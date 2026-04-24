@@ -1,0 +1,110 @@
+import { describe, expect, it } from 'vitest'
+import { parseLcuChampSelectSession } from './lcuMap'
+
+describe('parseLcuChampSelectSession', () => {
+  it('fills championId from pick actions when team row is still empty', () => {
+    const raw = {
+      localPlayerCellId: 0,
+      myTeam: [
+        {
+          team: 1,
+          cellId: 0,
+          championId: 0,
+          championPickIntent: 0,
+          assignedPosition: 'jungle'
+        },
+        {
+          team: 1,
+          cellId: 1,
+          championId: 0,
+          assignedPosition: 'top'
+        },
+        { team: 1, cellId: 2, championId: 0, assignedPosition: 'middle' },
+        { team: 1, cellId: 3, championId: 0, assignedPosition: 'bottom' },
+        { team: 1, cellId: 4, championId: 0, assignedPosition: 'utility' }
+      ],
+      theirTeam: [
+        { team: 2, cellId: 5, championId: 0, assignedPosition: 'top' },
+        { team: 2, cellId: 6, championId: 0, assignedPosition: 'jungle' },
+        { team: 2, cellId: 7, championId: 0, assignedPosition: 'middle' },
+        { team: 2, cellId: 8, championId: 0, assignedPosition: 'bottom' },
+        { team: 2, cellId: 9, championId: 0, assignedPosition: 'utility' }
+      ],
+      actions: [
+        [
+          {
+            type: 'pick',
+            actorCellId: 6,
+            championId: 121,
+            completed: false,
+            pickTurn: 1
+          }
+        ]
+      ]
+    }
+    const snap = parseLcuChampSelectSession(raw)
+    expect(snap).not.toBeNull()
+    const jg = snap!.enemy.find((p) => p.cellId === 6)
+    expect(jg?.championId).toBe(121)
+  })
+
+  it('parses bans from actions using championPickIntent when championId is still 0', () => {
+    const raw = {
+      localPlayerCellId: 0,
+      myTeam: [
+        { team: 1, cellId: 0, championId: 0, assignedPosition: 'jungle' },
+        { team: 1, cellId: 1, championId: 0, assignedPosition: 'top' },
+        { team: 1, cellId: 2, championId: 0, assignedPosition: 'middle' },
+        { team: 1, cellId: 3, championId: 0, assignedPosition: 'bottom' },
+        { team: 1, cellId: 4, championId: 0, assignedPosition: 'utility' }
+      ],
+      theirTeam: [
+        { team: 2, cellId: 5, championId: 0, assignedPosition: 'top' },
+        { team: 2, cellId: 6, championId: 0, assignedPosition: 'jungle' },
+        { team: 2, cellId: 7, championId: 0, assignedPosition: 'middle' },
+        { team: 2, cellId: 8, championId: 0, assignedPosition: 'bottom' },
+        { team: 2, cellId: 9, championId: 0, assignedPosition: 'utility' }
+      ],
+      bans: { myTeamBans: [], theirTeamBans: [], numBans: 10 },
+      actions: [
+        [
+          {
+            type: 'ban',
+            actorCellId: 0,
+            championId: 0,
+            championPickIntent: 157,
+            completed: false,
+            pickTurn: 1
+          }
+        ]
+      ]
+    }
+    const snap = parseLcuChampSelectSession(raw)
+    expect(snap?.bans).toContain(157)
+  })
+
+  it('parses bans when session uses a flat champion id array', () => {
+    const raw = {
+      localPlayerCellId: 0,
+      myTeam: [
+        { team: 1, cellId: 0, championId: 0, assignedPosition: 'jungle' },
+        { team: 1, cellId: 1, championId: 0, assignedPosition: 'top' },
+        { team: 1, cellId: 2, championId: 0, assignedPosition: 'middle' },
+        { team: 1, cellId: 3, championId: 0, assignedPosition: 'bottom' },
+        { team: 1, cellId: 4, championId: 0, assignedPosition: 'utility' }
+      ],
+      theirTeam: [
+        { team: 2, cellId: 5, championId: 0, assignedPosition: 'top' },
+        { team: 2, cellId: 6, championId: 0, assignedPosition: 'jungle' },
+        { team: 2, cellId: 7, championId: 0, assignedPosition: 'middle' },
+        { team: 2, cellId: 8, championId: 0, assignedPosition: 'bottom' },
+        { team: 2, cellId: 9, championId: 0, assignedPosition: 'utility' }
+      ],
+      bans: [103, 12, 34],
+      actions: []
+    }
+    const snap = parseLcuChampSelectSession(raw)
+    expect(snap?.bans).toEqual(expect.arrayContaining([103, 12, 34]))
+    expect(snap!.bans!.length).toBe(3)
+  })
+})

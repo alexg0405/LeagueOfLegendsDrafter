@@ -1,0 +1,9 @@
+{
+  "Aatrox": { "frontline": 0.8, "engage": 0.6, "peel": 0.0, "magic": 0.0, "physical": 0.9, "range_score": 0.2, "scaling": 0.5, "cc": 0.3 },
+  "Viego": { "frontline": 0.2, "engage": 0.5, "peel": 0.0, "magic": 0.0, "physical": 0.8, "range_score": 0.2, "scaling": 0.4, "cc": 0.2 },
+  "Thresh": { "frontline": 0.3, "engage": 0.7, "peel": 0.8, "magic": 0.2, "physical": 0.2, "range_score": 0.3, "scaling": 0.2, "cc": 0.9 },
+  "Malphite": { "frontline": 1.0, "engage": 1.0, "peel": 0.1, "magic": 0.7, "physical": 0.2, "range_score": 0.1, "scaling": 0.4, "cc": 0.7 },
+  "Taliyah": { "frontline": 0.0, "engage": 0.2, "peel": 0.0, "magic": 0.9, "physical": 0.0, "range_score": 0.6, "scaling": 0.5, "cc": 0.4 },
+  "Rell": { "frontline": 0.6, "engage": 0.9, "peel": 0.2, "magic": 0.2, "physical": 0.1, "range_score": 0.1, "scaling": 0.1, "cc": 1.0 },
+  "Jinx": { "frontline": 0.0, "engage": 0.0, "peel": 0.0, "magic": 0.0, "physical": 1.0, "range_score": 0.9, "scaling": 1.0, "cc": 0.1 }
+}

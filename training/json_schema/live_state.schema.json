@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexusdraft.local/training/live_state.schema.json",
+  "title": "live_draft_state_for_scorer",
+  "description": "Input to the Python (or TS) live scorer. Partial picks are ok; use empty object where unknown. mid/middle: use one convention (here: mid) for Python.",
+  "type": "object",
+  "required": ["patch", "queue", "my_role", "side", "bans", "candidates"],
+  "properties": {
+    "patch": { "type": "string" },
+    "queue": { "type": "string" },
+    "tier_bucket": { "type": "string", "default": "all" },
+    "region": { "type": "string" },
+    "side": { "type": "string", "enum": ["blue", "red"] },
+    "my_role": { "type": "string" },
+    "ally_role_picks": { "type": "object", "additionalProperties": { "type": "integer" } },
+    "enemy_role_picks": { "type": "object", "additionalProperties": { "type": "integer" } },
+    "bans": { "type": "array", "items": { "type": "integer" } },
+    "candidates": {
+      "type": "array",
+      "items": { "type": "integer" },
+      "description": "If omitted, fill from your role pool; usually passed explicitly."
+    },
+    "comfort": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 } },
+    "n_monte_carlo": { "type": "integer", "minimum": 0, "default": 0, "description": "If >0, run draft completions with random remaining picks." }
+  }
+}

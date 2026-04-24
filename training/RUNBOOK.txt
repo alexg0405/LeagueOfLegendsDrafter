@@ -1,0 +1,121 @@
+Nexus Draft — training + Riot data runbook
+=========================================
+
+Canonical end-to-end flow (single source of truth: training/, champion IDs)
+---------------------------------------------------------------------------
+1. Ingest match-v5 → training/nexus_training.db (team_perspective, …)  [etl:ingest]
+2. Aggregate rows → training/examples/effects/logit_*.json             [etl:aggregate]
+3. Optional: npm run train:champion-dim  (champion_dim id↔name from DDragon)
+4. Optional: npm run train:export -- (add --comfort-json file to embed personal comfort in id bundle)
+5. Runtime: app loads training/runtime/effects_id.json (gitignored; regenerate with train:export)
+6. Reference: draft_v1 reads draft_v1/data/training_export_name.json (gitignored) for name-keyed oracle
+7. Parity: npm run train:parity  +  npm test -- --run src/shared/draft/parityFixture.test.ts
+
+State contract (Python JSON vs TS DraftEngineState): see training/DRAFT_STATE.md
+
+1) Schema (offline rows + effect tables)
+   Create DB:  npm run train:init-db
+   (Uses Python sqlite3 — no `sqlite3` CLI needed, e.g. Windows. Optional: sqlite3 < training/schema.sql)
+
+1b) Ingest match-v5 JSON (one file or a folder)
+   npm run etl:ingest -- --file path/to/MATCH.json
+   npm run etl:ingest -- --dir path/to/matches_folder
+   Dry run:  python training/etl/ingest.py --dry-run --file training/etl/samples/match_v5_synthetic.json
+
+1b-riot) After riot:collect (data in training/data/riot_matches.db, table matches_raw), push into nexus in one step:
+   npm run etl:ingest-riot
+   (Same rows as file ingest; no manual JSON export.)
+
+1c) Aggregate counts -> logit JSON for the Python scorer
+   npm run etl:aggregate
+   Tuning: python training/etl/aggregate_effects.py --help
+   (Lowers --min-games-* only when you have few matches; defaults need more data.)
+
+1c2) champion_dim (id ↔ name) + one-way export to runtime
+   training/schema.sql defines champion_dim. Fill from Data Dragon:
+   npm run train:champion-dim
+   (Requires network unless you pass --json path/to/champion.json)
+   After logit_*.json exist: npm run train:export
+   Optional: npm run train:export -- --comfort-json training/examples/player_comfort.example.json
+   (merges into effects_id.json as comfortByChampionId; personal data stays local)
+   - Writes training/runtime/effects_id.json (id keys, ignored by git; for TS + tooling).
+   - Writes draft_v1/data/training_export_name.json (name keys for draft_v1.load_training_export).
+   Canonical Riot data path stays: match-v5 -> ingest -> aggregate_effects -> logit -> export.
+   draft_v1/build_aggregates.py remains a *literal* name-based oracle, not the main ETL.
+
+1c3) Parity (compare scorers; shared fixture)
+   training/examples/parity_state.json (same shape as live_state) — use for:
+   training/score_v1.py, draft_v1 (name resolution via training_export_name), and
+   src/shared/draft/recommendEngine.ts (id-keyed; resolve names only for display).
+
+1d) Bulk collection from the Riot API (account-v1 + match-v5, regional routing)
+   pip install -r training/requirements-riot.txt
+   CSV: game_name, tag_line only. NA accounts: omit --region (default americas) or pass --region na.
+   set RIOT_API_KEY=RGAPI-...  (or .env; never commit keys)
+   Data storage (all local under repo; gitignore may exclude DBs):
+   - training/data/riot_matches.db — raw: matches_raw (full match-v5 JSON), accounts, crawl state.
+   - training/nexus_training.db — after etl:ingest-riot: team_perspective for training/aggregate.
+   - training/runtime/effects_id.json — after etl:aggregate + train:export (id-keyed scorers).
+   npm run riot:collect -- --csv your.csv --region americas
+   npm run riot:collect:deep -- --csv your.csv --region americas
+   (collect:deep uses --max-pages 20, i.e. up to 2000 list refs per account per run. Tune --max-pages / --max-match-downloads on either script.)
+   (Uses regional routing. URL-encodes Riot ID path segments. Dedupes match payloads.
+    crawl_state + player_match_index avoid refetch; 429 uses Retry-After.)
+   npm run riot:extract
+   (Fills match_meta + match_participants from matches_raw. DB: training/data/riot_matches.db)
+
+1e) Ladder + snowball (no global “playtime” API — seed from Challenger/GM/Master, then expand)
+   Riot has no public list of all accounts by /time played. High-tier solo ladders are the
+   usual proxy for very active ranked players. League-v4 is on the *platform* host (na1, euw1).
+   This seeds discovered_puuids, then fetches each PUUID’s match history; every saved match
+   harvests 10 new PUUIds for the queue (table discovered_puuids, last_crawled_at NULL = pending).
+   npm run riot:ladder -- --platform na1
+   npm run riot:snowball -- --max-puuids 30 --max-pages 2
+   (Repeat snowball; respect dev/personal key rate limits. Use --region to override mapping.)
+
+2) One training row (two per 5v5)
+   - Ingest from Riot match-v5 (v5/matches/{matchId}). Map participants to
+     top/jungle/mid/adc/support using Riot’s teamPosition or timeline if needed.
+   - Insert into team_perspective: role_picks_json / enemy_role_picks_json as JSON objects
+     of champion *ids* (integers). Same for bans arrays.
+   - Patch bucket: derive from dataVersion (short form like 16.8). Train separate models
+     per queue_bucket and, initially, a single tier_bucket (e.g. emerald_plus) or "all".
+   - Use Data Dragon for id ↔ name/keys; do not use DDragon for win labels.
+
+3) Smoothed effects
+   - Aggregate wins/games in SQL or pandas; write logit_effects to JSON for the scorer:
+       training/examples/effects/logit_base.json
+       logit_matchup.json  (nested: ... my_role, candidate, enemy)
+       logit_synergy.json  (nested: ... my_role, ally_role, candidate, ally)
+   - Use smoothed_rate + logit_effect (see training/score_v1.py functions).
+
+4) Final-draft model (separate)
+   - Train on completed drafts only: featurize ally/enemy champs, side, patch, queue, tier;
+     optional comp tags (engage, frontline) from champion_tags or your own table.
+   - CatBoost / LightGBM / sklearn logistic are all fine. Export to artifact_uri, register in
+     model_artifact, then replace full_draft_logit() in score_v1.py with your model predict.
+
+5) First-pass live scorer (Python, stdlib only)
+   python training/score_v1.py --state training/examples/live_state.example.json
+   Optional: --effects path/to/dir (defaults to training/examples/effects)
+   Set "n_monte_carlo" in the JSON to enable rollouts. Replace random completions and
+   full_draft_logit with data-driven pick frequencies + your win model for production.
+
+5b) Minimal concrete draft (matches/participants/bans + additive DraftScorer)
+   Name-based state dict, tuple-keyed dict lookups, no champion ids: see draft_v1/
+   (schema.sql, scorer.py, load_data.py, build_aggregates.py, live_feed_adapter.py, main.py).
+   From repo root:  npm run draft:init    then   npm run draft:score
+
+6) Riot platform limits (summary; check official dev portal)
+   - Personal keys: low rate; production keys are higher and intended for public products.
+   - Routing: platform id for some calls; match-v5 uses regional host.
+   - Register products that serve players as required by Riot’s policies.
+
+7) Product presentation
+   - Show ranked options with short reasons (e.g. synergy, risk). Avoid “single mandate” UX;
+     static pregame information overlays are a documented approved pattern for apps that
+     don’t remove player agency.
+
+8) TypeScript app
+   - Live draft in src/shared/draft/recommendEngine.ts; wire trained matrices later the same
+     way the Python scorer loads JSON: precompute B, S, M and add vectors per new lock.

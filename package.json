@@ -1,0 +1,103 @@
+{
+  "name": "league-drafter",
+  "version": "0.2.0",
+  "description": "Nexus//Draft — League of Legends draft helper with LCU, overlay, and heuristics",
+  "author": "Nexus Draft contributors",
+  "main": "out/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "etl:riot-lane": "node scripts/riot-lane-etl.mjs",
+    "train:score": "python training/score_v1.py --state training/examples/live_state.example.json",
+    "train:init-db": "python -m training.scripts.init_nexus_db",
+    "etl:ingest": "python training/etl/ingest.py --db training/nexus_training.db --schema training/schema.sql",
+    "etl:ingest-riot": "python -m training.scripts.ingest_from_riot_db",
+    "etl:aggregate": "python training/etl/aggregate_effects.py --db training/nexus_training.db --out training/examples/effects",
+    "train:champion-dim": "python -m training.scripts.populate_champion_dim --db training/nexus_training.db",
+    "train:export": "python -m training.export_effects",
+    "train:parity": "python -m training.parity_draft_scorers",
+    "draft:init": "python -m draft_v1.build_aggregates --init-schema --seed-sample --rebuild",
+    "draft:score": "python -m draft_v1.main",
+    "riot:collect": "python -m training.riot_ingest.collect_riot_matches",
+    "riot:collect:deep": "python -m training.riot_ingest.collect_riot_matches --max-pages 20",
+    "riot:extract": "python -m training.riot_ingest.extract_matches",
+    "riot:ladder": "python -m training.riot_ingest.ladder_snowball ladder",
+    "riot:snowball": "python -m training.riot_ingest.ladder_snowball snowball"
+  },
+  "dependencies": {
+    "electron-store": "^9.0.0",
+    "framer-motion": "^12.38.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.5.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "postcss": "^8.5.10",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.0"
+  },
+  "build": {
+    "appId": "dev.nexusdraft.app",
+    "productName": "Nexus Draft",
+    "icon": "LOGO.png",
+    "copyright": "Copyright © 2026",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json",
+      "LOGO.png"
+    ],
+    "extraResources": [
+      {
+        "from": "training/runtime/effects_id.json",
+        "to": "training/runtime/effects_id.json"
+      }
+    ],
+    "asar": true,
+    "win": {
+      "icon": "LOGO.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "artifactName": "${productName}-Setup-${version}.exe"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.exe"
+    }
+  }
+}

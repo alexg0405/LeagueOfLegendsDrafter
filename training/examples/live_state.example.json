@@ -1,0 +1,33 @@
+{
+  "patch": "16.8",
+  "queue": "ranked_solo",
+  "tier_bucket": "emerald_plus",
+  "region": "NA",
+  "side": "blue",
+  "my_role": "adc",
+  "ally_role_picks": {
+    "jungle": 64,
+    "support": 53
+  },
+  "enemy_role_picks": {
+    "top": 82,
+    "mid": 238
+  },
+  "bans": [
+    103,
+    157,
+    201
+  ],
+  "candidates": [
+    22,
+    81,
+    51,
+    18,
+    119
+  ],
+  "comfort": {
+    "22": 0.72,
+    "81": 0.4
+  },
+  "n_monte_carlo": 0
+}

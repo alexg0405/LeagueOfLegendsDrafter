@@ -1,0 +1,26 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`parityState fixture (TS v1, candidate subset) > ranks ParityStateJson candidates and is stable for snapshot review 1`] = `
+[
+  {
+    "c": 0.609,
+    "i": 22,
+  },
+  {
+    "c": 0.582,
+    "i": 51,
+  },
+  {
+    "c": 0.563,
+    "i": 18,
+  },
+  {
+    "c": 0.555,
+    "i": 119,
+  },
+  {
+    "c": 0.544,
+    "i": 81,
+  },
+]
+`;

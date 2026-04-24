@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexusdraft.local/training/team_row.schema.json",
+  "title": "team_perspective_training_row",
+  "description": "One clean row per team per match for offline training. Build two rows per 5v5 (blue+red) if you want both perspectives. Champion keys are Riot champion ids (Data Dragon 'key' as int).",
+  "type": "object",
+  "required": [
+    "patch_bucket",
+    "queue_bucket",
+    "region",
+    "side",
+    "role_picks",
+    "enemy_role_picks",
+    "bans_friendly",
+    "bans_enemy",
+    "win"
+  ],
+  "properties": {
+    "patch_bucket": { "type": "string", "description": "e.g. 16.8" },
+    "queue_bucket": { "type": "string", "description": "e.g. ranked_solo" },
+    "tier_bucket": { "type": "string", "description": "e.g. emerald_plus" },
+    "region": { "type": "string" },
+    "side": { "type": "string", "enum": ["blue", "red"] },
+    "role_picks": {
+      "type": "object",
+      "required": ["top", "jungle", "mid", "adc", "support"],
+      "properties": {
+        "top": { "type": "integer" },
+        "jungle": { "type": "integer" },
+        "mid": { "type": "integer" },
+        "adc": { "type": "integer" },
+        "support": { "type": "integer" }
+      },
+      "additionalProperties": true
+    },
+    "enemy_role_picks": {
+      "type": "object",
+      "required": ["top", "jungle", "mid", "adc", "support"],
+      "properties": {
+        "top": { "type": "integer" },
+        "jungle": { "type": "integer" },
+        "mid": { "type": "integer" },
+        "adc": { "type": "integer" },
+        "support": { "type": "integer" }
+      },
+      "additionalProperties": true
+    },
+    "bans_friendly": { "type": "array", "items": { "type": "integer" } },
+    "bans_enemy": { "type": "array", "items": { "type": "integer" } },
+    "win": { "type": "integer", "enum": [0, 1] }
+  }
+}

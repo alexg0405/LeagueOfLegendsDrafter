@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Vite dev + React refresh need loose script/connect rules; this is a local-only tool. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https: http: ws: wss: http://localhost:* ws://localhost:* ws://127.0.0.1:* http://127.0.0.1:*; font-src 'self' data:;"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #060f0c;
+        color: #e6edf3;
+      }
+    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Orbitron:wght@500;700&family=Share+Tech+Mono&display=swap"
+      rel="stylesheet"
+    />
+    <title>Nexus//Draft</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // If the React bundle never mounts, show a message instead of an empty dark box (often network / Vite / preload).
+      (function () {
+        function show() {
+          var r = document.getElementById('root')
+          if (r && r.children.length === 0) {
+            r.innerHTML =
+              '<div style="padding:24px;max-width:640px;font:14px/1.5 system-ui,Segoe UI,sans-serif;background:#060f0c;color:#f85149;min-height:100vh;box-sizing:border-box">' +
+              '<strong style="color:#e6edf3">The app did not start.</strong><br><br>Run <code style="color:#58a6ff">npm run dev</code> ' +
+              'from the <strong>project root</strong> (Vite may use 5173 or the next free port).<br><br>Press ' +
+              '<kbd style="background:#21262d;padding:2px 6px;border-radius:4px">Ctrl+Shift+I</kbd> to open the console and read the real error.</div>'
+          }
+        }
+        window.addEventListener('load', function () {
+          setTimeout(show, 2500)
+        })
+      })()
+    </script>
+  </body>
+</html>

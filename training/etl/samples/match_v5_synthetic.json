@@ -1,0 +1,103 @@
+{
+  "metadata": {
+    "matchId": "NA1_1234567890",
+    "participants": ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"]
+  },
+  "info": {
+    "gameVersion": "15.3.456.7890",
+    "gameDuration": 1860,
+    "queueId": 420,
+    "mapId": 11,
+    "gameCreation": 1700000000000,
+    "participants": [
+      {
+        "participantId": 1,
+        "teamId": 100,
+        "championId": 266,
+        "teamPosition": "TOP",
+        "win": true
+      },
+      {
+        "participantId": 2,
+        "teamId": 100,
+        "championId": 64,
+        "teamPosition": "JUNGLE",
+        "win": true
+      },
+      {
+        "participantId": 3,
+        "teamId": 100,
+        "championId": 103,
+        "teamPosition": "MIDDLE",
+        "win": true
+      },
+      {
+        "participantId": 4,
+        "teamId": 100,
+        "championId": 22,
+        "teamPosition": "BOTTOM",
+        "win": true
+      },
+      {
+        "participantId": 5,
+        "teamId": 100,
+        "championId": 412,
+        "teamPosition": "UTILITY",
+        "win": true
+      },
+      {
+        "participantId": 6,
+        "teamId": 200,
+        "championId": 516,
+        "teamPosition": "TOP",
+        "win": false
+      },
+      {
+        "participantId": 7,
+        "teamId": 200,
+        "championId": 121,
+        "teamPosition": "JUNGLE",
+        "win": false
+      },
+      {
+        "participantId": 8,
+        "teamId": 200,
+        "championId": 238,
+        "teamPosition": "MIDDLE",
+        "win": false
+      },
+      {
+        "participantId": 9,
+        "teamId": 200,
+        "championId": 81,
+        "teamPosition": "BOTTOM",
+        "win": false
+      },
+      {
+        "participantId": 10,
+        "teamId": 200,
+        "championId": 53,
+        "teamPosition": "UTILITY",
+        "win": false
+      }
+    ],
+    "teams": [
+      {
+        "teamId": 100,
+        "win": true,
+        "bans": [
+          { "championId": 157, "pickTurn": 1 },
+          { "championId": 200, "pickTurn": 2 }
+        ]
+      },
+      {
+        "teamId": 200,
+        "win": false,
+        "bans": [
+          { "championId": 238, "pickTurn": 3 },
+          { "championId": 555, "pickTurn": 4 }
+        ]
+      }
+    ]
+  }
+}

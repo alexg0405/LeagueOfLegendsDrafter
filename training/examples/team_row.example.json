@@ -1,0 +1,24 @@
+{
+  "patch_bucket": "16.8",
+  "queue_bucket": "ranked_solo",
+  "tier_bucket": "emerald_plus",
+  "region": "NA",
+  "side": "blue",
+  "role_picks": {
+    "top": 266,
+    "jungle": 234,
+    "mid": 103,
+    "adc": 222,
+    "support": 412
+  },
+  "enemy_role_picks": {
+    "top": 54,
+    "jungle": 113,
+    "mid": 134,
+    "adc": 145,
+    "support": 526
+  },
+  "bans_friendly": [157, 238, 12],
+  "bans_enemy": [200, 53, 51],
+  "win": 1
+}

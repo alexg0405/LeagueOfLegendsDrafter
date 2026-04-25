@@ -26,7 +26,7 @@ export function NexusStubView() {
   const li = liVariants(reduce)
   const copy = [
     '· LCU: live pick/ban from the Riot client when it is open.',
-    '· Manual + vision: when LCU is unavailable.',
+    '· Manual board: use local entry when LCU is unavailable.',
     '· Overlay: Insert / F9 / F10 from Draft.'
   ]
   return (
@@ -47,7 +47,7 @@ export function NexusStubView() {
           transition={{ delay: 0.06, duration: DUR.fast, ease: EASING.sharp }}
         >
           Use the <strong className="text-nexus-text/90">Draft</strong> screen for the League client link, your role, champion
-          data, screen capture, and overlay toggle. Nothing here is paywalled.
+          data, manual board, and overlay toggle. Nothing here is paywalled.
         </motion.p>
         <ul className="mt-5 space-y-2.5 font-mono text-sm sm:text-base text-nexus-text/90 list-none pl-0">
           {copy.map((line, i) => (

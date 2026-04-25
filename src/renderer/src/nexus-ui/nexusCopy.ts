@@ -1,6 +1,6 @@
 import type { DraftSource, LcuChampSelectResult } from '@shared/draft'
 
-/** How draft state is being filled — plain language */
+/** How draft state is being filled - plain language */
 export function copyDraftSource(s: DraftSource): string {
   switch (s) {
     case 'none':
@@ -10,7 +10,7 @@ export function copyDraftSource(s: DraftSource): string {
     case 'manual':
       return 'Picks you enter'
     case 'vision':
-      return 'Read from screen'
+      return 'Not in a draft'
     default:
       return String(s)
   }
@@ -18,16 +18,10 @@ export function copyDraftSource(s: DraftSource): string {
 
 /** Short League connection for status strip / top bar */
 export function copyLeagueClientLine(lcu: LcuChampSelectResult | null): string {
-  if (lcu == null) {
-    return 'Checking…'
-  }
-  if (lcu.lcuReachable) {
+  if (lcu?.lcuReachable) {
     return 'League: connected'
   }
-  if (lcu.lockfileFound) {
-    return 'League: starting up'
-  }
-  return 'League: not running'
+  return 'League: waiting'
 }
 
 /** One line for the bottom status strip (plain, no LCU / DGV / src / NOM) */
@@ -39,9 +33,9 @@ export function copyBottomStatusStrip(params: {
   const { lcu, dataVersion, source } = params
   const league = copyLeagueClientLine(lcu)
   const data =
-    dataVersion && dataVersion !== '—' && !dataVersion.startsWith('(')
+    dataVersion && dataVersion !== '-' && dataVersion !== '—' && !dataVersion.startsWith('(')
       ? dataVersion
-      : '—'
+      : '-'
   const src = copyDraftSource(source)
-  return `${league} · Game data ${data} · ${src}`
+  return `${league} - Game data ${data} - ${src}`
 }

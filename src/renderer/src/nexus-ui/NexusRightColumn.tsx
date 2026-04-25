@@ -26,6 +26,9 @@ export function NexusRightColumn({
   const item = rightColumnItemVariants(reduce)
   const src = copyDraftSource((draftSource || 'none') as DraftSource)
   const srcKey = (draftSource || 'none') as DraftSource
+  const lcuText = lcuState.toLowerCase()
+  const lcuReady = lcuText.includes('ready') || lcuText.includes('reachable')
+  const lcuWaiting = !lcuReady && (lcuText.includes('waiting') || lcuText.includes('detected') || lcuText.includes('connecting'))
   return (
     <aside
       className="w-[280px] min-w-[260px] shrink-0 border-l border-nexus-line bg-nexus-surface flex flex-col text-sm"
@@ -52,15 +55,15 @@ export function NexusRightColumn({
           <div className="flex justify-between items-baseline gap-2 mb-2">
             <MicroLabel>Riot client</MicroLabel>
             <motion.span
-              key={lcuState.includes('reachable') ? 'on' : 'off'}
+              key={lcuReady ? 'on' : lcuWaiting ? 'wait' : 'off'}
               className={`font-mono text-xs font-medium ${
-                lcuState.includes('reachable') ? 'text-nexus-lime' : 'text-nexus-red/80'
+                lcuReady ? 'text-nexus-lime' : lcuWaiting ? 'text-nexus-yellow/90' : 'text-nexus-red/80'
               }`}
               initial={reduce ? false : { y: -4, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ duration: 0.12, ease: EASING.sharp }}
             >
-              {lcuState.includes('reachable') ? 'On' : 'Off'}
+              {lcuReady ? 'On' : lcuWaiting ? 'Wait' : 'Off'}
             </motion.span>
           </div>
           <p className="font-mono text-sm text-nexus-text/90 leading-snug">{lcuState}</p>

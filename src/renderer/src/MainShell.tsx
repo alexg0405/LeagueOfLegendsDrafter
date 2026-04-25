@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { getLatestDDragonVersion, loadChampionMaps, type ChampionLite } from '@shared/dataDragon'
 import {
@@ -33,7 +33,6 @@ import {
 import { copyBottomStatusStrip, copyDraftSource } from './nexus-ui/nexusCopy'
 
 const ROLES: DraftRole[] = ['top', 'jungle', 'middle', 'bottom', 'support']
-const CAPTURE_LIST_REFRESH_MS = 4000
 const LS_SUGGEST_OVERRIDE = 'nexusdraft.v1.suggestOverride'
 const LS_MY_ROLE = 'nexusdraft.v1.myRole'
 const LS_SUGGEST_MC = 'nexusdraft.v1.suggestMcRollouts'
@@ -41,6 +40,7 @@ const LS_SUGGEST_SORT = 'nexusdraft.v1.suggestSortBy'
 const LS_SUGGEST_DELTA_LIST = 'nexusdraft.v1.suggestDeltaListMode'
 const DEFAULT_SUGGEST_MC = 10
 const MAX_SUGGEST_MC = 200
+const SUGGESTION_RESULT_LIMIT = 40
 
 /** Deterministic per board so MC rankings don’t flicker between identical LCU polls. */
 function fnv1a32(s: string): number {
@@ -171,6 +171,49 @@ const defaultOverlayEnginePrefs: OverlayEnginePrefs = {
   deltaListModeOverride: null
 }
 
+function lcuUiStatus(lcu: LcuChampSelectResult | null): NonNullable<DraftUpdate['lcuStatus']> {
+  if (lcu == null) {
+    return 'unknown'
+  }
+  if (lcu.lcuReachable) {
+    return 'ready'
+  }
+  return 'waiting'
+}
+
+function isBenignLcuWaitingError(error: string | null): boolean {
+  if (!error) {
+    return true
+  }
+  return /lockfile not found|econnrefused|econnreset|socket|timeout|connect/i.test(error)
+}
+
+function copyLcuStatusLine(lcu: LcuChampSelectResult | null): string {
+  if (lcu == null) {
+    return 'Waiting for League client status...'
+  }
+  if (lcu.lcuReachable) {
+    return lcu.snapshot ? 'League client ready; draft data is live.' : 'League client ready; waiting for champ select.'
+  }
+  if (lcu.lockfileFound && isBenignLcuWaitingError(lcu.error)) {
+    return 'League client detected; waiting for it to finish loading.'
+  }
+  if (!lcu.lockfileFound && isBenignLcuWaitingError(lcu.error)) {
+    return 'Waiting for League client to start.'
+  }
+  return 'League client detected; waiting for a clean LCU response.'
+}
+
+function displayLcuError(lcu: LcuChampSelectResult | null): string | null {
+  if (!lcu?.error) {
+    return null
+  }
+  if (!lcu.lcuReachable && isBenignLcuWaitingError(lcu.error)) {
+    return null
+  }
+  return lcu.error
+}
+
 export function MainShell() {
   const [ddVersion, setDdVersion] = useState<string | null>(null)
   const [champions, setChampions] = useState<ChampionLite[]>([])
@@ -179,9 +222,6 @@ export function MainShell() {
   const [lcu, setLcu] = useState<LcuChampSelectResult | null>(null)
   const [useManual, setUseManual] = useState(false)
   const [manual, setManual] = useState<ManualPicks>(emptyManual)
-  const [visionSnapshot, setVisionSnapshot] = useState<DraftSnapshot | null>(null)
-  const [visionText, setVisionText] = useState<string | null>(null)
-  const [visionConf, setVisionConf] = useState<string | null>(null)
 
   const [myRole, setMyRole] = useState<DraftRole>(readStoredMyRole)
   const [suggestOverride, setSuggestOverride] = useState(readStoredSuggestOverride)
@@ -192,14 +232,7 @@ export function MainShell() {
     ...defaultOverlayEnginePrefs
   }))
 
-  const [sources, setSources] = useState<
-    Array<{ id: string; name: string; display_id?: string; thumbnailDataUrl: string | null }>
-  >([])
-  const [err, setErr] = useState<string | null>(null)
-  const [settingsLoaded, setSettingsLoaded] = useState(false)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [trainedEffects, setTrainedEffects] = useState<CompiledTrainedEffects | null>(null)
-  const previewRef = useRef<HTMLCanvasElement | null>(null)
 
   const effectiveMyRole: DraftRole = useMemo(() => {
     if (suggestOverride) {
@@ -208,11 +241,8 @@ export function MainShell() {
     if (lcu?.snapshot?.myRole && lcu.snapshot.myRole !== 'unknown') {
       return lcu.snapshot.myRole
     }
-    if (visionSnapshot?.myRole && visionSnapshot.myRole !== 'unknown') {
-      return visionSnapshot.myRole
-    }
     return myRole
-  }, [suggestOverride, myRole, lcu, visionSnapshot])
+  }, [suggestOverride, myRole, lcu])
 
   const suggestionRoleLine = useMemo(() => {
     if (suggestOverride) {
@@ -221,11 +251,8 @@ export function MainShell() {
     if (lcu?.snapshot?.myRole && lcu.snapshot.myRole !== 'unknown') {
       return 'Using League client role. Turn on “I pick my role” to force a role and its champion list.'
     }
-    if (visionSnapshot?.myRole && visionSnapshot.myRole !== 'unknown') {
-      return 'Using screen-vision role. Turn on “I pick my role” if it is wrong.'
-    }
-    return 'League/vision did not report a role — using your pick below as fallback.'
-  }, [suggestOverride, lcu, visionSnapshot])
+    return 'League did not report a role — using your pick below as fallback.'
+  }, [suggestOverride, lcu])
 
   useEffect(() => {
     return window.drafter.onOverlayEnginePrefs((patch: OverlayEnginePrefsPatch) => {
@@ -305,11 +332,8 @@ export function MainShell() {
     if (lcu?.lcuReachable && lcuSnapshotNamed) {
       return { activeSnapshot: lcuSnapshotNamed, draftSource: 'lcu' }
     }
-    if (visionSnapshot) {
-      return { activeSnapshot: visionSnapshot, draftSource: 'vision' }
-    }
     return { activeSnapshot: null, draftSource: 'none' }
-  }, [useManual, manualSnapshot, lcu, lcuSnapshotNamed, visionSnapshot])
+  }, [useManual, manualSnapshot, lcu, lcuSnapshotNamed])
 
   const roleForSuggestions = useMemo((): DraftRole => {
     if (overlayEnginePrefs.roleOverride != null) {
@@ -387,6 +411,7 @@ export function MainShell() {
       myRole: roleForSuggestions,
       snapshot: activeSnapshot,
       idToName: nameById,
+      maxResults: SUGGESTION_RESULT_LIMIT,
       dataDragonVersion: ddVersion,
       monteCarloSamples: mcForSuggestions,
       rngSeed,
@@ -416,16 +441,21 @@ export function MainShell() {
     return ids.map((id) => nameById.get(id) ?? resolveChampionName(id, nameById))
   }, [activeSnapshot?.bans, nameById])
 
+  const lcuStatus = lcuUiStatus(lcu)
+  const lcuStatusLine = copyLcuStatusLine(lcu)
+  const lcuError = displayLcuError(lcu)
+
   useEffect(() => {
     const payload: DraftUpdate = {
       source: draftSource,
       lcuConnected: lcu?.lcuReachable ?? false,
+      lcuStatus,
       snapshot: activeSnapshot,
       suggestions,
       geminiNarration: null,
       dataDragonVersion: ddVersion,
       patchLabel: patchLabel ?? ENGINE_V1_LABEL,
-      error: lcu?.error ?? null,
+      error: lcuError,
       updatedAt: new Date().toISOString(),
       suggestionMyRole: roleForSuggestions,
       banChampionNames,
@@ -438,6 +468,8 @@ export function MainShell() {
   }, [
     draftSource,
     lcu,
+    lcuStatus,
+    lcuError,
     activeSnapshot,
     suggestions,
     ddVersion,
@@ -508,49 +540,6 @@ export function MainShell() {
     })()
   }, [])
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const id = await window.drafter.getCaptureSourceId()
-        setSelectedId(id)
-      } catch {
-        /* ignore */
-      } finally {
-        setSettingsLoaded(true)
-      }
-    })()
-  }, [])
-
-  const refreshCaptureSources = useCallback(async () => {
-    try {
-      setErr(null)
-      setSources(await window.drafter.listCaptureSources())
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
-    }
-  }, [])
-
-  useEffect(() => {
-    void refreshCaptureSources()
-  }, [refreshCaptureSources])
-
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      void refreshCaptureSources()
-    }, CAPTURE_LIST_REFRESH_MS)
-    return () => {
-      clearInterval(id)
-    }
-  }, [refreshCaptureSources])
-
-  const lcuStatusLine = lcu
-    ? lcu.lockfileFound
-      ? lcu.lcuReachable
-        ? 'League client API reachable (LCU).'
-        : 'Lockfile found but LCU not responding — is the client fully loaded?'
-      : 'League client lockfile not found — start the Riot / League client.'
-    : 'Connecting…'
-
   const [nexusNav, setNexusNav] = useState<NexusNavId>('home')
   const [routeDir, setRouteDir] = useState(1)
 
@@ -570,18 +559,8 @@ export function MainShell() {
     region: 'AMERICAS',
     dataVersion: ddVersion && ddVersion[0] !== '(' ? ddVersion : '—',
     build: '0.2.0',
-    networkStatus: lcu
-      ? lcu.lcuReachable
-        ? 'On'
-        : lcu.lockfileFound
-          ? 'Wait'
-          : 'Off'
-      : '—',
-    link: lcu?.lcuReachable
-      ? 'League: ready'
-      : lcu?.lockfileFound
-        ? 'League: starting'
-        : 'League: closed',
+    networkStatus: lcuStatus === 'ready' ? 'On' : 'Wait',
+    link: lcuStatus === 'ready' ? 'League: ready' : 'League: waiting',
     resourceLine: `Picks from: ${copyDraftSource(draftSource)} · Suggestions: ${patchLabel ?? ENGINE_V1_LABEL}`,
     onMinimizeApp: () => {
       void window.drafter.minimizeApp()
@@ -614,7 +593,7 @@ export function MainShell() {
     modelLabel: patchLabel ?? ENGINE_V1_LABEL,
     queueLine: activeSnapshot
       ? `You’re on ${String(roleForSuggestions)} — pick ideas are on.`
-      : 'Get into champ select, type a board, or use screen capture to see pick ideas here.'
+      : 'Get into champ select or type a board to see pick ideas here.'
   }
 
   const bottomBar = {
@@ -666,7 +645,7 @@ export function MainShell() {
           <NexusRoutePanel key="operations" direction={routeDir} className="w-full min-h-0 min-w-0">
             <NexusOperationsView
               lcuStatusLine={lcuStatusLine}
-              lcuError={lcu?.error ?? null}
+              lcuError={lcuError}
               draftSource={draftSource}
               useManual={useManual}
               onUseManual={setUseManual}
@@ -676,9 +655,7 @@ export function MainShell() {
                   const fromClient: DraftRole =
                     lcu?.snapshot?.myRole && lcu.snapshot.myRole !== 'unknown'
                       ? lcu.snapshot.myRole
-                      : visionSnapshot?.myRole && visionSnapshot.myRole !== 'unknown'
-                        ? visionSnapshot.myRole
-                        : myRole
+                      : myRole
                   setMyRole(fromClient)
                 }
                 setSuggestOverride(next)
@@ -706,20 +683,6 @@ export function MainShell() {
               suggestDeltaListMode={suggestDeltaListMode}
               onSuggestDeltaListMode={setSuggestDeltaListMode}
               suggestions={suggestions}
-              err={err}
-              settingsLoaded={settingsLoaded}
-              onRefreshCaptureSources={() => void refreshCaptureSources()}
-              sources={sources}
-              selectedId={selectedId}
-              onSelectSource={(id) => {
-                void (async () => {
-                  await window.drafter.setCaptureSourceId(id)
-                  setSelectedId(id)
-                })()
-              }}
-              previewRef={previewRef}
-              visionText={visionText}
-              visionConf={visionConf}
               onToggleOverlay={async () => {
                 await window.drafter.toggleOverlay()
               }}

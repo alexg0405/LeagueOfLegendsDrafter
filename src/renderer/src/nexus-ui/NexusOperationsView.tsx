@@ -1,7 +1,5 @@
-import type { Ref, RefObject } from 'react'
 import type { ChampionLite } from '@shared/dataDragon'
 import type { DraftDeltaListMode, DraftRole, DraftSource, PickSuggestion } from '@shared/draft'
-import { DesktopPreview } from '../capture/DesktopPreview'
 import { copyDraftSource } from './nexusCopy'
 import { NexusPanel } from './NexusPanel'
 
@@ -11,14 +9,9 @@ const inField =
   'nexus-focus w-full min-w-0 max-w-md bg-nexus-bg border border-nexus-line text-nexus-text font-mono text-sm py-2 px-3 focus:border-nexus-lime/50 focus:outline-none disabled:opacity-45'
 const btnPrimary =
   'nexus-focus inline-flex items-center justify-center font-display text-xs sm:text-sm tracking-[0.16em] uppercase px-5 py-2.5 border border-nexus-lime bg-nexus-lime text-nexus-bg border-nexus-lime/90 hover:brightness-110 active:brightness-95 disabled:opacity-40 disabled:cursor-not-allowed'
-const btnGhost =
-  'nexus-focus inline-flex items-center justify-center font-mono text-xs sm:text-sm px-4 py-2 border border-nexus-line text-nexus-muted hover:text-nexus-text hover:border-nexus-lime/35 disabled:opacity-40'
-const preBlock =
-  'nexus-allow-select font-mono text-xs sm:text-sm bg-nexus-bg/90 border border-nexus-line p-3 max-h-40 overflow-y-auto nexus-ops-scroll text-nexus-text/90 whitespace-pre-wrap break-words'
 const textMuted = 'text-nexus-muted'
 const textBody = 'font-mono text-sm text-nexus-text/90'
 const errText = 'font-mono text-sm text-nexus-red'
-const okText = 'font-mono text-sm text-nexus-lime/90'
 
 export type NexusOperationsViewProps = {
   lcuStatusLine: string
@@ -47,20 +40,6 @@ export type NexusOperationsViewProps = {
   suggestDeltaListMode: DraftDeltaListMode
   onSuggestDeltaListMode: (v: DraftDeltaListMode) => void
   suggestions: PickSuggestion[]
-  err: string | null
-  settingsLoaded: boolean
-  onRefreshCaptureSources: () => void
-  sources: Array<{
-    id: string
-    name: string
-    display_id?: string
-    thumbnailDataUrl: string | null
-  }>
-  selectedId: string | null
-  onSelectSource: (id: string) => void
-  previewRef: RefObject<HTMLCanvasElement | null>
-  visionText: string | null
-  visionConf: string | null
   onToggleOverlay: () => void
 }
 
@@ -89,15 +68,6 @@ export function NexusOperationsView({
   suggestDeltaListMode,
   onSuggestDeltaListMode,
   suggestions,
-  err,
-  settingsLoaded,
-  onRefreshCaptureSources,
-  sources,
-  selectedId,
-  onSelectSource,
-  previewRef,
-  visionText,
-  visionConf,
   onToggleOverlay
 }: NexusOperationsViewProps) {
   const sorted = champions.slice().sort((a, b) => a.name.localeCompare(b.name))
@@ -307,60 +277,6 @@ export function NexusOperationsView({
             </li>
           ))}
         </ol>
-      </NexusPanel>
-
-      <NexusPanel kicker="vision" title="Screen capture (fallback)">
-        {err && <p className={`${errText} mb-2`}>{err}</p>}
-        {settingsLoaded && <p className={`${okText} mb-2`}>Settings ready.</p>}
-        <p className="mb-2">
-          <button type="button" className={btnGhost} onClick={onRefreshCaptureSources}>
-            Refresh sources
-          </button>
-        </p>
-        <ul className="flex flex-wrap gap-2 list-none p-0 m-0">
-          {sources.map((s) => (
-            <li key={s.id}>
-              <button
-                type="button"
-                onClick={() => onSelectSource(s.id)}
-                className={[
-                  'nexus-focus flex flex-col items-start gap-1.5 max-w-[200px] text-left p-2 border font-mono text-xs',
-                  'bg-nexus-bg border-nexus-line text-nexus-text hover:border-nexus-lime/30',
-                  selectedId === s.id
-                    ? 'border-nexus-lime ring-1 ring-nexus-lime/50 bg-nexus-surface-2/80'
-                    : ''
-                ].join(' ')}
-              >
-                {s.thumbnailDataUrl && (
-                  <img
-                    className="block w-[100px] h-[60px] object-cover border border-nexus-line/50 bg-black"
-                    src={s.thumbnailDataUrl}
-                    alt=""
-                    width={100}
-                    height={60}
-                  />
-                )}
-                <span className="leading-tight break-words">{s.name}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        {selectedId && (
-          <p className="font-mono text-xs text-nexus-lime/85 mt-2 break-all">
-            Capture: {selectedId.slice(0, 48)}…
-          </p>
-        )}
-        <div className="mt-2">
-          <DesktopPreview
-            ref={previewRef as Ref<HTMLCanvasElement>}
-            sourceId={selectedId}
-          />
-        </div>
-        <p className="mt-3 font-mono text-xs text-nexus-muted">
-          Screen draft parsing is temporarily disabled.
-        </p>
-        {visionText && <pre className={`${preBlock} mt-3 text-xs`}>{visionText.slice(0, 2000)}</pre>}
-        {visionConf && <p className="text-nexus-muted text-xs mt-1">Screen read confidence: {visionConf}</p>}
       </NexusPanel>
 
       <NexusPanel kicker="hud" title="Overlay">

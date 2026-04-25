@@ -1,3 +1,4 @@
+import { resolveChampionName } from './championNameFallback'
 import type { DraftRole, DraftSnapshot, SlotPick } from './types'
 
 const ROLES: DraftRole[] = ['top', 'jungle', 'middle', 'bottom', 'support', 'unknown']
@@ -47,6 +48,18 @@ function toSlot(
   const rawName = typeof o['championName'] === 'string' ? o['championName'].trim() : ''
   if (!rawName) {
     return { role: r, championId: null, championName: null, cellId: null }
+  }
+  const genericId = /^(?:champion\s*)?(\d+)$/i.exec(rawName)?.[1]
+  if (genericId) {
+    const id = Number(genericId)
+    if (Number.isInteger(id) && id > 0) {
+      return {
+        role: r,
+        championId: id,
+        championName: resolveChampionName(id, null),
+        cellId: null
+      }
+    }
   }
   const id = nameToId.get(rawName.toLowerCase().replace(/'/g, '')) ?? null
   return {

@@ -1,6 +1,10 @@
 import { resolveChampionName } from './championNameFallback'
 import type { DraftSnapshot, SlotPick } from './types'
 
+function isGenericChampionName(name: string): boolean {
+  return /^champion\s+\d+$/i.test(name.trim())
+}
+
 function mapSlot(s: SlotPick, idToName: ReadonlyMap<number, string> | null): SlotPick {
   if (s.championId == null || s.championId === 0) {
     return s
@@ -9,7 +13,7 @@ function mapSlot(s: SlotPick, idToName: ReadonlyMap<number, string> | null): Slo
   if (fromMap) {
     return { ...s, championName: fromMap }
   }
-  if (s.championName) {
+  if (s.championName && !isGenericChampionName(s.championName)) {
     return s
   }
   return { ...s, championName: resolveChampionName(s.championId, null) }

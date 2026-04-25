@@ -1,4 +1,5 @@
 import { ROLE_CHAMPION_POOL } from './matchupData'
+import { publicMetaCandidateIdsForRole } from './metaStats'
 import type { DraftRole, DraftSnapshot } from './types'
 
 const ROLE_KEYS = ['top', 'jungle', 'middle', 'bottom', 'support'] as const
@@ -13,11 +14,11 @@ type LockedEnemy = {
 type RolePosterior = Record<RoleKey, number>
 
 const rolePoolSets: Record<RoleKey, Set<number>> = {
-  top: new Set(ROLE_CHAMPION_POOL.top ?? []),
-  jungle: new Set(ROLE_CHAMPION_POOL.jungle ?? []),
-  middle: new Set(ROLE_CHAMPION_POOL.middle ?? []),
-  bottom: new Set(ROLE_CHAMPION_POOL.bottom ?? []),
-  support: new Set(ROLE_CHAMPION_POOL.support ?? [])
+  top: new Set([...(ROLE_CHAMPION_POOL.top ?? []), ...publicMetaCandidateIdsForRole('top')]),
+  jungle: new Set([...(ROLE_CHAMPION_POOL.jungle ?? []), ...publicMetaCandidateIdsForRole('jungle')]),
+  middle: new Set([...(ROLE_CHAMPION_POOL.middle ?? []), ...publicMetaCandidateIdsForRole('middle')]),
+  bottom: new Set([...(ROLE_CHAMPION_POOL.bottom ?? []), ...publicMetaCandidateIdsForRole('bottom')]),
+  support: new Set([...(ROLE_CHAMPION_POOL.support ?? []), ...publicMetaCandidateIdsForRole('support')])
 }
 
 const roleInferenceCache = new WeakMap<DraftSnapshot, Map<number, RolePosterior>>()
@@ -31,9 +32,9 @@ function slotRolePrior(slotRole: DraftRole, role: RoleKey): number {
     return 1
   }
   if (slotRole === role) {
-    return 0.7
+    return 10
   }
-  return 0.075
+  return 0.05
 }
 
 function emptyPosterior(): RolePosterior {
@@ -143,13 +144,25 @@ export function inferredLaneWeightForEnemy(
   enemyIdx: number,
   myRole: DraftRole
 ): number {
+  const offRoleFloor = (() => {
+    if (myRole === 'top' || myRole === 'middle') {
+      return 0.12
+    }
+    if (myRole === 'jungle') {
+      return 0.2
+    }
+    if (myRole === 'bottom' || myRole === 'support') {
+      return 0.18
+    }
+    return 0.18
+  })()
   if (myRole === 'unknown') {
-    return 0.32
+    return offRoleFloor
   }
   const p = posteriors.get(enemyIdx)
   if (!p) {
-    return 0.32
+    return offRoleFloor
   }
   const laneP = p[myRole as RoleKey] ?? 0
-  return 0.32 + 0.68 * laneP
+  return offRoleFloor + (1 - offRoleFloor) * laneP
 }

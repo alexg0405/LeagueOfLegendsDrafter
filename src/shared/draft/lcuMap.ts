@@ -1,4 +1,21 @@
+import { ROLE_CHAMPION_POOL } from './matchupData'
+import { publicMetaCandidateIdsForRole } from './metaStats'
 import type { DraftRole, DraftSnapshot, SlotPick, TeamId } from './types'
+
+const ROLE_KEYS = ['top', 'jungle', 'middle', 'bottom', 'support'] as const
+type RoleKey = (typeof ROLE_KEYS)[number]
+
+const rolePoolSets: Record<RoleKey, Set<number>> = {
+  top: new Set([...(ROLE_CHAMPION_POOL.top ?? []), ...publicMetaCandidateIdsForRole('top')]),
+  jungle: new Set([...(ROLE_CHAMPION_POOL.jungle ?? []), ...publicMetaCandidateIdsForRole('jungle')]),
+  middle: new Set([...(ROLE_CHAMPION_POOL.middle ?? []), ...publicMetaCandidateIdsForRole('middle')]),
+  bottom: new Set([...(ROLE_CHAMPION_POOL.bottom ?? []), ...publicMetaCandidateIdsForRole('bottom')]),
+  support: new Set([...(ROLE_CHAMPION_POOL.support ?? []), ...publicMetaCandidateIdsForRole('support')])
+}
+
+function isRoleKey(role: DraftRole | null | undefined): role is RoleKey {
+  return role === 'top' || role === 'jungle' || role === 'middle' || role === 'bottom' || role === 'support'
+}
 
 function mapPosition(p: string | undefined | null): DraftRole {
   if (!p || p === '') {
@@ -24,6 +41,56 @@ function mapPosition(p: string | undefined | null): DraftRole {
     return 'support'
   }
   return 'unknown'
+}
+
+function roleCandidatesForChampion(championId: number | null): RoleKey[] {
+  if (championId == null || championId <= 0) {
+    return []
+  }
+  return ROLE_KEYS.filter((role) => rolePoolSets[role].has(championId))
+}
+
+function inferLocalRoleFromTeam(ally: SlotPick[], localCell: number | null): DraftRole | null {
+  if (localCell == null) {
+    return null
+  }
+  const selfIdx = ally.findIndex((s) => s.cellId === localCell)
+  if (selfIdx < 0) {
+    return null
+  }
+  const self = ally[selfIdx]!
+  const teammateRoles = new Set<RoleKey>()
+  for (let i = 0; i < ally.length; i += 1) {
+    if (i === selfIdx) {
+      continue
+    }
+    const role = ally[i]?.role
+    if (isRoleKey(role)) {
+      teammateRoles.add(role)
+    }
+  }
+
+  const missingRoles = ROLE_KEYS.filter((role) => !teammateRoles.has(role))
+  const localRole = isRoleKey(self.role) ? self.role : null
+  const championRoles = roleCandidatesForChampion(self.championId)
+  const championMissingRoles = missingRoles.filter((role) => championRoles.includes(role))
+
+  if (localRole && missingRoles.includes(localRole)) {
+    return localRole
+  }
+  if (championMissingRoles.length === 1) {
+    return championMissingRoles[0]
+  }
+  if (missingRoles.length === 1 && (self.role === 'unknown' || (localRole != null && teammateRoles.has(localRole)))) {
+    return missingRoles[0]
+  }
+  if (localRole) {
+    return localRole
+  }
+  if (championRoles.length === 1) {
+    return championRoles[0]
+  }
+  return null
 }
 
 type LcuTeamMember = {
@@ -75,15 +142,9 @@ export function parseLcuChampSelectSession(raw: unknown): DraftSnapshot | null {
   const enemy: SlotPick[] = (theirTeam as unknown[]).slice(0, 5).map(mapMember)
   mergePickChampionsFromActions(ally, enemy, o['actions'])
 
-  let myRole: DraftRole | null = null
   const localCell =
     typeof o['localPlayerCellId'] === 'number' ? (o['localPlayerCellId'] as number) : null
-  if (localCell != null) {
-    const self = ally.find((s) => s.cellId === localCell)
-    if (self && self.role !== 'unknown') {
-      myRole = self.role
-    }
-  }
+  const myRole = inferLocalRoleFromTeam(ally, localCell)
 
   let team: TeamId | null = null
   if (typeof o['myTeam'] === 'object' && myTeam[0] != null && typeof myTeam[0] === 'object') {
@@ -168,8 +229,10 @@ function mergePickChampionsFromActions(ally: SlotPick[], enemy: SlotPick[], acti
     if (cid == null || cid <= 0) {
       return
     }
-    if (row.championId == null || row.championId === 0) {
+    // Actions are the live source during champ select; they can update sooner than myTeam/theirTeam rows.
+    if (row.championId !== cid) {
       row.championId = cid
+      row.championName = null
     }
   }
   for (const p of ally) {

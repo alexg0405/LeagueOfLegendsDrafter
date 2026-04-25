@@ -107,4 +107,55 @@ describe('parseLcuChampSelectSession', () => {
     expect(snap?.bans).toEqual(expect.arrayContaining([103, 12, 34]))
     expect(snap!.bans!.length).toBe(3)
   })
+
+  it('infers local support when LCU leaves the local assigned position blank', () => {
+    const raw = {
+      localPlayerCellId: 4,
+      myTeam: [
+        { team: 1, cellId: 0, championId: 0, assignedPosition: 'top' },
+        { team: 1, cellId: 1, championId: 0, assignedPosition: 'jungle' },
+        { team: 1, cellId: 2, championId: 0, assignedPosition: 'middle' },
+        { team: 1, cellId: 3, championId: 0, assignedPosition: 'bottom' },
+        { team: 1, cellId: 4, championId: 89, assignedPosition: '' }
+      ],
+      theirTeam: [],
+      actions: []
+    }
+    const snap = parseLcuChampSelectSession(raw)
+    expect(snap?.myRole).toBe('support')
+  })
+
+  it('recovers local support when LCU reports a stale duplicate jungle position', () => {
+    const raw = {
+      localPlayerCellId: 4,
+      myTeam: [
+        { team: 1, cellId: 0, championId: 0, assignedPosition: 'top' },
+        { team: 1, cellId: 1, championId: 0, assignedPosition: 'jungle' },
+        { team: 1, cellId: 2, championId: 0, assignedPosition: 'middle' },
+        { team: 1, cellId: 3, championId: 0, assignedPosition: 'bottom' },
+        { team: 1, cellId: 4, championId: 89, assignedPosition: 'jungle' }
+      ],
+      theirTeam: [],
+      actions: []
+    }
+    const snap = parseLcuChampSelectSession(raw)
+    expect(snap?.myRole).toBe('support')
+  })
+
+  it('can infer the local role from a locked support champion when positions are unavailable', () => {
+    const raw = {
+      localPlayerCellId: 0,
+      myTeam: [
+        { team: 1, cellId: 0, championId: 89, assignedPosition: '' },
+        { team: 1, cellId: 1, championId: 0, assignedPosition: '' },
+        { team: 1, cellId: 2, championId: 0, assignedPosition: '' },
+        { team: 1, cellId: 3, championId: 0, assignedPosition: '' },
+        { team: 1, cellId: 4, championId: 0, assignedPosition: '' }
+      ],
+      theirTeam: [],
+      actions: []
+    }
+    const snap = parseLcuChampSelectSession(raw)
+    expect(snap?.myRole).toBe('support')
+  })
 })

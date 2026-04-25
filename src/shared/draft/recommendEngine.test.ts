@@ -1,9 +1,56 @@
 import { describe, expect, it } from 'vitest'
 import { buildEngineState, legalChampionSetForRole } from './draftState'
 import { cloneWithMyPick, completeDraftRandomly, recommend, v1ComponentScores, ENGINE_V1_LABEL } from './recommendEngine'
+import type { CompiledTrainedEffects } from './trainedEffects'
 import type { DraftSnapshot } from './types'
 
-const idMap = new Map<number, string>([[103, 'Ahri']])
+const idMap = new Map<number, string>([
+  [10, 'Kayle'],
+  [50, 'Swain'],
+  [60, 'Elise'],
+  [64, 'Lee Sin'],
+  [77, 'Udyr'],
+  [103, 'Ahri'],
+  [222, 'Jinx']
+])
+
+const roleKeys = ['top', 'jungle', 'middle', 'bottom', 'support'] as const
+
+function emptyBase(): CompiledTrainedEffects['base'] {
+  return Object.fromEntries(roleKeys.map((r) => [r, new Map<number, number>()])) as CompiledTrainedEffects['base']
+}
+
+function emptyMatchups(): CompiledTrainedEffects['matchup'] {
+  return Object.fromEntries(roleKeys.map((r) => [r, new Map<number, Map<number, number>>()])) as CompiledTrainedEffects['matchup']
+}
+
+function emptySynergy(): CompiledTrainedEffects['synergy'] {
+  return Object.fromEntries(
+    roleKeys.map((r) => [
+      r,
+      Object.fromEntries(roleKeys.map((r2) => [r2, new Map<number, Map<number, number>>()]))
+    ])
+  ) as CompiledTrainedEffects['synergy']
+}
+
+function trainedFixture(): CompiledTrainedEffects {
+  return {
+    status: {
+      schemaVersion: 1,
+      exportedAt: 'test',
+      basePairs: 0,
+      matchupPairs: 0,
+      synergyPairs: 0,
+      patchesSeen: ['test'],
+      hasAnyData: true
+    },
+    base: emptyBase(),
+    matchup: emptyMatchups(),
+    synergy: emptySynergy(),
+    comfort: new Map(),
+    idToName: new Map(idMap)
+  }
+}
 
 const baseSnap: DraftSnapshot = {
   ally: [
@@ -90,6 +137,156 @@ describe('recommend v1', () => {
     const v = v1ComponentScores(103, 'middle', st, null, null)
     /** Old 0.85·k/(wSum) factor pulled neutral boards ~8–15% below `base`, so every delta looked negative. */
     expect(v.contextCombined).toBeGreaterThanOrEqual(v.base - 0.08)
+  })
+
+  it('keeps curated hard counters visible when trained matchup rows are near neutral', () => {
+    const snap: DraftSnapshot = {
+      ally: [
+        { role: 'top', championId: null, championName: null, cellId: 0 },
+        { role: 'jungle', championId: null, championName: null, cellId: 1 },
+        { role: 'middle', championId: null, championName: null, cellId: 2 },
+        { role: 'bottom', championId: null, championName: null, cellId: 3 },
+        { role: 'support', championId: null, championName: null, cellId: 4 }
+      ],
+      enemy: [
+        { role: 'top', championId: null, championName: null, cellId: 5 },
+        { role: 'jungle', championId: 64, championName: 'Lee Sin', cellId: 6 },
+        { role: 'middle', championId: null, championName: null, cellId: 7 },
+        { role: 'bottom', championId: null, championName: null, cellId: 8 },
+        { role: 'support', championId: null, championName: null, cellId: 9 }
+      ],
+      myTeam: '100',
+      myRole: 'jungle',
+      localPlayerCellId: 1,
+      bans: null,
+      myPickOrder: null
+    }
+    const trained = trainedFixture()
+    trained.matchup.jungle.set(60, new Map([[64, -0.0093]]))
+    const st = buildEngineState(snap, 'jungle', {
+      bans: null,
+      myPickOrder: null,
+      dataDragonVersion: null,
+      patch: 'test'
+    })
+    const v = v1ComponentScores(60, 'jungle', st, idMap, null, trained)
+    expect(v.enemy).toBeLessThan(0.43)
+    expect(v.enemyAdj).toBeLessThan(-0.01)
+    expect(v.contextCombined - v.base).toBeLessThan(-0.01)
+  })
+
+  it('adds trained role-base champions to the candidate pool', () => {
+    const snap: DraftSnapshot = {
+      ally: [
+        { role: 'top', championId: null, championName: null, cellId: 0 },
+        { role: 'jungle', championId: null, championName: null, cellId: 1 },
+        { role: 'middle', championId: null, championName: null, cellId: 2 },
+        { role: 'bottom', championId: null, championName: null, cellId: 3 },
+        { role: 'support', championId: null, championName: null, cellId: 4 }
+      ],
+      enemy: [
+        { role: 'top', championId: null, championName: null, cellId: 5 },
+        { role: 'jungle', championId: null, championName: null, cellId: 6 },
+        { role: 'middle', championId: null, championName: null, cellId: 7 },
+        { role: 'bottom', championId: null, championName: null, cellId: 8 },
+        { role: 'support', championId: null, championName: null, cellId: 9 }
+      ],
+      myTeam: '100',
+      myRole: 'jungle',
+      localPlayerCellId: 1,
+      bans: null,
+      myPickOrder: null
+    }
+    const trained = trainedFixture()
+    trained.base.jungle.set(77, 2.2)
+    const st = buildEngineState(snap, 'jungle', {
+      bans: null,
+      myPickOrder: null,
+      dataDragonVersion: null,
+      patch: 'test'
+    })
+    const { suggestions } = recommend({
+      state: st,
+      idToName: idMap,
+      trainedEffects: trained,
+      maxResults: 3,
+      monteCarloSamples: 0
+    })
+    expect(suggestions.some((s) => s.championId === 77)).toBe(true)
+  })
+
+  it('uses public top-lane counter data to surface contextual deltas', () => {
+    const snap: DraftSnapshot = {
+      ally: [
+        { role: 'top', championId: null, championName: null, cellId: 0 },
+        { role: 'jungle', championId: null, championName: null, cellId: 1 },
+        { role: 'middle', championId: null, championName: null, cellId: 2 },
+        { role: 'bottom', championId: null, championName: null, cellId: 3 },
+        { role: 'support', championId: null, championName: null, cellId: 4 }
+      ],
+      enemy: [
+        { role: 'top', championId: 10, championName: 'Kayle', cellId: 5 },
+        { role: 'jungle', championId: null, championName: null, cellId: 6 },
+        { role: 'middle', championId: null, championName: null, cellId: 7 },
+        { role: 'bottom', championId: null, championName: null, cellId: 8 },
+        { role: 'support', championId: null, championName: null, cellId: 9 }
+      ],
+      myTeam: '100',
+      myRole: 'top',
+      localPlayerCellId: 0,
+      bans: null,
+      myPickOrder: 4
+    }
+    const st = buildEngineState(snap, 'top', {
+      bans: null,
+      myPickOrder: 4,
+      dataDragonVersion: null,
+      patch: 'test'
+    })
+    const { suggestions } = recommend({
+      state: st,
+      idToName: idMap,
+      maxResults: 8,
+      sortBy: 'delta'
+    })
+    const udyr = suggestions.find((s) => s.championId === 77)
+    expect(udyr).toBeTruthy()
+    expect(udyr?.winRateDelta ?? 0).toBeGreaterThanOrEqual(0.01)
+    expect(udyr?.reasons).toContain('lane_counter')
+  })
+
+  it('uses public bot-lane counter data to move winrate deltas by more than display noise', () => {
+    const snap: DraftSnapshot = {
+      ally: [
+        { role: 'top', championId: null, championName: null, cellId: 0 },
+        { role: 'jungle', championId: null, championName: null, cellId: 1 },
+        { role: 'middle', championId: null, championName: null, cellId: 2 },
+        { role: 'bottom', championId: null, championName: null, cellId: 3 },
+        { role: 'support', championId: null, championName: null, cellId: 4 }
+      ],
+      enemy: [
+        { role: 'top', championId: null, championName: null, cellId: 5 },
+        { role: 'jungle', championId: null, championName: null, cellId: 6 },
+        { role: 'middle', championId: null, championName: null, cellId: 7 },
+        { role: 'bottom', championId: 222, championName: 'Jinx', cellId: 8 },
+        { role: 'support', championId: null, championName: null, cellId: 9 }
+      ],
+      myTeam: '100',
+      myRole: 'bottom',
+      localPlayerCellId: 3,
+      bans: null,
+      myPickOrder: 5
+    }
+    const st = buildEngineState(snap, 'bottom', {
+      bans: null,
+      myPickOrder: 5,
+      dataDragonVersion: null,
+      patch: 'test'
+    })
+    const swain = v1ComponentScores(50, 'bottom', st, idMap, null)
+    expect(swain.enemy).toBeGreaterThan(0.53)
+    expect(swain.enemyAdj).toBeGreaterThan(0.01)
+    expect(swain.contextCombined - swain.base).toBeGreaterThan(0.01)
   })
 })
 

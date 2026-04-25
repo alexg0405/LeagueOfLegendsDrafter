@@ -20,7 +20,9 @@ import { ALLY_SYNERGY_BONUS } from './synergyData'
 import { draftPhaseFromLockedPicks, shrunkBaseRate, shrunkLaneRate } from './statsModel'
 import { winRateToBonus } from './shrinkage'
 import { legalChampionSetForRole, type DraftEngineState } from './draftState'
+import { publicMetaBaseRate, publicMetaCandidateIdsForRole, publicMetaLaneRate } from './metaStats'
 import {
+  draftRoleToKey,
   sigmoid,
   trainedBaseRate,
   trainedLaneRate,
@@ -50,12 +52,26 @@ export type RecommendArgs = {
   deltaListMode?: DraftDeltaListMode
 }
 
-const W_BASE = 0.35
-const W_ALLY = 0.25
-const W_ENEMY = 0.25
-const W_COMFORT = 0.15
-const W_COMP = 0.2
-const MAX_BLIND_PEN = 0.12
+const ALLY_ADJ_MIN = 0.05
+const ALLY_ADJ_GROWTH = 0.05
+const ENEMY_ADJ_MIN = 0.2
+const ENEMY_ADJ_GROWTH = 0.3
+const COMP_ADJ_MIN = 0.02
+const COMP_ADJ_GROWTH = 0.06
+const COMFORT_ADJ_MAX = 0.04
+
+const R_ALLY_PRIOR = 150
+const R_ENEMY_PRIOR = 35
+const R_COMP_PRIOR = 500
+const R_PERSONAL_PRIOR = 40
+
+const BLIND_CAP_BY_ROLE: Record<Exclude<DraftRole, 'unknown'>, number> = {
+  top: 0.1,
+  middle: 0.08,
+  bottom: 0.06,
+  support: 0.05,
+  jungle: 0.04
+}
 
 function bonusToP(bonus: number, scale: number): number {
   return 0.5 + scale * Math.max(-0.1, Math.min(0.1, bonus * 0.04))
@@ -66,14 +82,95 @@ function legacyEnemyP(c: number, e: number): number {
   if (b == null) {
     return 0.5
   }
-  return 0.5 + 0.014 * Math.max(-2.5, Math.min(2.5, b))
+  return Math.max(0.35, Math.min(0.68, 0.5 + 0.03 * Math.max(-6, Math.min(6, b))))
+}
+
+function clampMatchupRate(v: number): number {
+  return Math.max(0.28, Math.min(0.72, v))
+}
+
+function blendEnemyMatchupRate(trainedM: number | null, heuristicM: number): number {
+  if (trainedM == null) {
+    return heuristicM
+  }
+  const trainedShift = trainedM - 0.5
+  const heuristicShift = heuristicM - 0.5
+  if (Math.abs(heuristicShift) < 0.015) {
+    return clampMatchupRate(trainedM)
+  }
+  const sameDirection =
+    trainedShift === 0 || heuristicShift === 0 || Math.sign(trainedShift) === Math.sign(heuristicShift)
+  if (!sameDirection && Math.abs(trainedShift) > Math.abs(heuristicShift) * 1.5) {
+    return clampMatchupRate(0.5 + trainedShift * 0.7 + heuristicShift * 0.3)
+  }
+  const heuristicWeight =
+    Math.abs(heuristicShift) >= 0.09 && Math.abs(trainedShift) < Math.abs(heuristicShift) * 0.5
+      ? 0.8
+      : sameDirection
+        ? 0.4
+        : 0.7
+  return clampMatchupRate(0.5 + trainedShift * (1 - heuristicWeight) + heuristicShift * heuristicWeight)
+}
+
+function blendHeuristicMatchupRates(metaM: number | null, fallbackM: number): number {
+  if (metaM == null) {
+    return fallbackM
+  }
+  const metaShift = metaM - 0.5
+  const fallbackShift = fallbackM - 0.5
+  const sameDirection =
+    metaShift === 0 || fallbackShift === 0 || Math.sign(metaShift) === Math.sign(fallbackShift)
+  const metaWeight = !sameDirection ? 0.9 : Math.abs(fallbackShift) < Math.abs(metaShift) * 0.7 ? 0.88 : 0.78
+  return clampMatchupRate(0.5 + metaShift * metaWeight + fallbackShift * (1 - metaWeight))
+}
+
+function fallbackEnemyP(
+  c: number,
+  e: number,
+  myRole: DraftRole,
+  idToName: ReadonlyMap<number, string> | null | undefined,
+  championMetaById: ReadonlyMap<number, { tags: string[]; partype: string }> | null | undefined
+): number {
+  const cName = idToName?.get(c) ?? null
+  const eName = idToName?.get(e) ?? null
+  const cOverride = getChampionThreatOverride(cName)
+  const eOverride = getChampionThreatOverride(eName)
+  const cProfile = getChampionBuildProfile(c, myRole, championMetaById?.get(c) ?? null, cName)
+  const eProfile = getChampionBuildProfile(e, myRole, championMetaById?.get(e) ?? null, eName)
+  let score = 0.5
+  const enemyAssassin = eOverride?.classes.includes('assassin') ?? false
+  const enemyTank = eOverride?.classes.includes('tank') ?? false
+  const myAssassin = cOverride?.classes.includes('assassin') ?? false
+  const myTank = cOverride?.classes.includes('tank') ?? false
+  const mySquishy = !myTank && (cProfile.damage === 'ad' || cProfile.damage === 'ap')
+  if (enemyAssassin && mySquishy) {
+    score -= 0.03
+  }
+  if (enemyTank && (cProfile.damage === 'ad' || cProfile.damage === 'ap')) {
+    score -= 0.015
+  }
+  if (myAssassin && enemyTank) {
+    score -= 0.02
+  }
+  if (myTank && enemyAssassin) {
+    score += 0.02
+  }
+  if (cProfile.damage === 'mixed' || cProfile.damage === 'flex') {
+    score += 0.01
+  }
+  if ((eProfile.damage === 'mixed' || eProfile.damage === 'flex') && !myTank) {
+    score -= 0.01
+  }
+  return Math.max(0.43, Math.min(0.57, score))
 }
 
 function enemyTerm(
   c: number,
   myRole: DraftRole,
   snap: DraftSnapshot,
-  trained: CompiledTrainedEffects | null | undefined
+  trained: CompiledTrainedEffects | null | undefined,
+  idToName: ReadonlyMap<number, string> | null | undefined,
+  championMetaById: ReadonlyMap<number, { tags: string[]; partype: string }> | null | undefined
 ): number {
   const enemyRolePosteriors = inferEnemyRolePosteriors(snap)
   let s = 0
@@ -83,9 +180,14 @@ function enemyTerm(
       return
     }
     const e = p.championId
-    /** Prefer trained lane rate (exported logits); fall back to bundled shrinkage then heuristic bonuses. */
+    /** Blend trained lane rate with bundled counters so sparse near-50 rows do not erase hard counters. */
     const trainedM = trainedLaneRate(trained ?? null, myRole, c, e)
-    const m = trainedM ?? shrunkLaneRate(c, e) ?? legacyEnemyP(c, e)
+    const metaM = publicMetaLaneRate(myRole, c, e)
+    const laneM = shrunkLaneRate(c, e)
+    const legacyM = MATCHUP_BONUS[String(c)]?.[String(e)] != null ? legacyEnemyP(c, e) : null
+    const fallbackM = laneM ?? legacyM ?? fallbackEnemyP(c, e, myRole, idToName, championMetaById)
+    const heuristicM = blendHeuristicMatchupRates(metaM, fallbackM)
+    const m = blendEnemyMatchupRate(trainedM, heuristicM)
     const wgt = inferredLaneWeightForEnemy(enemyRolePosteriors, idx, myRole)
     s += m * wgt
     w += wgt
@@ -131,9 +233,10 @@ function blindPenalty(
   c: number,
   poolKey: keyof typeof ROLE_CHAMPION_POOL,
   state: DraftEngineState,
-  trained: CompiledTrainedEffects | null | undefined
+  trained: CompiledTrainedEffects | null | undefined,
+  enemyExposure: number
 ): number {
-  const base = trainedBaseRate(trained ?? null, poolKey as DraftRole, c) ?? shrunkBaseRate(poolKey, c)
+  const base = baseTerm(c, poolKey, state.myRole, trained)
   const phase = draftPhaseFromLockedPicks(state.lockedChampionPicks)
   const earlyBoard = phase === 'early' && state.lockedChampionPicks < 3
   const earlyLcu = state.myPickOrder != null && state.myPickOrder <= 2
@@ -141,10 +244,29 @@ function blindPenalty(
   if (!useEarly) {
     return 0
   }
-  if (base >= 0.505) {
-    return 0
+  const roleCap = BLIND_CAP_BY_ROLE[poolKey as Exclude<DraftRole, 'unknown'>]
+  const vulnerability = Math.max(0, Math.min(1, (0.51 - base) / 0.1))
+  return roleCap * Math.max(0, Math.min(1, enemyExposure)) * vulnerability
+}
+
+function blendBaseRates(trainedM: number | null, metaM: number | null, fallbackM: number): number {
+  if (trainedM != null && metaM != null) {
+    return clampMatchupRate(0.5 + (trainedM - 0.5) * 0.4 + (metaM - 0.5) * 0.6)
   }
-  return (0.505 - base) * (MAX_BLIND_PEN / 0.1)
+  return trainedM ?? metaM ?? fallbackM
+}
+
+function baseTerm(
+  c: number,
+  poolKey: keyof typeof ROLE_CHAMPION_POOL,
+  myRole: DraftRole,
+  trained: CompiledTrainedEffects | null | undefined
+): number {
+  const role = myRole === 'unknown' ? (poolKey as DraftRole) : myRole
+  const trainedM = trainedBaseRate(trained ?? null, role, c)
+  const metaM = publicMetaBaseRate(poolKey as DraftRole, c)
+  const fallbackM = shrunkBaseRate(poolKey, c)
+  return blendBaseRates(trainedM, metaM, fallbackM)
 }
 
 function comfortGet(id: number, m: ReadonlyMap<number, number> | null | undefined): number {
@@ -284,6 +406,47 @@ function teammateLockCountExcludingLocal(s: DraftSnapshot): number {
   return n
 }
 
+function enemyLockCount(s: DraftSnapshot): number {
+  let n = 0
+  for (const e of s.enemy) {
+    if (e.championId != null && e.championId > 0) {
+      n += 1
+    }
+  }
+  return n
+}
+
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v))
+}
+
+function centered01(v: number): number {
+  return clamp01(v) - 0.5
+}
+
+function reliability(nEff: number, prior: number): number {
+  if (!Number.isFinite(nEff) || nEff <= 0) {
+    return 0
+  }
+  return nEff / (nEff + prior)
+}
+
+function laneCertainty(snapshot: DraftSnapshot, myRole: DraftRole): number {
+  if (myRole === 'unknown') {
+    return 0
+  }
+  const post = inferEnemyRolePosteriors(snapshot)
+  let laneMass = 0
+  snapshot.enemy.forEach((e, idx) => {
+    if (e.championId == null || e.championId <= 0) {
+      return
+    }
+    const p = post.get(idx)
+    laneMass += p ? p[myRole] ?? 0 : 0
+  })
+  return clamp01(laneMass)
+}
+
 function hasBoardContext(s: DraftSnapshot, myRole: DraftRole, localCell: number | null): boolean {
   for (const a of s.ally) {
     if (a.championId == null || a.championId === 0) {
@@ -303,8 +466,9 @@ function hasBoardContext(s: DraftSnapshot, myRole: DraftRole, localCell: number 
 }
 
 /**
- * V1 linear blend, with **extra weight on the ally/teamcomp term** as more allies lock
- * (rebalances away from base so suggestions react to your comp).
+ * Baseline-anchored additive model:
+ * score = base + centered context adjustments - blind risk.
+ * This prevents neutral context from regressing every candidate toward 50%.
  */
 export function v1ComponentScores(
   c: number,
@@ -320,6 +484,10 @@ export function v1ComponentScores(
   enemy: number
   comfort: number
   comp: number
+  allyAdj: number
+  enemyAdj: number
+  compAdj: number
+  comfortAdj: number
   blindP: number
   contextCombined: number
   combined: number
@@ -327,25 +495,46 @@ export function v1ComponentScores(
   const s = state.snapshot
   const localCell = s.localPlayerCellId
   const myRole = state.myRole
-  const base = trainedBaseRate(trained, myRole, c) ?? shrunkBaseRate(poolKey, c)
+  const base = baseTerm(c, poolKey, myRole, trained)
   const ally = allyTerm(c, myRole, localCell, s, trained)
-  const enemy = enemyTerm(c, myRole, s, trained)
+  const enemy = enemyTerm(c, myRole, s, trained, idToName, championMetaById)
   const comf = comfortGet(c, comfortBy)
   const comp = compTerm(c, myRole, localCell, s, championMetaById, idToName)
-  const blindP = blindPenalty(c, poolKey, state, trained)
-  const t = Math.min(1, teammateLockCountExcludingLocal(s) / 4)
-  const wA = W_ALLY * (1 + 0.2 * t)
-  const wB = W_BASE * (1 - 0.1 * t)
-  const wE = W_ENEMY * (1 - 0.05 * t)
-  /** Weighted average (same scale as `base`) so delta vs baseline is meaningful; old 0.85·k shrink made deltas almost always negative. */
-  const wSum = wA + wB + wE + W_COMP
-  const blended = (wB * base + wA * ally + wE * enemy + W_COMP * comp) / wSum
-  const contextCombined = Math.max(0, Math.min(1, blended))
-  const combined = Math.max(
-    0,
-    Math.min(1, contextCombined + W_COMFORT * comf - blindP)
-  )
-  return { base, ally, enemy, comfort: comf, comp, blindP, contextCombined, combined }
+  const allyLocks = teammateLockCountExcludingLocal(s)
+  const enemyLocks = enemyLockCount(s)
+  const tA = clamp01(allyLocks / 4)
+  const lc = laneCertainty(s, myRole)
+  const tE = clamp01(lc * Math.max(0.65, enemyLocks / 5))
+  const tC = tA
+
+  const rA = reliability(allyLocks * 60, R_ALLY_PRIOR)
+  const rE = reliability(enemyLocks * 70 * Math.max(0.35, lc), R_ENEMY_PRIOR)
+  const rC = reliability(allyLocks * 50, R_COMP_PRIOR)
+  const hasComfortSignal = comfortBy != null && comfortBy.has(c)
+  const rP = reliability(hasComfortSignal ? 40 : 0, R_PERSONAL_PRIOR)
+
+  const allyAdj = (ALLY_ADJ_MIN + ALLY_ADJ_GROWTH * tA) * rA * centered01(ally)
+  const enemyAdj = (ENEMY_ADJ_MIN + ENEMY_ADJ_GROWTH * tE) * rE * centered01(enemy)
+  const compAdj = (COMP_ADJ_MIN + COMP_ADJ_GROWTH * tC) * rC * centered01(comp)
+  const comfortAdj = COMFORT_ADJ_MAX * rP * centered01(comf)
+  const blindP = blindPenalty(c, poolKey, state, trained, 1 - tE)
+
+  const contextCombined = clamp01(base + allyAdj + enemyAdj + compAdj)
+  const combined = clamp01(contextCombined + comfortAdj - blindP)
+  return {
+    base,
+    ally,
+    enemy,
+    comfort: comf,
+    comp,
+    allyAdj,
+    enemyAdj,
+    compAdj,
+    comfortAdj,
+    blindP,
+    contextCombined,
+    combined
+  }
 }
 
 function mulberry32(a: number): () => number {
@@ -366,7 +555,9 @@ function pickFromPoolExcluding(
     return null
   }
   const key = role as keyof typeof ROLE_CHAMPION_POOL
-  const list = (ROLE_CHAMPION_POOL[key] ?? []).filter((id) => !exclude.has(id))
+  const list = Array.from(
+    new Set([...(ROLE_CHAMPION_POOL[key] ?? []), ...publicMetaCandidateIdsForRole(role)])
+  ).filter((id) => !exclude.has(id))
   if (list.length === 0) {
     return null
   }
@@ -483,6 +674,15 @@ export function recommend(args: RecommendArgs): {
   }
 
   const legal = legalChampionSetForRole(poolKey)
+  for (const c of publicMetaCandidateIdsForRole(poolKey as DraftRole)) {
+    legal.add(c)
+  }
+  const trainedPoolKey = draftRoleToKey(myRole)
+  if (trainedEffects && trainedPoolKey) {
+    for (const c of Array.from(trainedEffects.base[trainedPoolKey].keys())) {
+      legal.add(c)
+    }
+  }
   const un = state.unavailable
   const pool: number[] = []
   for (const c of Array.from(legal)) {
@@ -645,11 +845,13 @@ export function recommend(args: RecommendArgs): {
           `V1 ${(comp.combined * 100).toFixed(1)}%`,
           `EV ${((it.ev ?? 0) * 100).toFixed(1)}%`,
           `σ${((it.risk ?? 0) * 100).toFixed(0)}%`,
+          `adj a${(comp.allyAdj * 100).toFixed(1)} e${(comp.enemyAdj * 100).toFixed(1)} c${(comp.compAdj * 100).toFixed(1)} p${(comp.comfortAdj * 100).toFixed(1)} b-${(comp.blindP * 100).toFixed(1)}`,
           laneOpp ? 'lane' : 'blind'
         ]
       : [
           `~${(comp.combined * 100).toFixed(1)}% blend`,
           `b${(comp.base * 100).toFixed(0)}% a${(comp.ally * 100).toFixed(0)}% e${(comp.enemy * 100).toFixed(0)}% c${(comp.comp * 100).toFixed(0)}%`,
+          `adj a${(comp.allyAdj * 100).toFixed(1)} e${(comp.enemyAdj * 100).toFixed(1)} c${(comp.compAdj * 100).toFixed(1)} p${(comp.comfortAdj * 100).toFixed(1)} b-${(comp.blindP * 100).toFixed(1)}`,
           laneOpp ? 'lane' : 'blind'
         ]
     return {
@@ -663,7 +865,11 @@ export function recommend(args: RecommendArgs): {
       lookaheadEV: it.ev,
       lookaheadRisk: it.risk,
       reasons: Array.from(new Set(reasons)),
-      runes: runeLoadoutForChampion(c, myRole),
+      runes: runeLoadoutForChampion(c, myRole, {
+        snapshot: state.snapshot,
+        idToName,
+        championMetaById
+      }),
       detail: detailParts.join(' · '),
       buildProfile: getChampionBuildProfile(c, myRole, championMetaById?.get(c) ?? null, nameOf(c))
     }

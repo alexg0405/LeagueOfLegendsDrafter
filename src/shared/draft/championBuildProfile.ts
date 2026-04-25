@@ -35,10 +35,18 @@ function overrideProfile(
   const p = partype && partype !== 'None' && partype !== 'Unknown' ? partype : 'Mana/HP'
   const damage: ChampionBuildProfile['damage'] =
     o.threat === 'hybrid' ? 'mixed' : o.threat === 'utility' ? 'mixed' : o.threat
+  const threatLabel =
+    o.threat === 'ap'
+      ? 'AP'
+      : o.threat === 'ad'
+        ? 'AD'
+        : o.threat === 'hybrid'
+          ? 'Hybrid'
+          : 'Utility'
   return {
     damage,
     archetype: o.classes.join(' / '),
-    buildHint: `Override profile for ${championName}: ${o.threat} threat with ${o.classes.join(' / ')} role.`,
+    buildHint: `${threatLabel} threat with ${o.classes.join(' / ')} role.`,
     tagsLine: o.classes.join(' · '),
     partype: p
   }

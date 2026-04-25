@@ -39,6 +39,16 @@ export { ALLY_SYNERGY_BONUS } from './synergyData'
 export { inferEnemyRolePosteriors, inferredLaneWeightForEnemy } from './roleInference'
 export { HEURISTIC_PATCH_LABEL, MATCHUP_BONUS, ROLE_CHAMPION_POOL } from './matchupData'
 export { NEXUS_STATS_MODEL_LABEL } from './statsModel'
+export {
+  PUBLIC_META_STATS_LABEL,
+  publicMetaBaseRate,
+  publicMetaBaseStat,
+  publicMetaCandidateIdsForRole,
+  publicMetaCounterStat,
+  publicMetaLaneRate,
+  type PublicMetaBaseStat,
+  type PublicMetaCounterStat
+} from './metaStats'
 export { runeLoadoutForChampion } from './runeHints'
 export { parseDraftVisionResponse } from './visionJson'
 export type { LcuChampSelectResult } from './lcuTypes'

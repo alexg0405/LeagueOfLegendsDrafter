@@ -223,6 +223,14 @@ export function isDraftUpdate(x: unknown): x is DraftUpdate {
   if (typeof o.lcuConnected !== 'boolean') {
     return false
   }
+  if (
+    o.lcuStatus !== undefined &&
+    o.lcuStatus !== 'unknown' &&
+    o.lcuStatus !== 'waiting' &&
+    o.lcuStatus !== 'ready'
+  ) {
+    return false
+  }
   if (o.snapshot != null && !isSnapshot(o.snapshot)) {
     return false
   }

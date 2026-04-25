@@ -125,6 +125,8 @@ export type OverlayEngineEcho = OverlayEnginePrefs & {
 export type DraftUpdate = {
   source: DraftSource
   lcuConnected: boolean
+  /** UI-level client state for calm startup/loading copy. */
+  lcuStatus?: 'unknown' | 'waiting' | 'ready'
   snapshot: DraftSnapshot | null
   suggestions: PickSuggestion[]
   /** Optional coaching text explanation */

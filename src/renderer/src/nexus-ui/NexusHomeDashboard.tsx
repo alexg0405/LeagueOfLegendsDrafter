@@ -1,6 +1,6 @@
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
+import { useState, type ReactNode } from 'react'
 import { MicroLabel, NexusPlus } from './NexusTick'
-import { NexusModuleCard } from './NexusModuleCard'
 import { NexusProgressSegmented } from './NexusProgressSegmented'
 import {
   DUR,
@@ -18,16 +18,65 @@ type Props = {
   onEnterOperations: () => void
 }
 
+type HomeModule = {
+  id: string
+  kicker: string
+  title: string
+  light?: boolean
+  body: ReactNode
+}
+
 export function NexusHomeDashboard({
   ddragonVersion,
   lcuStatus,
   patchLabel,
   onEnterOperations
 }: Props) {
+  const [openModuleIds, setOpenModuleIds] = useState<ReadonlySet<string>>(() => new Set())
   const { reduce } = useNexusMotion()
   const titleV = homeTitleLineVars(reduce)
   const metaV = homeMetaCascadeVars(reduce)
   const gridV = cardStaggerContainerVars(reduce)
+  const lcuText = lcuStatus.toLowerCase()
+  const lcuClass =
+    lcuText.includes('ready') || lcuText.includes('live')
+      ? 'text-nexus-lime/85'
+      : lcuText.includes('waiting') || lcuText.includes('detected')
+        ? 'text-nexus-yellow/90'
+        : 'text-nexus-red/85'
+  const modules: HomeModule[] = [
+    {
+      id: 'LC_01',
+      kicker: 'lcu',
+      title: 'League client',
+      body: 'Connects to the Riot client when you are in champ select. No login stored in Nexus.'
+    },
+    {
+      id: 'SC_01',
+      kicker: 'model',
+      title: 'Scoring',
+      light: true,
+      body: (
+        <>
+          <NexusProgressSegmented value={0.55} label="blend (v1)" sub="4-term" />
+          <p className="mt-2 font-mono text-sm text-[#1a1e1a]">Base / lane / ally terms · export optional</p>
+        </>
+      )
+    },
+    {
+      id: 'OV_01',
+      kicker: 'hud',
+      title: 'Overlay',
+      body: 'Compact window on top of the game. Insert, F9, or F10 — set up from Draft.'
+    },
+    {
+      id: 'TR_01',
+      kicker: 'train',
+      title: 'Data (optional)',
+      light: true,
+      body: 'Pull match-v5, ingest, aggregate, export — for custom stats. No cloud required.'
+    }
+  ]
 
   return (
     <div className="p-5 lg:px-8 lg:py-6 min-h-0 max-w-[1100px]">
@@ -43,7 +92,7 @@ export function NexusHomeDashboard({
               animate="animate"
             >
               <MicroLabel>league // champ select</MicroLabel>
-              <span className="font-mono text-sm text-nexus-lime/85">SoloQ · Flex · manual/vision if needed</span>
+              <span className="font-mono text-sm text-nexus-lime/85">SoloQ · Flex · manual entry if needed</span>
             </motion.div>
             <h1 className="font-display text-5xl sm:text-6xl md:text-7xl text-nexus-text leading-[0.9] tracking-[0.06em] mb-1 overflow-hidden">
               <motion.span className="block" custom={0} variants={titleV} initial="initial" animate="animate">
@@ -61,8 +110,7 @@ export function NexusHomeDashboard({
               animate="animate"
             >
               Pick and ban support for <span className="text-nexus-text/85">League of Legends</span> — Riot LCU, manual
-              board, or screen vision. Suggestions are heuristics plus optional data you train locally. Third-party; not
-              from Riot.
+              board, and optional data you train locally. Third-party; not from Riot.
             </motion.p>
             <motion.div
               className="mt-4 flex flex-wrap items-center gap-2 font-mono text-sm text-nexus-muted"
@@ -87,7 +135,7 @@ export function NexusHomeDashboard({
               </motion.button>
             </div>
             <motion.p
-              className="mt-4 font-mono text-sm text-nexus-red/85 max-w-prose leading-snug"
+              className={`mt-4 font-mono text-sm ${lcuClass} max-w-prose leading-snug`}
               custom={2}
               variants={metaV}
               initial="initial"
@@ -95,6 +143,18 @@ export function NexusHomeDashboard({
             >
               Client: {lcuStatus}
             </motion.p>
+            <motion.div
+              className="mt-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 border border-nexus-line/70 bg-nexus-bg/35 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-nexus-muted"
+              custom={3}
+              variants={metaV}
+              initial="initial"
+              animate="animate"
+            >
+              <span className="text-nexus-lime/75">tagmark</span>
+              <span>github @ alexg0405</span>
+              <span className="text-nexus-line">/</span>
+              <span>linkedin @ alexanderguodev</span>
+            </motion.div>
           </div>
           <div className="border-t lg:border-t-0 lg:border-l border-nexus-line bg-nexus-bg/90 flex flex-col min-h-[100px]">
             <div className="flex-1 p-2 flex items-center justify-center">
@@ -124,26 +184,85 @@ export function NexusHomeDashboard({
       </section>
 
       <motion.div
-        className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+        className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start"
         variants={gridV}
         initial="initial"
         animate="animate"
       >
-        <NexusModuleCard title="League client" kicker="lcu" id="LC_01" className="min-h-[128px]">
-          Connects to the Riot client when you are in champ select. No login stored in Nexus.
-        </NexusModuleCard>
-        <NexusModuleCard title="Scoring" kicker="model" id="SC_01" className="min-h-[120px] light">
-          <NexusProgressSegmented value={0.55} label="blend (v1)" sub="4-term" />
-          <p className="mt-2 font-mono text-sm text-nexus-muted/95">
-            Base / lane / ally terms · export optional
-          </p>
-        </NexusModuleCard>
-        <NexusModuleCard title="Overlay" kicker="hud" id="OV_01" className="min-h-[120px]">
-          Compact window on top of the game. Insert, F9, or F10 — set up from Draft.
-        </NexusModuleCard>
-        <NexusModuleCard title="Data (optional)" kicker="train" id="TR_01" className="min-h-[120px] light">
-          Pull match-v5, ingest, aggregate, export — for custom stats. No cloud required.
-        </NexusModuleCard>
+        {modules.map((module) => {
+          const isOpen = openModuleIds.has(module.id)
+          return (
+            <motion.section
+              key={module.id}
+              layout={!reduce}
+              className={[
+                'relative border border-nexus-line overflow-hidden',
+                module.light ? 'bg-nexus-panel text-[#0a0c0d]' : 'bg-nexus-surface'
+              ].join(' ')}
+              transition={reduce ? { duration: 0 } : { duration: 0.18, ease: EASING.out }}
+            >
+              <button
+                type="button"
+                className="nexus-focus w-full px-4 py-3 text-left flex items-center justify-between gap-3 font-mono text-sm"
+                onClick={() =>
+                  setOpenModuleIds((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(module.id)) {
+                      next.delete(module.id)
+                    } else {
+                      next.add(module.id)
+                    }
+                    return next
+                  })
+                }
+                aria-expanded={isOpen}
+              >
+                <span className={module.light ? 'text-[#1a1e1a]' : 'text-nexus-muted'}>
+                  menu // {module.id}
+                </span>
+                <motion.span
+                  className={[
+                    'text-lg leading-none',
+                    module.light ? 'text-[#0a0c0d]' : 'text-nexus-lime/90'
+                  ].join(' ')}
+                  animate={reduce ? undefined : { rotate: isOpen ? 45 : 0, scale: isOpen ? 1.08 : 1 }}
+                  transition={{ duration: 0.14, ease: EASING.sharp }}
+                  aria-hidden
+                >
+                  +
+                </motion.span>
+              </button>
+              <AnimatePresence initial={false}>
+                {isOpen && (
+                  <motion.div
+                    key="module-body"
+                    className={[
+                      'border-t border-nexus-line px-4 py-3 min-h-[120px]',
+                      module.light ? 'text-[#1a1e1a]' : 'text-nexus-muted'
+                    ].join(' ')}
+                    initial={reduce ? false : { height: 0, opacity: 0, scale: 0.98, y: -6 }}
+                    animate={reduce ? undefined : { height: 'auto', opacity: 1, scale: 1, y: 0 }}
+                    exit={reduce ? undefined : { height: 0, opacity: 0, scale: 0.98, y: -6 }}
+                    transition={reduce ? { duration: 0 } : { duration: 0.18, ease: EASING.out }}
+                  >
+                    <MicroLabel className={module.light ? 'opacity-70 text-[#1a1e1a]' : 'opacity-80'}>
+                      {module.kicker}
+                    </MicroLabel>
+                    <h3
+                      className={[
+                        'mt-1 font-display text-2xl tracking-[0.1em] uppercase leading-tight',
+                        module.light ? 'text-[#0a0c0d]' : 'text-nexus-text'
+                      ].join(' ')}
+                    >
+                      {module.title}
+                    </h3>
+                    <div className="mt-2 text-base leading-relaxed">{module.body}</div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.section>
+          )
+        })}
       </motion.div>
     </div>
   )

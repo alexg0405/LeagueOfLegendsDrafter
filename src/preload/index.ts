@@ -57,6 +57,8 @@ const api = {
   },
 
   toggleOverlay: () => ipcRenderer.invoke('overlay:toggle') as Promise<{ visible: boolean }>,
+  setOverlayProjectionMode: (open: boolean) =>
+    ipcRenderer.invoke('overlay:setProjectionMode', open) as Promise<{ ok: boolean; open: boolean }>,
   closeApp: () => ipcRenderer.invoke('app:close') as Promise<{ ok: true }>,
   minimizeApp: () => ipcRenderer.invoke('app:minimize') as Promise<{ ok: true }>,
 

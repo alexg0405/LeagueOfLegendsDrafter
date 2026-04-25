@@ -134,3 +134,133 @@
     );
   pointer-events: none;
 }
+
+.nexus-matrix-stage {
+  background:
+    radial-gradient(circle at 78% 12%, rgba(29, 212, 168, 0.2), transparent 24%),
+    linear-gradient(180deg, rgba(6, 15, 12, 0.92), rgba(3, 8, 7, 0.98));
+}
+
+.nexus-matrix-stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 22px, rgba(29, 212, 168, 0.16) 23px, transparent 24px),
+    repeating-linear-gradient(180deg, rgba(29, 212, 168, 0.07) 0 1px, transparent 1px 6px);
+  animation: nexus-matrix-rain 1.4s linear infinite;
+  opacity: 0.35;
+}
+
+.nexus-matrix-stage::after {
+  content: '01001110 01000101 01011000 01010101 01010011 00101111 00101111 01000100 01010010 01000001 01000110 01010100';
+  position: absolute;
+  left: 1.2rem;
+  right: 1.2rem;
+  top: 0.75rem;
+  color: rgba(29, 212, 168, 0.16);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.nexus-matrix-panel {
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  animation: nexus-matrix-panel-in 180ms ease-out both;
+}
+
+.nexus-matrix-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(29, 212, 168, 0.12), transparent 14%, transparent 86%, rgba(29, 212, 168, 0.1)),
+    repeating-linear-gradient(0deg, rgba(232, 243, 238, 0.035), rgba(232, 243, 238, 0.035) 1px, transparent 1px, transparent 4px);
+  mix-blend-mode: screen;
+  z-index: 20;
+}
+
+.nexus-matrix-beams {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.nexus-matrix-beams span {
+  position: absolute;
+  top: 2.4rem;
+  right: 2.4rem;
+  width: 120vw;
+  height: 1px;
+  transform-origin: right center;
+  background: linear-gradient(90deg, transparent, rgba(29, 212, 168, 0.04), rgba(29, 212, 168, 0.82));
+  box-shadow: 0 0 14px rgba(29, 212, 168, 0.75);
+  animation: nexus-matrix-beam 420ms ease-out both;
+}
+
+.nexus-matrix-beams span:nth-child(1) {
+  transform: rotate(10deg);
+}
+
+.nexus-matrix-beams span:nth-child(2) {
+  transform: rotate(24deg);
+  animation-delay: 35ms;
+}
+
+.nexus-matrix-beams span:nth-child(3) {
+  transform: rotate(41deg);
+  animation-delay: 70ms;
+}
+
+.nexus-matrix-beams span:nth-child(4) {
+  transform: rotate(63deg);
+  animation-delay: 105ms;
+}
+
+.nexus-matrix-beams span:nth-child(5) {
+  transform: rotate(83deg);
+  animation-delay: 140ms;
+}
+
+.nexus-matrix-beams span:nth-child(6) {
+  transform: rotate(116deg);
+  animation-delay: 175ms;
+}
+
+@keyframes nexus-matrix-rain {
+  from {
+    background-position: 0 0, 0 0;
+  }
+  to {
+    background-position: 0 0, 0 24px;
+  }
+}
+
+@keyframes nexus-matrix-beam {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes nexus-matrix-panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}

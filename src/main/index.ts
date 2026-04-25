@@ -6,6 +6,7 @@ import {
   ipcMain,
   screen,
   desktopCapturer,
+  type Rectangle,
   type WebContents
 } from 'electron'
 import { existsSync } from 'node:fs'
@@ -113,12 +114,56 @@ const OVERLAY_WIDTH = 380
 
 let mainWindow: BrowserWindow | null = null
 let overlayWindow: BrowserWindow | null = null
+let overlayCompactBounds: Rectangle | null = null
+let overlayProjectionOpen = false
 
 function applyOverlayPriority(win: BrowserWindow) {
   win.setAlwaysOnTop(true, 'screen-saver')
   if (process.platform === 'darwin') {
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   }
+}
+
+function setOverlayProjectionMode(open: boolean): { ok: boolean; open: boolean } {
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    return { ok: false, open: false }
+  }
+  if (open === overlayProjectionOpen) {
+    return { ok: true, open: overlayProjectionOpen }
+  }
+  applyOverlayPriority(overlayWindow)
+  if (open) {
+    overlayCompactBounds = overlayWindow.getBounds()
+    const display = screen.getDisplayMatching(overlayCompactBounds)
+    const work = display.workArea
+    const maxW = Math.max(320, work.width - 48)
+    const maxH = Math.max(240, work.height - 48)
+    const minW = Math.min(900, maxW)
+    const minH = Math.min(560, maxH)
+    const targetW = Math.min(Math.max(minW, Math.floor(work.width * 0.72)), maxW)
+    const targetH = Math.min(Math.max(minH, Math.floor(work.height * 0.74)), maxH)
+    overlayWindow.setMinimumSize(minW, minH)
+    overlayWindow.setBounds(
+      {
+        width: targetW,
+        height: targetH,
+        x: work.x + Math.max(24, Math.floor((work.width - targetW) / 2)),
+        y: work.y + Math.max(24, Math.floor((work.height - targetH) / 2))
+      },
+      true
+    )
+    overlayProjectionOpen = true
+    overlayWindow.showInactive()
+    return { ok: true, open: true }
+  }
+
+  overlayWindow.setMinimumSize(320, 200)
+  if (overlayCompactBounds) {
+    overlayWindow.setBounds(overlayCompactBounds, true)
+  }
+  overlayProjectionOpen = false
+  overlayWindow.showInactive()
+  return { ok: true, open: false }
 }
 
 /**
@@ -264,6 +309,8 @@ function createOverlayWindow() {
   }
   overlayWindow.on('closed', () => {
     overlayWindow = null
+    overlayCompactBounds = null
+    overlayProjectionOpen = false
   })
 
   if (isDev) {
@@ -418,6 +465,9 @@ app.whenReady().then(() => {
   ipcMain.handle('overlay:toggle', () => {
     toggleOverlayWindow()
     return { visible: overlayWindow && !overlayWindow.isDestroyed() ? overlayWindow.isVisible() : false }
+  })
+  ipcMain.handle('overlay:setProjectionMode', (_event, open: unknown) => {
+    return setOverlayProjectionMode(open === true)
   })
   ipcMain.handle('app:close', () => {
     app.quit()

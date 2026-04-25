@@ -1,6 +1,6 @@
 {
   "name": "league-drafter",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Nexus//Draft — League of Legends draft helper with LCU, overlay, and heuristics",
   "author": "Nexus Draft contributors",
   "main": "out/main/index.js",

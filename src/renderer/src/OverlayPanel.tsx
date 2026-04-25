@@ -85,15 +85,14 @@ function pushOverlayPrefs(patch: OverlayEnginePrefsPatch) {
   void window.drafter.setOverlayEnginePrefs(patch)
 }
 
-function inRolePool(id: number, role: DraftRole, trainedEffects: CompiledTrainedEffects | null): boolean {
+function inRolePool(id: number, role: DraftRole): boolean {
   if (role === 'unknown') {
     return false
   }
   const k = role as keyof typeof ROLE_CHAMPION_POOL
   return (
     (ROLE_CHAMPION_POOL[k] ?? []).includes(id) ||
-    publicMetaCandidateIdsForRole(role).includes(id) ||
-    Boolean(trainedEffects?.base[role]?.has(id))
+    publicMetaCandidateIdsForRole(role).includes(id)
   )
 }
 
@@ -648,7 +647,7 @@ export function OverlayPanel() {
                   </span>
                 )}
               </p>
-              {!inRolePool(lookupId, poolRole, trainedEffects) && (
+              {!inRolePool(lookupId, poolRole) && (
                 <p className="font-mono text-nexus-red/80 text-[11px] m-0 mt-1.5">Not in the curated {poolRole} pool — base is approximate.</p>
               )}
             </div>

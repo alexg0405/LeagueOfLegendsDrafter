@@ -175,7 +175,7 @@ describe('recommend v1', () => {
     expect(v.contextCombined - v.base).toBeLessThan(-0.01)
   })
 
-  it('adds trained role-base champions to the candidate pool', () => {
+  it('uses trained base rows without expanding the role pool', () => {
     const snap: DraftSnapshot = {
       ally: [
         { role: 'top', championId: null, championName: null, cellId: 0 },
@@ -192,14 +192,16 @@ describe('recommend v1', () => {
         { role: 'support', championId: null, championName: null, cellId: 9 }
       ],
       myTeam: '100',
-      myRole: 'jungle',
-      localPlayerCellId: 1,
+      myRole: 'middle',
+      localPlayerCellId: 2,
       bans: null,
       myPickOrder: null
     }
     const trained = trainedFixture()
-    trained.base.jungle.set(77, 2.2)
-    const st = buildEngineState(snap, 'jungle', {
+    trained.base.middle.set(103, 2.2)
+    trained.base.middle.set(67, 2.2)
+    trained.base.middle.set(98, 2.2)
+    const st = buildEngineState(snap, 'middle', {
       bans: null,
       myPickOrder: null,
       dataDragonVersion: null,
@@ -209,10 +211,12 @@ describe('recommend v1', () => {
       state: st,
       idToName: idMap,
       trainedEffects: trained,
-      maxResults: 3,
+      maxResults: 80,
       monteCarloSamples: 0
     })
-    expect(suggestions.some((s) => s.championId === 77)).toBe(true)
+    expect(suggestions.some((s) => s.championId === 103)).toBe(true)
+    expect(suggestions.some((s) => s.championId === 67)).toBe(false)
+    expect(suggestions.some((s) => s.championId === 98)).toBe(false)
   })
 
   it('uses public top-lane counter data to surface contextual deltas', () => {

@@ -22,7 +22,6 @@ import { winRateToBonus } from './shrinkage'
 import { legalChampionSetForRole, type DraftEngineState } from './draftState'
 import { publicMetaBaseRate, publicMetaCandidateIdsForRole, publicMetaLaneRate } from './metaStats'
 import {
-  draftRoleToKey,
   sigmoid,
   trainedBaseRate,
   trainedLaneRate,
@@ -676,12 +675,6 @@ export function recommend(args: RecommendArgs): {
   const legal = legalChampionSetForRole(poolKey)
   for (const c of publicMetaCandidateIdsForRole(poolKey as DraftRole)) {
     legal.add(c)
-  }
-  const trainedPoolKey = draftRoleToKey(myRole)
-  if (trainedEffects && trainedPoolKey) {
-    for (const c of Array.from(trainedEffects.base[trainedPoolKey].keys())) {
-      legal.add(c)
-    }
   }
   const un = state.unavailable
   const pool: number[] = []

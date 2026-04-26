@@ -89,19 +89,6 @@ function shortIntel(text: string | null | undefined, fallback: string): string {
   return first ? first.slice(0, 96) : fallback
 }
 
-function reasonCodes(reasons: readonly string[]): string {
-  const map: Record<string, string> = {
-    fill_role: 'ROLE',
-    base_wr: 'BASE',
-    lane_counter: 'CNTR',
-    late_counter: 'LATE',
-    team_synergy: 'SYN',
-    blind_safe: 'BLIND',
-    meta_safe: 'META'
-  }
-  return reasons.map((r) => map[r] ?? r.toUpperCase()).slice(0, 4).join(' / ')
-}
-
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
     <h3 className="font-mono font-bold text-sm uppercase tracking-[0.12em] text-nexus-lime/95 mb-2.5 border-b border-nexus-line pb-1.5">
@@ -715,7 +702,7 @@ export function OverlayPanel() {
               return (
                 <li
                   key={`${d.boardSignature ?? d.updatedAt}-${i}-${p.championId}`}
-                  className="relative border border-nexus-line/90 bg-nexus-surface-2/95 px-2.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                  className="relative border border-nexus-line/85 bg-nexus-surface-2/90 px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -735,18 +722,10 @@ export function OverlayPanel() {
                         </div>
                       )}
                     </div>
-                    <div className="flex shrink-0 gap-1">
-                      {p.runes && (
-                        <span
-                          className="inline-flex h-6 min-w-6 items-center justify-center border border-nexus-lime/45 px-1.5 font-mono text-[10px] uppercase text-nexus-lime/90"
-                          title={`${p.runes.primaryTree} / ${p.runes.keystone}`}
-                        >
-                          {p.runes.primaryTree.slice(0, 3)}
-                        </span>
-                      )}
+                    <div className="flex shrink-0 gap-1 opacity-90">
                       {p.buildProfile && (
                         <span
-                          className="inline-flex h-6 min-w-6 items-center justify-center border border-nexus-line px-1.5 font-mono text-[10px] uppercase text-nexus-text/85"
+                          className="inline-flex h-5 min-w-6 items-center justify-center border border-nexus-line px-1.5 font-mono text-[10px] uppercase text-nexus-text/85"
                           title={p.buildProfile.buildHint}
                         >
                           {p.buildProfile.damage}
@@ -755,31 +734,43 @@ export function OverlayPanel() {
                     </div>
                   </div>
 
-                  {p.runes && (
-                    <div className="mt-2 border-t border-nexus-line/55 pt-1.5 font-mono text-xs leading-snug">
-                      <span className="text-nexus-lime/85">Runes</span>
-                      <span className="text-nexus-muted"> · {p.runes.keystone} / {p.runes.primaryTree}</span>
-                      <div className="text-[11px] text-nexus-muted/85">{p.runes.secondary}</div>
+                  <div className="mt-2 grid grid-cols-2 gap-1.5 font-mono text-[10px] leading-snug">
+                    <div className="border-l-2 border-nexus-lime/65 bg-nexus-bg/20 pl-1.5 pr-1 py-0.5 min-w-0">
+                      <span className="uppercase tracking-[0.12em] text-nexus-lime/80">Synergy</span>
+                      <span className="text-nexus-line"> · </span>
+                      <span className="text-nexus-text/80 truncate inline-block max-w-[75%] align-bottom">
+                        {allies.length ? allies.join(' / ') : 'pending'}
+                      </span>
                     </div>
-                  )}
-
-                  <div className="mt-2 grid grid-cols-2 gap-2 font-mono text-[11px] leading-snug">
-                    <div className="border-l-2 border-nexus-lime/70 bg-nexus-bg/30 pl-2 pr-1 py-1">
-                      <div className="uppercase tracking-[0.12em] text-nexus-lime/75">Synergizes</div>
-                      <div className="text-nexus-text/85 truncate">{allies.length ? allies.join(' / ') : 'ally picks pending'}</div>
-                    </div>
-                    <div className="border-l-2 border-nexus-red/75 bg-nexus-bg/30 pl-2 pr-1 py-1">
-                      <div className="uppercase tracking-[0.12em] text-nexus-red/75">Counters</div>
-                      <div className="text-nexus-text/85 truncate">{enemies.length ? enemies.join(' / ') : 'enemy picks pending'}</div>
+                    <div className="border-l-2 border-nexus-red/70 bg-nexus-bg/20 pl-1.5 pr-1 py-0.5 min-w-0">
+                      <span className="uppercase tracking-[0.12em] text-nexus-red/80">Good vs</span>
+                      <span className="text-nexus-line"> · </span>
+                      <span className="text-nexus-text/80 truncate inline-block max-w-[75%] align-bottom">
+                        {enemies.length ? enemies.join(' / ') : 'pending'}
+                      </span>
                     </div>
                   </div>
 
-                  <details className="group mt-2 border border-nexus-line/70 bg-nexus-bg/35 font-mono text-[11px] leading-snug text-nexus-text/75">
+                  <div className="mt-2 grid grid-cols-1 gap-1.5">
+                    {p.runes && (
+                      <details className="group border border-nexus-line/65 bg-nexus-bg/25 font-mono text-[11px] leading-snug text-nexus-text/75">
+                        <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
+                          <span>Runes</span>
+                          <span className="text-nexus-lime/80 group-open:rotate-45 transition-transform">+</span>
+                        </summary>
+                        <div className="border-t border-nexus-line/55 px-2 py-1.5">
+                          <span className="text-nexus-lime/85">{p.runes.keystone}</span>
+                          <span className="text-nexus-muted"> / {p.runes.primaryTree}</span>
+                          <div className="mt-0.5 text-nexus-muted/85">{p.runes.secondary}</div>
+                        </div>
+                      </details>
+                    )}
+                  <details className="group border border-nexus-line/65 bg-nexus-bg/25 font-mono text-[11px] leading-snug text-nexus-text/75">
                     <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
                       <span>Tips</span>
                       <span className="text-nexus-lime/80 group-open:rotate-45 transition-transform">+</span>
                     </summary>
-                    <div className="border-t border-nexus-line/60 px-2 py-1.5">
+                    <div className="border-t border-nexus-line/55 px-2 py-1.5">
                       <span>{intel}</span>
                       {p.buildProfile && (
                         <div className="mt-1 text-nexus-muted">
@@ -789,16 +780,6 @@ export function OverlayPanel() {
                       )}
                     </div>
                   </details>
-
-                  <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-nexus-muted">
-                    <span>{reasonCodes(p.reasons)}</span>
-                    {p.lookaheadEV != null && (
-                      <>
-                        <span className="text-nexus-line">·</span>
-                        <span>EV {(p.lookaheadEV * 100).toFixed(1)}%</span>
-                        <span>σ{((p.lookaheadRisk ?? 0) * 100).toFixed(0)}%</span>
-                      </>
-                    )}
                   </div>
                 </li>
               )

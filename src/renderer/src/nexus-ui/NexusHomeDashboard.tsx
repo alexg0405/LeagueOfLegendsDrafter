@@ -13,7 +13,6 @@ import {
 
 type Props = {
   ddragonVersion: string
-  lcuStatus: string
   patchLabel: string
   onEnterOperations: () => void
 }
@@ -28,7 +27,6 @@ type HomeModule = {
 
 export function NexusHomeDashboard({
   ddragonVersion,
-  lcuStatus,
   patchLabel,
   onEnterOperations
 }: Props) {
@@ -37,13 +35,6 @@ export function NexusHomeDashboard({
   const titleV = homeTitleLineVars(reduce)
   const metaV = homeMetaCascadeVars(reduce)
   const gridV = cardStaggerContainerVars(reduce)
-  const lcuText = lcuStatus.toLowerCase()
-  const lcuClass =
-    lcuText.includes('ready') || lcuText.includes('live')
-      ? 'text-nexus-lime/85'
-      : lcuText.includes('waiting') || lcuText.includes('detected')
-        ? 'text-nexus-yellow/90'
-        : 'text-nexus-red/85'
   const modules: HomeModule[] = [
     {
       id: 'LC_01',
@@ -96,22 +87,12 @@ export function NexusHomeDashboard({
             </motion.div>
             <h1 className="font-display text-5xl sm:text-6xl md:text-7xl text-nexus-text leading-[0.9] tracking-[0.06em] mb-1 overflow-hidden">
               <motion.span className="block" custom={0} variants={titleV} initial="initial" animate="animate">
-                DRAFT
-              </motion.span>
-              <motion.span className="block text-nexus-lime" custom={1} variants={titleV} initial="initial" animate="animate">
                 NEXUS
               </motion.span>
+              <motion.span className="block text-nexus-lime" custom={1} variants={titleV} initial="initial" animate="animate">
+                DRAFT
+              </motion.span>
             </h1>
-            <motion.p
-              className="font-mono text-sm sm:text-base text-nexus-muted max-w-xl mt-4 leading-relaxed"
-              custom={0}
-              variants={metaV}
-              initial="initial"
-              animate="animate"
-            >
-              Pick and ban support for <span className="text-nexus-text/85">League of Legends</span> — Riot LCU, manual
-              board, and optional data you train locally. Third-party; not from Riot.
-            </motion.p>
             <motion.div
               className="mt-4 flex flex-wrap items-center gap-2 font-mono text-sm text-nexus-muted"
               custom={1}
@@ -134,15 +115,6 @@ export function NexusHomeDashboard({
                 Open draft
               </motion.button>
             </div>
-            <motion.p
-              className={`mt-4 font-mono text-sm ${lcuClass} max-w-prose leading-snug`}
-              custom={2}
-              variants={metaV}
-              initial="initial"
-              animate="animate"
-            >
-              Client: {lcuStatus}
-            </motion.p>
             <motion.div
               className="mt-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 border border-nexus-line/70 bg-nexus-bg/35 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-nexus-text"
               custom={3}
@@ -156,18 +128,86 @@ export function NexusHomeDashboard({
             </motion.div>
           </div>
           <div className="border-t lg:border-t-0 lg:border-l border-nexus-line bg-nexus-bg/90 flex flex-col min-h-[100px]">
-            <div className="flex-1 p-2 flex items-center justify-center">
-              <motion.div
-                className="text-nexus-lime/90 font-display text-5xl leading-none tracking-widest opacity-90 [writing-mode:vertical-rl] [text-orientation:mixed]"
-                initial={reduce ? false : { opacity: 0, x: 10 }}
-                animate={{ opacity: 0.9, x: 0 }}
-                transition={{ delay: 0.18, duration: DUR.panel, ease: EASING.out }}
-              >
-                NEX
-              </motion.div>
-            </div>
+            <motion.div
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 auto-rows-min items-start gap-2 p-2"
+              variants={gridV}
+              initial="initial"
+              animate="animate"
+            >
+              {modules.map((module) => {
+                const isOpen = openModuleIds.has(module.id)
+                return (
+                  <motion.section
+                    key={module.id}
+                    className={[
+                      'relative border border-nexus-line overflow-hidden',
+                      module.light ? 'bg-nexus-panel text-[#0a0c0d]' : 'bg-nexus-surface'
+                    ].join(' ')}
+                    transition={reduce ? { duration: 0 } : { duration: 0.18, ease: EASING.out }}
+                  >
+                    <button
+                      type="button"
+                      className="nexus-focus w-full px-4 py-3 text-left flex items-center justify-between gap-3 font-mono text-sm"
+                      onClick={() =>
+                        setOpenModuleIds((prev) => {
+                          const next = new Set(prev)
+                          if (next.has(module.id)) {
+                            next.delete(module.id)
+                          } else {
+                            next.add(module.id)
+                          }
+                          return next
+                        })
+                      }
+                      aria-expanded={isOpen}
+                    >
+                      <span className={module.light ? 'text-[#1a1e1a]' : 'text-nexus-muted'}>{module.title}</span>
+                      <motion.span
+                        className={[
+                          'text-lg leading-none',
+                          module.light ? 'text-[#0a0c0d]' : 'text-nexus-lime/90'
+                        ].join(' ')}
+                        animate={reduce ? undefined : { rotate: isOpen ? 45 : 0, scale: isOpen ? 1.08 : 1 }}
+                        transition={{ duration: 0.14, ease: EASING.sharp }}
+                        aria-hidden
+                      >
+                        +
+                      </motion.span>
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {isOpen && (
+                        <motion.div
+                          key="module-body"
+                          className={[
+                            'border-t border-nexus-line px-4 py-3 min-h-[120px]',
+                            module.light ? 'text-[#1a1e1a]' : 'text-nexus-muted'
+                          ].join(' ')}
+                          initial={reduce ? false : { height: 0, opacity: 0, scale: 0.98, y: -6 }}
+                          animate={reduce ? undefined : { height: 'auto', opacity: 1, scale: 1, y: 0 }}
+                          exit={reduce ? undefined : { height: 0, opacity: 0, scale: 0.98, y: -6 }}
+                          transition={reduce ? { duration: 0 } : { duration: 0.18, ease: EASING.out }}
+                        >
+                          <MicroLabel className={module.light ? 'opacity-70 text-[#1a1e1a]' : 'opacity-80'}>
+                            {module.kicker}
+                          </MicroLabel>
+                          <h3
+                            className={[
+                              'mt-1 font-display text-2xl tracking-[0.1em] uppercase leading-tight',
+                              module.light ? 'text-[#0a0c0d]' : 'text-nexus-text'
+                            ].join(' ')}
+                          >
+                            {module.title}
+                          </h3>
+                          <div className="mt-2 text-base leading-relaxed">{module.body}</div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.section>
+                )
+              })}
+            </motion.div>
             <div className="border-t border-nexus-line p-2.5 font-mono text-xs text-nexus-muted space-y-0.5">
-              <p>APP_0.2.2</p>
+              <p>APP_0.3.0</p>
             </div>
           </div>
         </div>
@@ -182,85 +222,6 @@ export function NexusHomeDashboard({
         </div>
       </section>
 
-      <motion.div
-        className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start"
-        variants={gridV}
-        initial="initial"
-        animate="animate"
-      >
-        {modules.map((module) => {
-          const isOpen = openModuleIds.has(module.id)
-          return (
-            <motion.section
-              key={module.id}
-              layout={!reduce}
-              className={[
-                'relative border border-nexus-line overflow-hidden',
-                module.light ? 'bg-nexus-panel text-[#0a0c0d]' : 'bg-nexus-surface'
-              ].join(' ')}
-              transition={reduce ? { duration: 0 } : { duration: 0.18, ease: EASING.out }}
-            >
-              <button
-                type="button"
-                className="nexus-focus w-full px-4 py-3 text-left flex items-center justify-between gap-3 font-mono text-sm"
-                onClick={() =>
-                  setOpenModuleIds((prev) => {
-                    const next = new Set(prev)
-                    if (next.has(module.id)) {
-                      next.delete(module.id)
-                    } else {
-                      next.add(module.id)
-                    }
-                    return next
-                  })
-                }
-                aria-expanded={isOpen}
-              >
-                <span className={module.light ? 'text-[#1a1e1a]' : 'text-nexus-muted'}>{module.title}</span>
-                <motion.span
-                  className={[
-                    'text-lg leading-none',
-                    module.light ? 'text-[#0a0c0d]' : 'text-nexus-lime/90'
-                  ].join(' ')}
-                  animate={reduce ? undefined : { rotate: isOpen ? 45 : 0, scale: isOpen ? 1.08 : 1 }}
-                  transition={{ duration: 0.14, ease: EASING.sharp }}
-                  aria-hidden
-                >
-                  +
-                </motion.span>
-              </button>
-              <AnimatePresence initial={false}>
-                {isOpen && (
-                  <motion.div
-                    key="module-body"
-                    className={[
-                      'border-t border-nexus-line px-4 py-3 min-h-[120px]',
-                      module.light ? 'text-[#1a1e1a]' : 'text-nexus-muted'
-                    ].join(' ')}
-                    initial={reduce ? false : { height: 0, opacity: 0, scale: 0.98, y: -6 }}
-                    animate={reduce ? undefined : { height: 'auto', opacity: 1, scale: 1, y: 0 }}
-                    exit={reduce ? undefined : { height: 0, opacity: 0, scale: 0.98, y: -6 }}
-                    transition={reduce ? { duration: 0 } : { duration: 0.18, ease: EASING.out }}
-                  >
-                    <MicroLabel className={module.light ? 'opacity-70 text-[#1a1e1a]' : 'opacity-80'}>
-                      {module.kicker}
-                    </MicroLabel>
-                    <h3
-                      className={[
-                        'mt-1 font-display text-2xl tracking-[0.1em] uppercase leading-tight',
-                        module.light ? 'text-[#0a0c0d]' : 'text-nexus-text'
-                      ].join(' ')}
-                    >
-                      {module.title}
-                    </h3>
-                    <div className="mt-2 text-base leading-relaxed">{module.body}</div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.section>
-          )
-        })}
-      </motion.div>
     </div>
   )
 }

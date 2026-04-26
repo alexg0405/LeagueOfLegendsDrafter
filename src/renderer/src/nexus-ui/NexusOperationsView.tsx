@@ -108,8 +108,6 @@ export type NexusOperationsViewProps = {
   suggestMcRollouts: number
   maxSuggestMcRollouts: number
   onSuggestMcRollouts: (n: number) => void
-  suggestSortBy: 'score' | 'delta'
-  onSuggestSortBy: (v: 'score' | 'delta') => void
   suggestDeltaListMode: DraftDeltaListMode
   onSuggestDeltaListMode: (v: DraftDeltaListMode) => void
   suggestions: PickSuggestion[]
@@ -137,8 +135,6 @@ export function NexusOperationsView({
   suggestMcRollouts,
   maxSuggestMcRollouts,
   onSuggestMcRollouts,
-  suggestSortBy,
-  onSuggestSortBy,
   suggestDeltaListMode,
   onSuggestDeltaListMode,
   suggestions,
@@ -295,32 +291,17 @@ export function NexusOperationsView({
           </label>
           <label className="flex flex-col gap-1.5 min-w-0">
             <span className="font-mono text-[10px] sm:text-xs text-nexus-lime/85 uppercase tracking-[0.12em]">
-              Sort picks by
+              Delta list
             </span>
             <select
-              className={inField + ' w-[10.5rem]'}
-              value={suggestSortBy}
-              onChange={(e) => onSuggestSortBy(e.target.value === 'delta' ? 'delta' : 'score')}
+              className={inField + ' w-[11rem]'}
+              value={suggestDeltaListMode}
+              onChange={(e) => onSuggestDeltaListMode(e.target.value === 'worst' ? 'worst' : 'best')}
             >
-              <option value="score">Model score</option>
-              <option value="delta">Winrate delta</option>
+              <option value="best">Best in context first</option>
+              <option value="worst">Worst in context first</option>
             </select>
           </label>
-          {suggestSortBy === 'delta' && (
-            <label className="flex flex-col gap-1.5 min-w-0">
-              <span className="font-mono text-[10px] sm:text-xs text-nexus-lime/85 uppercase tracking-[0.12em]">
-                Delta list
-              </span>
-              <select
-                className={inField + ' w-[11rem]'}
-                value={suggestDeltaListMode}
-                onChange={(e) => onSuggestDeltaListMode(e.target.value === 'worst' ? 'worst' : 'best')}
-              >
-                <option value="best">Best in context first</option>
-                <option value="worst">Worst in context first</option>
-              </select>
-            </label>
-          )}
           <p className={`${textMuted} text-xs sm:text-sm max-w-xl m-0 flex-1 min-w-0 leading-relaxed`}>
             0 = fast V1. Higher rollouts react more as picks lock; max {maxSuggestMcRollouts}.
           </p>
@@ -329,11 +310,7 @@ export function NexusOperationsView({
           {modelDescription}
         </p>
         <p className="font-mono text-xs text-nexus-lime/80 mb-3">
-          {suggestSortBy === 'delta'
-            ? suggestDeltaListMode === 'worst'
-              ? 'Lowest lobby delta first'
-              : 'Highest lobby delta first'
-            : 'Top picks (sorted by model score)'}
+          {suggestDeltaListMode === 'worst' ? 'Lowest lobby delta first' : 'Highest lobby delta first'}
         </p>
         <ol className="list-decimal pl-4 sm:pl-5 space-y-3 font-mono text-sm text-nexus-text/90 max-w-3xl">
           {suggestions.length === 0 && (

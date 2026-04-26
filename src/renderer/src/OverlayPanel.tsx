@@ -50,26 +50,44 @@ function slotName(p: { championName: string | null; championId: number | null })
 
 function SlotPortrait({
   slot,
-  imageUrl
+  imageUrl,
+  isMySlot = false
 }: {
   slot: { championName: string | null; championId: number | null }
   imageUrl: string | null
+  isMySlot?: boolean
 }) {
   const name = slotName(slot)
   return (
-    <span className="inline-flex items-center gap-1.5 border border-nexus-line/70 bg-nexus-bg/30 px-1.5 py-1">
+    <span
+      className={[
+        'inline-flex items-center justify-center border p-1',
+        isMySlot
+          ? 'border-sky-300 bg-sky-400/18 text-sky-100 shadow-[0_0_14px_rgba(56,189,248,0.28)]'
+          : 'border-nexus-line/70 bg-nexus-bg/30'
+      ].join(' ')}
+      title={isMySlot ? `Your role: ${name}` : name}
+    >
       {imageUrl ? (
         <img
-          className="h-5 w-5 shrink-0 border border-nexus-line/70 object-cover"
+          className={[
+            'h-5 w-5 shrink-0 border object-cover',
+            isMySlot ? 'border-sky-200 shadow-[0_0_10px_rgba(125,211,252,0.42)]' : 'border-nexus-line/70'
+          ].join(' ')}
           src={imageUrl}
           alt=""
           width={20}
           height={20}
         />
       ) : (
-        <span className="h-5 w-5 shrink-0 border border-nexus-line/70 bg-nexus-surface-2" aria-hidden />
+        <span
+          className={[
+            'h-5 w-5 shrink-0 border',
+            isMySlot ? 'border-sky-200 bg-sky-300/20 shadow-[0_0_10px_rgba(125,211,252,0.42)]' : 'border-nexus-line/70 bg-nexus-surface-2'
+          ].join(' ')}
+          aria-hidden
+        />
       )}
-      <span className="truncate">{name}</span>
     </span>
   )
 }
@@ -87,9 +105,53 @@ function signedPct(v: number | undefined): string {
 
 type OverlaySlot = { role: string; championName: string | null; championId: number | null }
 
+const ROLE_FOCUS: Record<Exclude<DraftRole, 'unknown'>, { ally: DraftRole[]; enemy: DraftRole[] }> = {
+  top: {
+    ally: ['jungle', 'middle', 'support', 'bottom', 'top'],
+    enemy: ['top', 'jungle', 'middle', 'support', 'bottom']
+  },
+  jungle: {
+    ally: ['middle', 'support', 'top', 'bottom', 'jungle'],
+    enemy: ['jungle', 'middle', 'support', 'top', 'bottom']
+  },
+  middle: {
+    ally: ['jungle', 'support', 'top', 'bottom', 'middle'],
+    enemy: ['middle', 'jungle', 'support', 'top', 'bottom']
+  },
+  bottom: {
+    ally: ['support', 'jungle', 'middle', 'top', 'bottom'],
+    enemy: ['bottom', 'support', 'jungle', 'middle', 'top']
+  },
+  support: {
+    ally: ['bottom', 'jungle', 'middle', 'top', 'support'],
+    enemy: ['support', 'bottom', 'jungle', 'middle', 'top']
+  }
+}
+
 function filledNames(slots: OverlaySlot[], limit = 2): string[] {
   return slots
     .filter((p) => p.championId != null && p.championId > 0)
+    .map(slotName)
+    .filter((name) => name !== '—')
+    .slice(0, limit)
+}
+
+function focusedSlotNames(
+  slots: OverlaySlot[],
+  role: DraftRole | null,
+  side: 'ally' | 'enemy',
+  limit = 2
+): string[] {
+  if (!role || role === 'unknown') {
+    return filledNames(slots, limit)
+  }
+  const preferredRoles = ROLE_FOCUS[role]?.[side] ?? []
+  const filled = slots.filter((p) => p.championId != null && p.championId > 0)
+  const ordered = [
+    ...preferredRoles.flatMap((r) => filled.filter((slot) => slot.role === r)),
+    ...filled.filter((slot) => !preferredRoles.includes(slot.role as DraftRole))
+  ]
+  return ordered
     .map(slotName)
     .filter((name) => name !== '—')
     .slice(0, limit)
@@ -204,7 +266,6 @@ export function OverlayPanel() {
   const s = d.snapshot
   const topPicks = d.suggestions.slice(0, 6)
   const echo = d.overlayEngineEcho
-  const resolvedSort = echo?.resolvedSortBy ?? 'score'
   const resolvedMc = echo?.resolvedMonteCarlo ?? 0
   const resolvedDeltaList = echo?.resolvedDeltaListMode ?? 'best'
   const mcFollowsMain = echo?.monteCarloOverride == null
@@ -279,6 +340,19 @@ export function OverlayPanel() {
   const [lookupId, setLookupId] = useState<number | null>(null)
   /** DDragon `tags` + partype; empty tags until main app has loaded champion.json */
   const [lookupDdragon, setLookupDdragon] = useState<{ tags: string[]; partype: string } | null>(null)
+  const lookupChampion = useMemo(() => searchPool.find((x) => x.id === lookupId) ?? null, [searchPool, lookupId])
+  useEffect(() => {
+    const q = lookupQuery.trim()
+    if (q.length === 0) {
+      setLookupId(null)
+      setLookupDdragon(null)
+      return
+    }
+    if (lookupChampion && !nameMatchesChampionQuery(lookupChampion.name, q) && String(lookupChampion.id) !== q) {
+      setLookupId(null)
+      setLookupDdragon(null)
+    }
+  }, [lookupQuery, lookupChampion])
   /** When only one row matches, lock it in (same as picking from the list) */
   useEffect(() => {
     if (nameMatches.length !== 1) {
@@ -317,9 +391,9 @@ export function OverlayPanel() {
     if (lookupId == null || !poolRole) {
       return null
     }
-    const selectedName = searchPool.find((x) => x.id === lookupId)?.name ?? null
+    const selectedName = lookupChampion?.name ?? null
     return getChampionBuildProfile(lookupId, poolRole, lookupDdragon, selectedName)
-  }, [lookupId, poolRole, lookupDdragon, searchPool])
+  }, [lookupId, poolRole, lookupDdragon, lookupChampion])
 
   return (
     <div className="nexus-overlay-root h-full min-h-0 flex flex-col font-body font-bold text-nexus-text text-sm relative">
@@ -342,61 +416,31 @@ export function OverlayPanel() {
             {poolRole ?? 'auto'}
           </span>
           <span className="text-nexus-line hidden sm:inline">|</span>
-          <span className="text-nexus-lime/90 uppercase tracking-wide">Sort</span>
+          <span className="text-nexus-muted uppercase tracking-wide">Δ order</span>
           <button
             type="button"
             className={
-              resolvedSort === 'score'
+              resolvedDeltaList === 'best'
                 ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
                 : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
             }
-            title="Order by blended model score"
-            onClick={() => pushOverlayPrefs({ sortByOverride: 'score' })}
+            title="Strongest lobby lift first"
+            onClick={() => pushOverlayPrefs({ deltaListModeOverride: 'best' })}
           >
-            Model
+            Best
           </button>
           <button
             type="button"
             className={
-              resolvedSort === 'delta'
+              resolvedDeltaList === 'worst'
                 ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
                 : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
             }
-            title="Order by contextual winrate vs role baseline"
-            onClick={() => pushOverlayPrefs({ sortByOverride: 'delta' })}
+            title="Weakest in this lobby first"
+            onClick={() => pushOverlayPrefs({ deltaListModeOverride: 'worst' })}
           >
-            Win Δ
+            Worst
           </button>
-          {resolvedSort === 'delta' && (
-            <>
-              <span className="text-nexus-line">|</span>
-              <span className="text-nexus-muted uppercase tracking-wide">Δ order</span>
-              <button
-                type="button"
-                className={
-                  resolvedDeltaList === 'best'
-                    ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
-                    : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
-                }
-                title="Strongest lobby lift first"
-                onClick={() => pushOverlayPrefs({ deltaListModeOverride: 'best' })}
-              >
-                Best
-              </button>
-              <button
-                type="button"
-                className={
-                  resolvedDeltaList === 'worst'
-                    ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
-                    : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
-                }
-                title="Weakest in this lobby first"
-                onClick={() => pushOverlayPrefs({ deltaListModeOverride: 'worst' })}
-              >
-                Worst
-              </button>
-            </>
-          )}
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-nexus-line/50 pt-1.5 sm:border-0 sm:pt-0">
           <span className="text-nexus-lime/90 uppercase tracking-wide">Rollouts</span>
@@ -471,7 +515,7 @@ export function OverlayPanel() {
                 </h2>
               </div>
               <div className="hidden md:flex min-w-0 flex-1 items-center justify-end gap-3 font-mono text-xs text-nexus-muted">
-                <span>{resolvedSort === 'delta' ? 'win delta sort' : 'model score sort'}</span>
+                <span>win delta sort</span>
                 <span className="text-nexus-line">|</span>
                 <span>{d.suggestions.length} rows</span>
                 <span className="text-nexus-line">|</span>
@@ -585,7 +629,12 @@ export function OverlayPanel() {
               <div className="flex flex-wrap gap-1.5">
                 <span className="w-full text-nexus-muted uppercase tracking-[0.12em]">Allies</span>
                 {s.ally.map((slot) => (
-                  <SlotPortrait key={`a-${slot.role}-${slot.cellId ?? slot.championId ?? 'empty'}`} slot={slot} imageUrl={championIconUrl(slot.championId)} />
+                  <SlotPortrait
+                    key={`a-${slot.role}-${slot.cellId ?? slot.championId ?? 'empty'}`}
+                    slot={slot}
+                    imageUrl={championIconUrl(slot.championId)}
+                    isMySlot={poolRole != null && slot.role === poolRole}
+                  />
                 ))}
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -651,41 +700,85 @@ export function OverlayPanel() {
               ))}
             </ul>
           )}
-          {lookupId != null && poolRole && lookupBuild && (
-            <div className="border border-nexus-line/80 bg-nexus-surface-2/90 px-2.5 py-2 text-xs sm:text-sm mb-2">
-              <p className="font-mono text-nexus-lime/95 m-0 mb-1">
-                {searchPool.find((x) => x.id === lookupId)?.name ?? `Champion ${lookupId}`}
-                <span className="text-nexus-muted"> · {poolRole}</span>
-              </p>
-              <p className="font-mono text-nexus-lime/80 m-0 mb-1 uppercase text-[11px]">
-                {lookupBuild.damage} damage · {lookupBuild.archetype}
-                {lookupBuild.partype && lookupBuild.partype !== 'None' && (
-                  <span className="text-nexus-muted normal-case"> · {lookupBuild.partype}</span>
-                )}
-              </p>
-              {lookupBuild.tagsLine !== '—' && (
-                <p className="font-mono text-nexus-muted text-[11px] m-0 mb-1">Riot: {lookupBuild.tagsLine}</p>
-              )}
-              <p className="font-mono text-nexus-text/85 m-0 leading-snug">{lookupBuild.buildHint}</p>
-            </div>
-          )}
-          {lookupId != null && lookupScores && poolRole && (
-            <div className="border border-nexus-line/80 bg-nexus-surface-2/90 px-2.5 py-2 text-xs sm:text-sm">
-              <p className="font-mono text-nexus-lime/95 m-0 mb-1.5">
-                Draft model blend <span className="text-nexus-muted">· {(lookupScores.combined * 100).toFixed(1)}%</span>
-              </p>
-              <p className="font-mono text-nexus-muted m-0 leading-snug">
-                Base (role pool) {(lookupScores.base * 100).toFixed(0)}% · with allies {(lookupScores.ally * 100).toFixed(0)}% ·
-                vs enemies {(lookupScores.enemy * 100).toFixed(0)}% · comp {(lookupScores.comp * 100).toFixed(0)}%
-                {lookupScores.blindP > 0 && (
-                  <span>
-                    {' '}
-                    · early blind penalty −{(lookupScores.blindP * 100).toFixed(0)}%
+          {lookupId != null && poolRole && (lookupBuild || lookupScores) && (
+            <div className="relative border border-nexus-line/85 bg-nexus-surface-2/90 px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex gap-2">
+                  {championIconUrl(lookupId) && (
+                    <img
+                      className="h-10 w-10 shrink-0 border border-nexus-line/80 object-cover"
+                      src={championIconUrl(lookupId)!}
+                      alt=""
+                      width={40}
+                      height={40}
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-mono font-bold text-sm sm:text-base leading-tight">
+                      <span className="text-nexus-lime/95">{lookupChampion?.name ?? `Champion ${lookupId}`}</span>
+                      <span className="text-nexus-muted"> · </span>
+                      <span className="text-nexus-text/90">{poolRole}</span>
+                    </div>
+                    {lookupScores && (
+                      <div className="font-mono font-bold text-xs text-nexus-muted mt-1 tabular-nums">
+                        Draft model blend
+                        <span className="text-nexus-text/90"> · {(lookupScores.combined * 100).toFixed(1)}%</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {lookupBuild && (
+                  <span
+                    className="inline-flex h-5 min-w-6 shrink-0 items-center justify-center border border-nexus-line px-1.5 font-mono text-[10px] uppercase text-nexus-text/85"
+                    title={lookupBuild.buildHint}
+                  >
+                    {lookupBuild.damage}
                   </span>
                 )}
-              </p>
+              </div>
+
+              {lookupBuild && (
+                <div className="mt-2 border-l-2 border-nexus-lime/65 bg-nexus-bg/20 pl-1.5 pr-1 py-0.5 font-mono text-[10px] leading-snug">
+                  <span className="uppercase tracking-[0.12em] text-nexus-lime/80">Build</span>
+                  <span className="text-nexus-line"> · </span>
+                  <span className="text-nexus-text/80">{lookupBuild.archetype}</span>
+                  {lookupBuild.partype && lookupBuild.partype !== 'None' && (
+                    <span className="text-nexus-muted"> · {lookupBuild.partype}</span>
+                  )}
+                </div>
+              )}
+
+              {lookupScores && (
+                <details className="group mt-2 border border-nexus-line/65 bg-nexus-bg/25 font-mono text-[11px] leading-snug text-nexus-text/75">
+                  <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
+                    <span>Scores</span>
+                    <span className="text-nexus-lime/80 group-open:rotate-45 transition-transform">+</span>
+                  </summary>
+                  <div className="border-t border-nexus-line/55 px-2 py-1.5">
+                    Base {(lookupScores.base * 100).toFixed(0)}% · allies {(lookupScores.ally * 100).toFixed(0)}% · enemies{' '}
+                    {(lookupScores.enemy * 100).toFixed(0)}% · comp {(lookupScores.comp * 100).toFixed(0)}%
+                    {lookupScores.blindP > 0 && <span> · early blind penalty -{(lookupScores.blindP * 100).toFixed(0)}%</span>}
+                  </div>
+                </details>
+              )}
+
+              {lookupBuild && (
+                <details className="group mt-2 border border-nexus-line/65 bg-nexus-bg/25 font-mono text-[11px] leading-snug text-nexus-text/75">
+                  <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
+                    <span>Tips</span>
+                    <span className="text-nexus-lime/80 group-open:rotate-45 transition-transform">+</span>
+                  </summary>
+                  <div className="border-t border-nexus-line/55 px-2 py-1.5">
+                    {lookupBuild.buildHint}
+                    {lookupBuild.tagsLine !== '—' && <div className="mt-1 text-nexus-muted">Riot: {lookupBuild.tagsLine}</div>}
+                  </div>
+                </details>
+              )}
+
               {!inRolePool(lookupId, poolRole) && (
-                <p className="font-mono text-nexus-red/80 text-[11px] m-0 mt-1.5">Not in the curated {poolRole} pool — base is approximate.</p>
+                <p className="font-mono text-nexus-red/80 text-[11px] m-0 mt-2">
+                  Not in the curated {poolRole} pool — base is approximate.
+                </p>
               )}
             </div>
           )}
@@ -715,8 +808,8 @@ export function OverlayPanel() {
             key={d.boardSignature ? d.boardSignature : d.updatedAt}
           >
             {topPicks.map((p, i) => {
-              const allies = filledNames(s?.ally ?? [])
-              const enemies = filledNames(s?.enemy ?? [])
+              const allies = focusedSlotNames(s?.ally ?? [], poolRole, 'ally')
+              const enemies = focusedSlotNames(s?.enemy ?? [], poolRole, 'enemy')
               const intel = shortIntel(p.runes?.note, p.buildProfile?.buildHint ?? 'Matchup notes locked until board has more context.')
               return (
                 <li

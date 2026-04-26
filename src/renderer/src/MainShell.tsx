@@ -36,9 +36,8 @@ const ROLES: DraftRole[] = ['top', 'jungle', 'middle', 'bottom', 'support']
 const LS_SUGGEST_OVERRIDE = 'nexusdraft.v1.suggestOverride'
 const LS_MY_ROLE = 'nexusdraft.v1.myRole'
 const LS_SUGGEST_MC = 'nexusdraft.v1.suggestMcRollouts'
-const LS_SUGGEST_SORT = 'nexusdraft.v1.suggestSortBy'
 const LS_SUGGEST_DELTA_LIST = 'nexusdraft.v1.suggestDeltaListMode'
-const DEFAULT_SUGGEST_MC = 10
+const DEFAULT_SUGGEST_MC = 40
 const MAX_SUGGEST_MC = 200
 const SUGGESTION_RESULT_LIMIT = 40
 
@@ -94,21 +93,6 @@ function readStoredMyRole(): DraftRole {
     /* ignore */
   }
   return 'middle'
-}
-
-function readStoredSuggestSortBy(): 'score' | 'delta' {
-  try {
-    const v = localStorage.getItem(LS_SUGGEST_SORT)
-    if (v === 'delta') {
-      return 'delta'
-    }
-    if (v === 'score') {
-      return 'score'
-    }
-  } catch {
-    /* ignore */
-  }
-  return 'score'
 }
 
 function readStoredSuggestDeltaListMode(): DraftDeltaListMode {
@@ -234,7 +218,6 @@ export function MainShell() {
   const [myRole, setMyRole] = useState<DraftRole>(readStoredMyRole)
   const [suggestOverride, setSuggestOverride] = useState(readStoredSuggestOverride)
   const [suggestMcRollouts, setSuggestMcRollouts] = useState(readStoredMcRollouts)
-  const [suggestSortBy, setSuggestSortBy] = useState<'score' | 'delta'>(readStoredSuggestSortBy)
   const [suggestDeltaListMode, setSuggestDeltaListMode] = useState<DraftDeltaListMode>(readStoredSuggestDeltaListMode)
   const [overlayEnginePrefs, setOverlayEnginePrefs] = useState<OverlayEnginePrefs>(() => ({
     ...defaultOverlayEnginePrefs
@@ -304,14 +287,6 @@ export function MainShell() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(LS_SUGGEST_SORT, suggestSortBy)
-    } catch {
-      /* ignore */
-    }
-  }, [suggestSortBy])
-
-  useEffect(() => {
-    try {
       localStorage.setItem(LS_SUGGEST_DELTA_LIST, suggestDeltaListMode)
     } catch {
       /* ignore */
@@ -353,10 +328,7 @@ export function MainShell() {
     return myRole
   }, [overlayEnginePrefs.roleOverride, effectiveMyRole, myRole])
 
-  const sortForSuggestions = useMemo(
-    () => overlayEnginePrefs.sortByOverride ?? suggestSortBy,
-    [overlayEnginePrefs.sortByOverride, suggestSortBy]
-  )
+  const sortForSuggestions = 'delta' as const
 
   const deltaListForSuggestions = useMemo((): DraftDeltaListMode => {
     return overlayEnginePrefs.deltaListModeOverride ?? suggestDeltaListMode
@@ -566,7 +538,7 @@ export function MainShell() {
     runnerId: 'NEXUS//LOCAL',
     region: 'AMERICAS',
     dataVersion: ddVersion && ddVersion[0] !== '(' ? ddVersion : '—',
-    build: '0.2.2',
+    build: '0.3.0',
     networkStatus: lcuStatus === 'ready' ? 'On' : 'Wait',
     link: lcuStatus === 'ready' ? 'League: ready' : 'League: waiting',
     resourceLine: `Picks from: ${copyDraftSource(draftSource)} · Suggestions: ${patchLabel ?? ENGINE_V1_LABEL}`,
@@ -582,15 +554,12 @@ export function MainShell() {
     const model = patchLabel ?? ENGINE_V1_LABEL
     const trainedOn = model.includes('+trained') || Boolean(trainedEffects?.status.hasAnyData)
     const dataLine = trainedOn ? 'trained + bundled fallback' : 'bundled heuristics'
-    const sortLine =
-      suggestSortBy === 'delta'
-        ? `delta: ${suggestDeltaListMode === 'worst' ? 'worst first' : 'best first'}`
-        : 'model score'
+    const sortLine = `delta: ${suggestDeltaListMode === 'worst' ? 'worst first' : 'best first'}`
     if (suggestMcRollouts <= 0) {
       return `${model} - V1 only. Sort: ${sortLine}. Data: ${dataLine}.`
     }
     return `${model} - V1 + ${suggestMcRollouts} rollout(s). Sort: ${sortLine}. Data: ${dataLine}.`
-  }, [patchLabel, suggestMcRollouts, suggestSortBy, suggestDeltaListMode, trainedEffects])
+  }, [patchLabel, suggestMcRollouts, suggestDeltaListMode, trainedEffects])
 
   const rightCol = {
     lcuState: lcuStatusLine,
@@ -640,7 +609,6 @@ export function MainShell() {
           <NexusRoutePanel key="home" direction={routeDir} className="w-full min-h-0 min-w-0">
             <NexusHomeDashboard
               ddragonVersion={ddVersion && ddVersion[0] !== '(' ? ddVersion : '—'}
-              lcuStatus={lcuStatusLine}
               patchLabel={patchLabel ?? ENGINE_V1_LABEL}
               onEnterOperations={() => goNav('operations')}
             />
@@ -684,8 +652,6 @@ export function MainShell() {
               onSuggestMcRollouts={(n) => {
                 setSuggestMcRollouts(Math.max(0, Math.min(MAX_SUGGEST_MC, Math.trunc(n))))
               }}
-              suggestSortBy={suggestSortBy}
-              onSuggestSortBy={setSuggestSortBy}
               suggestDeltaListMode={suggestDeltaListMode}
               onSuggestDeltaListMode={setSuggestDeltaListMode}
               suggestions={suggestions}

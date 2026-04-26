@@ -2,15 +2,20 @@ import { useMemo, useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { ddragonChampionImageUrl } from '@shared/dataDragon'
 import {
+  ALLY_SYNERGY_BONUS,
   buildEngineState,
   buildOverlayChampionSearchPool,
   compileTrainedEffects,
   getChampionBuildProfile,
   isDraftUpdate,
+  MATCHUP_BONUS,
   nameMatchesChampionQuery,
+  publicMetaLaneRate,
   publicMetaCandidateIdsForRole,
   ROLE_CHAMPION_POOL,
   resolveChampionName,
+  shrunkLaneRate,
+  trainedSynergyDelta,
   v1ComponentScores,
   type CompiledTrainedEffects,
   type DraftUpdate,
@@ -92,6 +97,31 @@ function SlotPortrait({
   )
 }
 
+function ContextPortrait({
+  slot,
+  imageUrl,
+  tone
+}: {
+  slot: OverlaySlot
+  imageUrl: string | null
+  tone: 'ally' | 'enemy'
+}) {
+  const name = slotName(slot)
+  const toneClass =
+    tone === 'ally'
+      ? 'border-nexus-lime/80 bg-nexus-lime/10 shadow-[0_0_8px_rgba(35,213,176,0.18)]'
+      : 'border-nexus-red/80 bg-nexus-red/10 shadow-[0_0_8px_rgba(248,113,113,0.18)]'
+  return (
+    <span className={['inline-flex h-6 w-6 items-center justify-center border p-0.5', toneClass].join(' ')} title={name}>
+      {imageUrl ? (
+        <img className="h-full w-full object-cover" src={imageUrl} alt="" width={20} height={20} />
+      ) : (
+        <span className="h-full w-full bg-nexus-surface-2" aria-hidden />
+      )}
+    </span>
+  )
+}
+
 function pct(v: number | undefined): string {
   return v == null ? '--' : `${(v * 100).toFixed(1)}%`
 }
@@ -103,7 +133,7 @@ function signedPct(v: number | undefined): string {
   return `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`
 }
 
-type OverlaySlot = { role: string; championName: string | null; championId: number | null }
+type OverlaySlot = { role: DraftRole; championName: string | null; championId: number | null }
 
 const ROLE_FOCUS: Record<Exclude<DraftRole, 'unknown'>, { ally: DraftRole[]; enemy: DraftRole[] }> = {
   top: {
@@ -128,22 +158,20 @@ const ROLE_FOCUS: Record<Exclude<DraftRole, 'unknown'>, { ally: DraftRole[]; ene
   }
 }
 
-function filledNames(slots: OverlaySlot[], limit = 2): string[] {
+function filledSlots(slots: OverlaySlot[], limit = 2): OverlaySlot[] {
   return slots
     .filter((p) => p.championId != null && p.championId > 0)
-    .map(slotName)
-    .filter((name) => name !== '—')
     .slice(0, limit)
 }
 
-function focusedSlotNames(
+function focusedSlots(
   slots: OverlaySlot[],
   role: DraftRole | null,
   side: 'ally' | 'enemy',
   limit = 2
-): string[] {
+): OverlaySlot[] {
   if (!role || role === 'unknown') {
-    return filledNames(slots, limit)
+    return filledSlots(slots, limit)
   }
   const preferredRoles = ROLE_FOCUS[role]?.[side] ?? []
   const filled = slots.filter((p) => p.championId != null && p.championId > 0)
@@ -151,10 +179,59 @@ function focusedSlotNames(
     ...preferredRoles.flatMap((r) => filled.filter((slot) => slot.role === r)),
     ...filled.filter((slot) => !preferredRoles.includes(slot.role as DraftRole))
   ]
-  return ordered
-    .map(slotName)
-    .filter((name) => name !== '—')
+  return ordered.slice(0, limit)
+}
+
+function legacyEnemyPFromBonus(bonus: number | null): number {
+  if (bonus == null) {
+    return 0.5
+  }
+  return Math.max(0.35, Math.min(0.68, 0.5 + 0.03 * Math.max(-6, Math.min(6, bonus))))
+}
+
+function bestEnemySlotsForCandidate(candidateId: number, role: DraftRole | null, enemySlots: OverlaySlot[], limit = 2): OverlaySlot[] {
+  const lockedEnemies = enemySlots.filter((slot) => slot.championId != null && slot.championId > 0)
+  if (lockedEnemies.length === 0) {
+    return []
+  }
+  return lockedEnemies
+    .map((slot) => {
+      const enemyId = slot.championId!
+      const metaRate = role ? publicMetaLaneRate(role, candidateId, enemyId) : null
+      const laneRate = shrunkLaneRate(candidateId, enemyId)
+      const bonus = MATCHUP_BONUS[String(candidateId)]?.[String(enemyId)] ?? null
+      const fallbackRate = laneRate ?? legacyEnemyPFromBonus(bonus)
+      const score = (metaRate ?? fallbackRate) - 0.5
+      return { slot, score }
+    })
+    .sort((a, b) => b.score - a.score)
     .slice(0, limit)
+    .map((x) => x.slot)
+}
+
+function bestAllySlotsForCandidate(
+  candidateId: number,
+  role: DraftRole | null,
+  allySlots: OverlaySlot[],
+  trained: CompiledTrainedEffects | null,
+  limit = 2
+): OverlaySlot[] {
+  const lockedAllies = allySlots.filter((slot) => slot.championId != null && slot.championId > 0)
+  if (lockedAllies.length === 0) {
+    return []
+  }
+  return lockedAllies
+    .map((slot) => {
+      const allyId = slot.championId!
+      const heuristicBonus = ALLY_SYNERGY_BONUS[String(candidateId)]?.[String(allyId)] ?? ALLY_SYNERGY_BONUS[String(allyId)]?.[String(candidateId)] ?? 0
+      const trainedDelta =
+        role && slot.role !== 'unknown' ? trainedSynergyDelta(trained, role, slot.role, candidateId, allyId) : null
+      const score = trainedDelta ?? heuristicBonus * 0.04
+      return { slot, score }
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((x) => x.slot)
 }
 
 function shortIntel(text: string | null | undefined, fallback: string): string {
@@ -808,8 +885,12 @@ export function OverlayPanel() {
             key={d.boardSignature ? d.boardSignature : d.updatedAt}
           >
             {topPicks.map((p, i) => {
-              const allies = focusedSlotNames(s?.ally ?? [], poolRole, 'ally')
-              const enemies = focusedSlotNames(s?.enemy ?? [], poolRole, 'enemy')
+              const allies = bestAllySlotsForCandidate(p.championId, poolRole, s?.ally ?? [], trainedEffects)
+              const enemies = bestEnemySlotsForCandidate(p.championId, poolRole, s?.enemy ?? [])
+              const allyFallback = focusedSlots(s?.ally ?? [], poolRole, 'ally')
+              const enemyFallback = focusedSlots(s?.enemy ?? [], poolRole, 'enemy')
+              const synergySlots = allies.length ? allies : allyFallback
+              const goodVsSlots = enemies.length ? enemies : enemyFallback
               const intel = shortIntel(p.runes?.note, p.buildProfile?.buildHint ?? 'Matchup notes locked until board has more context.')
               return (
                 <li
@@ -858,18 +939,36 @@ export function OverlayPanel() {
                   </div>
 
                   <div className="mt-2 grid grid-cols-2 gap-1.5 font-mono text-[10px] leading-snug">
-                    <div className="border-l-2 border-nexus-lime/65 bg-nexus-bg/20 pl-1.5 pr-1 py-0.5 min-w-0">
+                    <div className="border-l-2 border-[#23d5b0] bg-nexus-bg/20 pl-1.5 pr-1 py-0.5 min-w-0">
                       <span className="uppercase tracking-[0.12em] text-nexus-lime/80">Synergy</span>
                       <span className="text-nexus-line"> · </span>
-                      <span className="text-nexus-text/80 truncate inline-block max-w-[75%] align-bottom">
-                        {allies.length ? allies.join(' / ') : 'pending'}
+                      <span className="inline-flex max-w-[75%] align-middle items-center gap-1">
+                        {synergySlots.length
+                          ? synergySlots.map((slot) => (
+                              <ContextPortrait
+                                key={`syn-${p.championId}-${slot.role}-${slot.championId}`}
+                                slot={slot}
+                                imageUrl={championIconUrl(slot.championId)}
+                                tone="ally"
+                              />
+                            ))
+                          : <span className="text-nexus-text/80">pending</span>}
                       </span>
                     </div>
-                    <div className="border-l-2 border-nexus-red/70 bg-nexus-bg/20 pl-1.5 pr-1 py-0.5 min-w-0">
+                    <div className="border-l-2 border-[#f87171] bg-nexus-bg/20 pl-1.5 pr-1 py-0.5 min-w-0">
                       <span className="uppercase tracking-[0.12em] text-nexus-red/80">Good vs</span>
                       <span className="text-nexus-line"> · </span>
-                      <span className="text-nexus-text/80 truncate inline-block max-w-[75%] align-bottom">
-                        {enemies.length ? enemies.join(' / ') : 'pending'}
+                      <span className="inline-flex max-w-[75%] align-middle items-center gap-1">
+                        {goodVsSlots.length
+                          ? goodVsSlots.map((slot) => (
+                              <ContextPortrait
+                                key={`vs-${p.championId}-${slot.role}-${slot.championId}`}
+                                slot={slot}
+                                imageUrl={championIconUrl(slot.championId)}
+                                tone="enemy"
+                              />
+                            ))
+                          : <span className="text-nexus-text/80">pending</span>}
                       </span>
                     </div>
                   </div>

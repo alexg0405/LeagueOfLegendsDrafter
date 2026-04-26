@@ -92,10 +92,6 @@ export type NexusOperationsViewProps = {
   draftSource: DraftSource
   useManual: boolean
   onUseManual: (v: boolean) => void
-  suggestOverride: boolean
-  onSuggestOverride: (v: boolean) => void
-  myRole: DraftRole
-  onMyRole: (r: DraftRole) => void
   effectiveMyRole: DraftRole
   suggestionRoleLine: string
   manual: { ally: Record<DraftRole, number | null>; enemy: Record<DraftRole, number | null> }
@@ -121,10 +117,6 @@ export function NexusOperationsView({
   draftSource,
   useManual,
   onUseManual,
-  suggestOverride,
-  onSuggestOverride,
-  myRole,
-  onMyRole,
   effectiveMyRole,
   suggestionRoleLine,
   manual,
@@ -178,29 +170,6 @@ export function NexusOperationsView({
             <span className="text-nexus-line"> · </span>
             {suggestionRoleLine}
           </p>
-          <div className="flex flex-wrap items-center gap-3">
-            <label className={`${textBody} flex items-center gap-2 cursor-pointer`}>
-              <input
-                type="checkbox"
-                className="accent-nexus-lime h-3.5 w-3.5"
-                checked={suggestOverride}
-                onChange={(e) => onSuggestOverride(e.target.checked)}
-              />
-              I pick my role (uses list below, ignores League / screen)
-            </label>
-            <select
-              className={inField + ' w-auto min-w-[8rem]'}
-              value={suggestOverride ? myRole : effectiveMyRole}
-              disabled={!suggestOverride}
-              onChange={(e) => onMyRole(e.target.value as DraftRole)}
-            >
-              {ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </div>
           <label className={`${textBody} flex items-center gap-2 cursor-pointer`}>
             <input
               type="checkbox"

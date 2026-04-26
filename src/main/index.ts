@@ -258,7 +258,7 @@ function createMainWindow() {
 
 function createOverlayWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
-  const overlayH = Math.max(220, Math.floor(height * 0.45))
+  const overlayH = Math.max(320, Math.floor(height * 0.62))
   overlayWindow = new BrowserWindow({
     width: OVERLAY_WIDTH,
     height: overlayH,

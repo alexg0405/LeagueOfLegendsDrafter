@@ -33,7 +33,6 @@ import {
 import { copyBottomStatusStrip, copyDraftSource } from './nexus-ui/nexusCopy'
 
 const ROLES: DraftRole[] = ['top', 'jungle', 'middle', 'bottom', 'support']
-const LS_SUGGEST_OVERRIDE = 'nexusdraft.v1.suggestOverride'
 const LS_MY_ROLE = 'nexusdraft.v1.myRole'
 const LS_SUGGEST_MC = 'nexusdraft.v1.suggestMcRollouts'
 const LS_SUGGEST_DELTA_LIST = 'nexusdraft.v1.suggestDeltaListMode'
@@ -66,21 +65,6 @@ function readStoredMcRollouts(): number {
     /* ignore */
   }
   return DEFAULT_SUGGEST_MC
-}
-
-function readStoredSuggestOverride(): boolean {
-  try {
-    const v = localStorage.getItem(LS_SUGGEST_OVERRIDE)
-    if (v === '1') {
-      return true
-    }
-    if (v === '0') {
-      return false
-    }
-  } catch {
-    /* ignore */
-  }
-  return false
 }
 
 function readStoredMyRole(): DraftRole {
@@ -215,8 +199,7 @@ export function MainShell() {
   const [useManual, setUseManual] = useState(false)
   const [manual, setManual] = useState<ManualPicks>(emptyManual)
 
-  const [myRole, setMyRole] = useState<DraftRole>(readStoredMyRole)
-  const [suggestOverride, setSuggestOverride] = useState(readStoredSuggestOverride)
+  const [myRole] = useState<DraftRole>(readStoredMyRole)
   const [suggestMcRollouts, setSuggestMcRollouts] = useState(readStoredMcRollouts)
   const [suggestDeltaListMode, setSuggestDeltaListMode] = useState<DraftDeltaListMode>(readStoredSuggestDeltaListMode)
   const [overlayEnginePrefs, setOverlayEnginePrefs] = useState<OverlayEnginePrefs>(() => ({
@@ -226,24 +209,18 @@ export function MainShell() {
   const [trainedEffects, setTrainedEffects] = useState<CompiledTrainedEffects | null>(null)
 
   const effectiveMyRole: DraftRole = useMemo(() => {
-    if (suggestOverride) {
-      return myRole
-    }
     if (lcu?.snapshot?.myRole && lcu.snapshot.myRole !== 'unknown') {
       return lcu.snapshot.myRole
     }
     return myRole
-  }, [suggestOverride, myRole, lcu])
+  }, [myRole, lcu])
 
   const suggestionRoleLine = useMemo(() => {
-    if (suggestOverride) {
-      return 'Using your pick below — the model only suggests champs in that role pool.'
-    }
     if (lcu?.snapshot?.myRole && lcu.snapshot.myRole !== 'unknown') {
-      return 'Using League client role. Turn on “I pick my role” to force a role and its champion list.'
+      return 'Using League client role automatically.'
     }
-    return 'League did not report a role — using your pick below as fallback.'
-  }, [suggestOverride, lcu])
+    return 'League did not report a role yet — using the saved fallback until champ select reports it.'
+  }, [lcu])
 
   useEffect(() => {
     return window.drafter.onOverlayEnginePrefs((patch: OverlayEnginePrefsPatch) => {
@@ -251,7 +228,7 @@ export function MainShell() {
         return
       }
       setOverlayEnginePrefs((prev) => ({
-        roleOverride: patch.roleOverride !== undefined ? patch.roleOverride : prev.roleOverride,
+        roleOverride: null,
         sortByOverride: patch.sortByOverride !== undefined ? patch.sortByOverride : prev.sortByOverride,
         monteCarloOverride:
           patch.monteCarloOverride !== undefined ? patch.monteCarloOverride : prev.monteCarloOverride,
@@ -260,14 +237,6 @@ export function MainShell() {
       }))
     })
   }, [])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(LS_SUGGEST_OVERRIDE, suggestOverride ? '1' : '0')
-    } catch {
-      /* ignore */
-    }
-  }, [suggestOverride])
 
   useEffect(() => {
     try {
@@ -319,14 +288,11 @@ export function MainShell() {
   }, [useManual, manualSnapshot, lcu, lcuSnapshotNamed])
 
   const roleForSuggestions = useMemo((): DraftRole => {
-    if (overlayEnginePrefs.roleOverride != null) {
-      return overlayEnginePrefs.roleOverride
-    }
     if (effectiveMyRole !== 'unknown') {
       return effectiveMyRole
     }
     return myRole
-  }, [overlayEnginePrefs.roleOverride, effectiveMyRole, myRole])
+  }, [effectiveMyRole, myRole])
 
   const sortForSuggestions = 'delta' as const
 
@@ -538,7 +504,7 @@ export function MainShell() {
     runnerId: 'NEXUS//LOCAL',
     region: 'AMERICAS',
     dataVersion: ddVersion && ddVersion[0] !== '(' ? ddVersion : '—',
-    build: '0.3.0',
+    build: '0.4.0',
     networkStatus: lcuStatus === 'ready' ? 'On' : 'Wait',
     link: lcuStatus === 'ready' ? 'League: ready' : 'League: waiting',
     resourceLine: `Picks from: ${copyDraftSource(draftSource)} · Suggestions: ${patchLabel ?? ENGINE_V1_LABEL}`,
@@ -623,19 +589,6 @@ export function MainShell() {
               draftSource={draftSource}
               useManual={useManual}
               onUseManual={setUseManual}
-              suggestOverride={suggestOverride}
-              onSuggestOverride={(next) => {
-                if (next) {
-                  const fromClient: DraftRole =
-                    lcu?.snapshot?.myRole && lcu.snapshot.myRole !== 'unknown'
-                      ? lcu.snapshot.myRole
-                      : myRole
-                  setMyRole(fromClient)
-                }
-                setSuggestOverride(next)
-              }}
-              myRole={myRole}
-              onMyRole={setMyRole}
               effectiveMyRole={effectiveMyRole}
               suggestionRoleLine={suggestionRoleLine}
               manual={manual}

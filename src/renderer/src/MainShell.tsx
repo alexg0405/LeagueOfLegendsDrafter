@@ -143,22 +143,30 @@ function emptyManual(): ManualPicks {
   return { ally: row(), enemy: row() }
 }
 
-function buildManualSnapshot(m: ManualPicks, idToName: ReadonlyMap<number, string>): DraftSnapshot {
+function buildManualSnapshot(
+  m: ManualPicks,
+  idToName: ReadonlyMap<number, string>,
+  selectedRole: DraftRole
+): DraftSnapshot {
+  const localRole = ROLES.includes(selectedRole) ? selectedRole : 'middle'
+  const localCellId = ROLES.indexOf(localRole)
   const slot = (side: 'ally' | 'enemy', role: DraftRole) => {
-    const id = side === 'ally' ? m.ally[role] : m.enemy[role]
+    const rawId = side === 'ally' ? m.ally[role] : m.enemy[role]
+    const id = rawId != null && Number.isFinite(rawId) && rawId > 0 ? rawId : null
+    const roleIndex = ROLES.indexOf(role)
     return {
       role,
       championId: id,
       championName: id != null ? idToName.get(id) ?? resolveChampionName(id, idToName) : null,
-      cellId: null
+      cellId: side === 'ally' ? roleIndex : roleIndex + 5
     }
   }
   return {
     ally: ROLES.map((r) => slot('ally', r)),
     enemy: ROLES.map((r) => slot('enemy', r)),
-    myTeam: null,
-    myRole: null,
-    localPlayerCellId: null,
+    myTeam: '100',
+    myRole: localRole,
+    localPlayerCellId: localCellId,
     bans: null,
     myPickOrder: null
   }
@@ -318,8 +326,8 @@ export function MainShell() {
   }, [lcu, nameById])
 
   const manualSnapshot = useMemo(
-    () => buildManualSnapshot(manual, nameById),
-    [manual, nameById]
+    () => buildManualSnapshot(manual, nameById, myRole),
+    [manual, nameById, myRole]
   )
 
   const { activeSnapshot, draftSource } = useMemo((): {
@@ -558,7 +566,7 @@ export function MainShell() {
     runnerId: 'NEXUS//LOCAL',
     region: 'AMERICAS',
     dataVersion: ddVersion && ddVersion[0] !== '(' ? ddVersion : '—',
-    build: '0.2.0',
+    build: '0.2.2',
     networkStatus: lcuStatus === 'ready' ? 'On' : 'Wait',
     link: lcuStatus === 'ready' ? 'League: ready' : 'League: waiting',
     resourceLine: `Picks from: ${copyDraftSource(draftSource)} · Suggestions: ${patchLabel ?? ENGINE_V1_LABEL}`,

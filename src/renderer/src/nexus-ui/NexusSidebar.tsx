@@ -86,7 +86,7 @@ export function NexusSidebar({ active, onNavigate }: Props) {
       <div className="border-t border-nexus-line p-2 flex flex-col items-center gap-1">
         <NexusPlus className="text-[8px] opacity-50" />
         <MicroLabel className="[writing-mode:vertical-rl] rotate-180 text-[10px] opacity-50">
-          draft v0.1
+          draft v 1.1
         </MicroLabel>
       </div>
     </aside>

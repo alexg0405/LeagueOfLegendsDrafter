@@ -71,6 +71,37 @@ function signedPct(v: number | undefined): string {
   return `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`
 }
 
+type OverlaySlot = { role: string; championName: string | null; championId: number | null }
+
+function filledNames(slots: OverlaySlot[], limit = 2): string[] {
+  return slots
+    .filter((p) => p.championId != null && p.championId > 0)
+    .map(slotName)
+    .filter((name) => name !== '—')
+    .slice(0, limit)
+}
+
+function shortIntel(text: string | null | undefined, fallback: string): string {
+  if (!text) {
+    return fallback
+  }
+  const first = text.split(/[.!?]/)[0]?.trim()
+  return first ? first.slice(0, 96) : fallback
+}
+
+function reasonCodes(reasons: readonly string[]): string {
+  const map: Record<string, string> = {
+    fill_role: 'ROLE',
+    base_wr: 'BASE',
+    lane_counter: 'CNTR',
+    late_counter: 'LATE',
+    team_synergy: 'SYN',
+    blind_safe: 'BLIND',
+    meta_safe: 'META'
+  }
+  return reasons.map((r) => map[r] ?? r.toUpperCase()).slice(0, 4).join(' / ')
+}
+
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
     <h3 className="font-mono font-bold text-sm uppercase tracking-[0.12em] text-nexus-lime/95 mb-2.5 border-b border-nexus-line pb-1.5">
@@ -677,54 +708,101 @@ export function OverlayPanel() {
             className="list-none m-0 p-0 space-y-2.5"
             key={d.boardSignature ? d.boardSignature : d.updatedAt}
           >
-            {topPicks.map((p, i) => (
-              <li
-                key={`${d.boardSignature ?? d.updatedAt}-${i}-${p.championId}`}
-                className="border border-nexus-line/80 bg-nexus-surface-2/90 px-2.5 py-2"
-              >
-                <div className="font-mono font-bold text-sm sm:text-base">
-                  <span className="text-nexus-lime/95">{p.championName}</span>
-                  <span className="text-nexus-muted"> · </span>
-                  <span className="text-nexus-text/85 tabular-nums">{p.score}</span>
-                </div>
-                {p.baseWinRate != null && p.contextWinRate != null && p.winRateDelta != null && (
-                  <div className="font-mono font-bold text-xs text-nexus-muted mt-1">
-                    {(p.baseWinRate * 100).toFixed(1)}% → {(p.contextWinRate * 100).toFixed(1)}%
-                    <span className={p.winRateDelta >= 0 ? 'text-nexus-lime/85' : 'text-nexus-red/80'}>
-                      {' '}
-                      ({p.winRateDelta >= 0 ? '+' : ''}
-                      {(p.winRateDelta * 100).toFixed(1)}%)
-                    </span>
+            {topPicks.map((p, i) => {
+              const allies = filledNames(s?.ally ?? [])
+              const enemies = filledNames(s?.enemy ?? [])
+              const intel = shortIntel(p.runes?.note, p.buildProfile?.buildHint ?? 'Matchup notes locked until board has more context.')
+              return (
+                <li
+                  key={`${d.boardSignature ?? d.updatedAt}-${i}-${p.championId}`}
+                  className="relative border border-nexus-line/90 bg-nexus-surface-2/95 px-2.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-mono font-bold text-sm sm:text-base leading-tight">
+                        <span className="text-nexus-lime/95">{p.championName}</span>
+                        <span className="text-nexus-muted"> · </span>
+                        <span className="text-nexus-text/90 tabular-nums">{p.score}</span>
+                      </div>
+                      {p.baseWinRate != null && p.contextWinRate != null && p.winRateDelta != null && (
+                        <div className="font-mono font-bold text-xs text-nexus-muted mt-1 tabular-nums">
+                          {(p.baseWinRate * 100).toFixed(1)}% -&gt; {(p.contextWinRate * 100).toFixed(1)}%
+                          <span className={p.winRateDelta >= 0 ? 'text-nexus-lime/85' : 'text-nexus-red/80'}>
+                            {' '}
+                            ({p.winRateDelta >= 0 ? '+' : ''}
+                            {(p.winRateDelta * 100).toFixed(1)}%)
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      {p.runes && (
+                        <span
+                          className="inline-flex h-6 min-w-6 items-center justify-center border border-nexus-lime/45 px-1.5 font-mono text-[10px] uppercase text-nexus-lime/90"
+                          title={`${p.runes.primaryTree} / ${p.runes.keystone}`}
+                        >
+                          {p.runes.primaryTree.slice(0, 3)}
+                        </span>
+                      )}
+                      {p.buildProfile && (
+                        <span
+                          className="inline-flex h-6 min-w-6 items-center justify-center border border-nexus-line px-1.5 font-mono text-[10px] uppercase text-nexus-text/85"
+                          title={p.buildProfile.buildHint}
+                        >
+                          {p.buildProfile.damage}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                )}
-                {p.runes && (
-                  <div className="font-mono text-xs text-nexus-muted mt-1.5 leading-snug">
-                    <div className="font-bold">{p.runes.keystone} / {p.runes.primaryTree}</div>
-                    <div className="text-[11px] text-nexus-muted/85">{p.runes.secondary}</div>
-                    {p.runes.note && <div className="text-[11px] text-nexus-text/70 font-normal mt-0.5">{p.runes.note}</div>}
+
+                  {p.runes && (
+                    <div className="mt-2 border-t border-nexus-line/55 pt-1.5 font-mono text-xs leading-snug">
+                      <span className="text-nexus-lime/85">Runes</span>
+                      <span className="text-nexus-muted"> · {p.runes.keystone} / {p.runes.primaryTree}</span>
+                      <div className="text-[11px] text-nexus-muted/85">{p.runes.secondary}</div>
+                    </div>
+                  )}
+
+                  <div className="mt-2 grid grid-cols-2 gap-2 font-mono text-[11px] leading-snug">
+                    <div className="border-l-2 border-nexus-lime/70 bg-nexus-bg/30 pl-2 pr-1 py-1">
+                      <div className="uppercase tracking-[0.12em] text-nexus-lime/75">Synergizes</div>
+                      <div className="text-nexus-text/85 truncate">{allies.length ? allies.join(' / ') : 'ally picks pending'}</div>
+                    </div>
+                    <div className="border-l-2 border-nexus-red/75 bg-nexus-bg/30 pl-2 pr-1 py-1">
+                      <div className="uppercase tracking-[0.12em] text-nexus-red/75">Counters</div>
+                      <div className="text-nexus-text/85 truncate">{enemies.length ? enemies.join(' / ') : 'enemy picks pending'}</div>
+                    </div>
                   </div>
-                )}
-                {p.buildProfile && (
-                  <div className="font-mono text-[11px] sm:text-xs text-nexus-muted mt-1.5 leading-snug">
-                    <span className="text-nexus-lime/85 uppercase">{p.buildProfile.damage}</span>
-                    <span className="text-nexus-line"> · </span>
-                    {p.buildProfile.archetype}
-                    {p.buildProfile.tagsLine !== '—' && (
-                      <span>
-                        <span className="text-nexus-line"> — </span>
-                        {p.buildProfile.tagsLine}
-                      </span>
+
+                  <details className="group mt-2 border border-nexus-line/70 bg-nexus-bg/35 font-mono text-[11px] leading-snug text-nexus-text/75">
+                    <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
+                      <span>Tips</span>
+                      <span className="text-nexus-lime/80 group-open:rotate-45 transition-transform">+</span>
+                    </summary>
+                    <div className="border-t border-nexus-line/60 px-2 py-1.5">
+                      <span>{intel}</span>
+                      {p.buildProfile && (
+                        <div className="mt-1 text-nexus-muted">
+                          {p.buildProfile.archetype}
+                          {p.buildProfile.tagsLine !== '—' && <span> · {p.buildProfile.tagsLine}</span>}
+                        </div>
+                      )}
+                    </div>
+                  </details>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-nexus-muted">
+                    <span>{reasonCodes(p.reasons)}</span>
+                    {p.lookaheadEV != null && (
+                      <>
+                        <span className="text-nexus-line">·</span>
+                        <span>EV {(p.lookaheadEV * 100).toFixed(1)}%</span>
+                        <span>σ{((p.lookaheadRisk ?? 0) * 100).toFixed(0)}%</span>
+                      </>
                     )}
-                    <div className="text-nexus-text/75 mt-0.5 font-normal">{p.buildProfile.buildHint}</div>
                   </div>
-                )}
-                {p.lookaheadEV != null && (
-                  <div className="font-mono font-bold text-xs text-nexus-muted mt-1">
-                    EV {(p.lookaheadEV * 100).toFixed(1)}% · σ{((p.lookaheadRisk ?? 0) * 100).toFixed(0)}%
-                  </div>
-                )}
-              </li>
-            ))}
+                </li>
+              )
+            })}
           </ul>
         </section>
 

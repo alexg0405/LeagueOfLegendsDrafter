@@ -61,20 +61,24 @@ export async function loadChampionMaps(version: string): Promise<{
     throw new Error(`champion.json ${res.status}`)
   }
   const j = (await res.json()) as {
-    data: Record<string, { key: string; name: string; id: number; tags?: string[]; partype?: string }>
+    data: Record<string, { key: string; name: string; id: string; tags?: string[]; partype?: string }>
   }
   const byLowerName = new Map<string, number>()
   const champions: ChampionLite[] = []
   for (const ch of Object.values(j.data)) {
+    const numericId = Number(ch.key)
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+      continue
+    }
     champions.push({
-      id: ch.id,
-      key: ch.key,
+      id: numericId,
+      key: ch.id,
       name: ch.name,
       tags: Array.isArray(ch.tags) ? ch.tags : [],
       partype: typeof ch.partype === 'string' && ch.partype.length > 0 ? ch.partype : 'None'
     })
-    byLowerName.set(ch.name.toLowerCase(), ch.id)
-    byLowerName.set(ch.key.toLowerCase(), ch.id)
+    byLowerName.set(ch.name.toLowerCase(), numericId)
+    byLowerName.set(ch.id.toLowerCase(), numericId)
   }
   championCache.set(version, byLowerName)
   championListCache.set(version, champions)

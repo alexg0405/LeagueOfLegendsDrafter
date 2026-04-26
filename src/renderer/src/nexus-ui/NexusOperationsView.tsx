@@ -1,7 +1,10 @@
+import { AnimatePresence, motion } from 'framer-motion'
+import { useState, type ReactNode } from 'react'
 import type { ChampionLite } from '@shared/dataDragon'
 import type { DraftDeltaListMode, DraftRole, DraftSource, PickSuggestion } from '@shared/draft'
 import { copyDraftSource } from './nexusCopy'
-import { NexusPanel } from './NexusPanel'
+import { MicroLabel } from './NexusTick'
+import { EASING, useNexusMotion } from './nexusMotion'
 
 const ROLES: DraftRole[] = ['top', 'jungle', 'middle', 'bottom', 'support']
 
@@ -12,6 +15,76 @@ const btnPrimary =
 const textMuted = 'text-nexus-muted'
 const textBody = 'font-mono text-sm text-nexus-text/90'
 const errText = 'font-mono text-sm text-nexus-red'
+
+function parseChampionSelectValue(value: string): number | null {
+  if (!value) {
+    return null
+  }
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+type OpsSectionProps = {
+  id: string
+  kicker: string
+  title: string
+  children: ReactNode
+  open: boolean
+  onToggle: () => void
+  accent?: boolean
+}
+
+function CollapsibleOpsSection({ id, kicker, title, children, open, onToggle, accent = false }: OpsSectionProps) {
+  const { reduce } = useNexusMotion()
+  return (
+    <motion.section
+      layout={!reduce}
+      className={[
+        'relative border border-nexus-line bg-nexus-surface-2/90 mb-3 overflow-hidden',
+        'shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]',
+        accent ? 'border-nexus-lime/25' : ''
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      transition={reduce ? { duration: 0 } : { duration: 0.18, ease: EASING.out }}
+    >
+      <button
+        type="button"
+        className="nexus-focus w-full px-4 py-3 text-left flex items-center justify-between gap-3 font-mono text-sm"
+        onClick={onToggle}
+        aria-expanded={open}
+      >
+        <span className="text-nexus-muted">{title}</span>
+        <motion.span
+          className="text-lg leading-none text-nexus-lime/90"
+          animate={reduce ? undefined : { rotate: open ? 45 : 0, scale: open ? 1.08 : 1 }}
+          transition={{ duration: 0.14, ease: EASING.sharp }}
+          aria-hidden
+        >
+          +
+        </motion.span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="ops-section-body"
+            className="border-t border-nexus-line px-4 py-4 sm:px-5 sm:py-5 text-sm sm:text-base leading-relaxed"
+            initial={reduce ? false : { height: 0, opacity: 0, scale: 0.98, y: -6 }}
+            animate={reduce ? undefined : { height: 'auto', opacity: 1, scale: 1, y: 0 }}
+            exit={reduce ? undefined : { height: 0, opacity: 0, scale: 0.98, y: -6 }}
+            transition={reduce ? { duration: 0 } : { duration: 0.18, ease: EASING.out }}
+          >
+            <MicroLabel className="block mb-2 text-nexus-lime/75">{kicker}</MicroLabel>
+            <h2 className="font-display text-base sm:text-lg tracking-[0.14em] uppercase text-nexus-lime/95 mb-3 sm:mb-4">
+              {title}
+            </h2>
+            {children}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.section>
+  )
+}
 
 export type NexusOperationsViewProps = {
   lcuStatusLine: string
@@ -71,10 +144,29 @@ export function NexusOperationsView({
   onToggleOverlay
 }: NexusOperationsViewProps) {
   const sorted = champions.slice().sort((a, b) => a.name.localeCompare(b.name))
+  const [openSectionIds, setOpenSectionIds] = useState<ReadonlySet<string>>(() => new Set())
+  const toggleSection = (id: string) => {
+    setOpenSectionIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
 
   return (
     <div className="w-full max-w-4xl mx-auto px-3 sm:px-5 lg:px-6 py-2 sm:py-3 pb-10 text-nexus-text nexus-ops-scroll">
-      <NexusPanel kicker="league // link" title="Client link" accent>
+      <CollapsibleOpsSection
+        id="CL_01"
+        kicker="league // link"
+        title="Client link"
+        accent
+        open={openSectionIds.has('CL_01')}
+        onToggle={() => toggleSection('CL_01')}
+      >
         <p className={`${textBody} mb-2`}>{lcuStatusLine}</p>
         {lcuError && <p className={`${errText} mb-2`}>{lcuError}</p>}
         <p className={`${textMuted} font-mono text-sm mb-4`}>
@@ -120,10 +212,16 @@ export function NexusOperationsView({
             Use manual board (ignores the League client for the 10 slots)
           </label>
         </div>
-      </NexusPanel>
+      </CollapsibleOpsSection>
 
       {useManual && (
-        <NexusPanel kicker="board" title="Manual draft (10 slots)">
+        <CollapsibleOpsSection
+          id="BD_01"
+          kicker="board"
+          title="Manual draft (10 slots)"
+          open={openSectionIds.has('BD_01')}
+          onToggle={() => toggleSection('BD_01')}
+        >
           <div className="mt-1 grid grid-cols-[5.5rem_1fr_1fr] gap-x-2 gap-y-1.5 text-xs sm:text-sm max-h-[22rem] overflow-y-auto nexus-ops-scroll pr-1 items-center">
             <div />
             <div className="text-center font-mono text-nexus-lime/85 uppercase text-[10px] tracking-widest">Ally</div>
@@ -135,8 +233,7 @@ export function NexusOperationsView({
                   className={inField + ' max-w-none w-full text-xs'}
                   value={manual.ally[role] ?? ''}
                   onChange={(e) => {
-                    const v = e.target.value
-                    onManualAlly(role, v ? Number(v) : null)
+                    onManualAlly(role, parseChampionSelectValue(e.target.value))
                   }}
                 >
                   <option value="">—</option>
@@ -150,8 +247,7 @@ export function NexusOperationsView({
                   className={inField + ' max-w-none w-full text-xs'}
                   value={manual.enemy[role] ?? ''}
                   onChange={(e) => {
-                    const v = e.target.value
-                    onManualEnemy(role, v ? Number(v) : null)
+                    onManualEnemy(role, parseChampionSelectValue(e.target.value))
                   }}
                 >
                   <option value="">—</option>
@@ -164,10 +260,16 @@ export function NexusOperationsView({
               </div>
             ))}
           </div>
-        </NexusPanel>
+        </CollapsibleOpsSection>
       )}
 
-      <NexusPanel kicker="model" title="Draft model">
+      <CollapsibleOpsSection
+        id="MD_01"
+        kicker="model"
+        title="Draft model"
+        open={openSectionIds.has('MD_01')}
+        onToggle={() => toggleSection('MD_01')}
+      >
         <div className="flex flex-wrap items-end gap-x-4 gap-y-3 mb-4 border-b border-nexus-line/50 pb-4">
           <label className="flex flex-col gap-1.5 min-w-0">
             <span className="font-mono text-[10px] sm:text-xs text-nexus-lime/85 uppercase tracking-[0.12em]">
@@ -277,9 +379,15 @@ export function NexusOperationsView({
             </li>
           ))}
         </ol>
-      </NexusPanel>
+      </CollapsibleOpsSection>
 
-      <NexusPanel kicker="hud" title="Overlay">
+      <CollapsibleOpsSection
+        id="OV_01"
+        kicker="hud"
+        title="Overlay"
+        open={openSectionIds.has('OV_01')}
+        onToggle={() => toggleSection('OV_01')}
+      >
         <p className={`${textMuted} text-sm mb-3`}>
           <kbd className="px-1 border border-nexus-line/70 bg-nexus-bg text-nexus-text/90">Insert</kbd>,{' '}
           <kbd className="px-1 border border-nexus-line/70 bg-nexus-bg text-nexus-text/90">F9</kbd>, or{' '}
@@ -289,7 +397,7 @@ export function NexusOperationsView({
         <button type="button" className={btnPrimary} onClick={onToggleOverlay}>
           Toggle overlay
         </button>
-      </NexusPanel>
+      </CollapsibleOpsSection>
     </div>
   )
 }

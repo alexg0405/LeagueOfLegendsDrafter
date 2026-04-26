@@ -144,13 +144,12 @@ export function NexusHomeDashboard({
               Client: {lcuStatus}
             </motion.p>
             <motion.div
-              className="mt-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 border border-nexus-line/70 bg-nexus-bg/35 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-nexus-muted"
+              className="mt-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 border border-nexus-line/70 bg-nexus-bg/35 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-nexus-text"
               custom={3}
               variants={metaV}
               initial="initial"
               animate="animate"
             >
-              <span className="text-nexus-lime/75">tagmark</span>
               <span>github @ alexg0405</span>
               <span className="text-nexus-line">/</span>
               <span>linkedin @ alexanderguodev</span>
@@ -168,7 +167,7 @@ export function NexusHomeDashboard({
               </motion.div>
             </div>
             <div className="border-t border-nexus-line p-2.5 font-mono text-xs text-nexus-muted space-y-0.5">
-              <p>APP_0.2.0</p>
+              <p>APP_0.2.2</p>
             </div>
           </div>
         </div>
@@ -217,9 +216,7 @@ export function NexusHomeDashboard({
                 }
                 aria-expanded={isOpen}
               >
-                <span className={module.light ? 'text-[#1a1e1a]' : 'text-nexus-muted'}>
-                  menu // {module.id}
-                </span>
+                <span className={module.light ? 'text-[#1a1e1a]' : 'text-nexus-muted'}>{module.title}</span>
                 <motion.span
                   className={[
                     'text-lg leading-none',

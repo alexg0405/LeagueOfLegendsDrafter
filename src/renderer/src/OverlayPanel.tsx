@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
+import { ddragonChampionImageUrl } from '@shared/dataDragon'
 import {
   buildEngineState,
   buildOverlayChampionSearchPool,
@@ -33,13 +34,6 @@ const empty: DraftUpdate = {
   championsSearch: null
 }
 
-function roleAbbrev(role: string): string {
-  if (role === 'unknown') {
-    return '?'
-  }
-  return role[0]!.toUpperCase()
-}
-
 function isGenericChampionName(name: string): boolean {
   return /^champion\s+\d+$/i.test(name.trim())
 }
@@ -54,10 +48,30 @@ function slotName(p: { championName: string | null; championId: number | null })
   return p.championName ?? '—'
 }
 
-function slotLine(ally: { role: string; championName: string | null; championId: number | null }[]): string {
-  return ally
-    .map((p) => `${roleAbbrev(p.role)}:${slotName(p)}`)
-    .join(' · ')
+function SlotPortrait({
+  slot,
+  imageUrl
+}: {
+  slot: { championName: string | null; championId: number | null }
+  imageUrl: string | null
+}) {
+  const name = slotName(slot)
+  return (
+    <span className="inline-flex items-center gap-1.5 border border-nexus-line/70 bg-nexus-bg/30 px-1.5 py-1">
+      {imageUrl ? (
+        <img
+          className="h-5 w-5 shrink-0 border border-nexus-line/70 object-cover"
+          src={imageUrl}
+          alt=""
+          width={20}
+          height={20}
+        />
+      ) : (
+        <span className="h-5 w-5 shrink-0 border border-nexus-line/70 bg-nexus-surface-2" aria-hidden />
+      )}
+      <span className="truncate">{name}</span>
+    </span>
+  )
 }
 
 function pct(v: number | undefined): string {
@@ -97,8 +111,6 @@ function SectionLabel({ children }: { children: ReactNode }) {
   )
 }
 
-const OVERLAY_ROLE_OPTIONS: DraftRole[] = ['top', 'jungle', 'middle', 'bottom', 'support']
-
 function pushOverlayPrefs(patch: OverlayEnginePrefsPatch) {
   void window.drafter.setOverlayEnginePrefs(patch)
 }
@@ -127,6 +139,10 @@ export function OverlayPanel() {
       }
     })
     return un
+  }, [])
+
+  useEffect(() => {
+    pushOverlayPrefs({ roleOverride: null })
   }, [])
 
   useEffect(() => {
@@ -227,6 +243,22 @@ export function OverlayPanel() {
     return new Map(rows.map((c) => [c.id, c.name]))
   }, [d.championsSearch])
 
+  const championKeyById = useMemo((): ReadonlyMap<number, string> => {
+    const rows = d.championsSearch
+    if (!rows?.length) {
+      return new Map()
+    }
+    return new Map(rows.flatMap((c) => (c.key ? [[c.id, c.key] as const] : [])))
+  }, [d.championsSearch])
+
+  const championIconUrl = (id: number | null | undefined): string | null => {
+    if (id == null || id <= 0 || !d.dataDragonVersion || d.dataDragonVersion[0] === '(') {
+      return null
+    }
+    const key = championKeyById.get(id)
+    return key ? ddragonChampionImageUrl(d.dataDragonVersion, key) : null
+  }
+
   const nameMatches = useMemo(() => {
     const q = lookupQuery.trim()
     if (q.length < 1) {
@@ -305,25 +337,10 @@ export function OverlayPanel() {
 
       <div className="nexus-overlay-nodrag border-b border-nexus-line/80 bg-nexus-surface-2/95 px-3 py-2 flex flex-col gap-2 text-[11px] sm:text-xs font-mono">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-          <label className="flex items-center gap-1.5 text-nexus-muted">
-            <span className="text-nexus-lime/90 uppercase tracking-wide">Role</span>
-            <select
-              className="nexus-focus bg-nexus-bg border border-nexus-line text-nexus-text py-0.5 px-1.5 max-w-[7.5rem]"
-              value={echo?.roleOverride == null ? 'auto' : echo.roleOverride}
-              onChange={(e) => {
-                const v = e.target.value
-                pushOverlayPrefs({ roleOverride: v === 'auto' ? null : (v as DraftRole) })
-              }}
-              aria-label="Suggestion role"
-            >
-              <option value="auto">Auto</option>
-              {OVERLAY_ROLE_OPTIONS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </label>
+          <span className="text-nexus-lime/90 uppercase tracking-wide">Role</span>
+          <span className="px-2 py-0.5 border border-nexus-line text-nexus-text uppercase">
+            {poolRole ?? 'auto'}
+          </span>
           <span className="text-nexus-line hidden sm:inline">|</span>
           <span className="text-nexus-lime/90 uppercase tracking-wide">Sort</span>
           <button
@@ -498,7 +515,18 @@ export function OverlayPanel() {
                     >
                       <td className="px-3 py-2.5 border-b border-nexus-line/45 tabular-nums text-nexus-muted">{i + 1}</td>
                       <td className="px-3 py-2.5 border-b border-nexus-line/45">
-                        <span className="text-nexus-lime/95 font-bold">{p.championName}</span>
+                        <span className="inline-flex items-center gap-2">
+                          {championIconUrl(p.championId) && (
+                            <img
+                              className="h-7 w-7 border border-nexus-line/70 object-cover"
+                              src={championIconUrl(p.championId)!}
+                              alt=""
+                              width={28}
+                              height={28}
+                            />
+                          )}
+                          <span className="text-nexus-lime/95 font-bold">{p.championName}</span>
+                        </span>
                       </td>
                       <td className="px-3 py-2.5 border-b border-nexus-line/45 tabular-nums text-nexus-text">{p.score.toFixed(2)}</td>
                       <td className="px-3 py-2.5 border-b border-nexus-line/45 tabular-nums text-nexus-muted">{pct(p.baseWinRate)}</td>
@@ -550,37 +578,23 @@ export function OverlayPanel() {
       )}
 
       <div className="nexus-overlay-nodrag nexus-overlay-no-scrollbar relative z-10 flex-1 min-h-0 overflow-y-auto px-3.5 py-3.5 text-sm leading-relaxed">
-        <section className="mb-5">
-          <SectionLabel>League link</SectionLabel>
-          <p className="font-mono font-bold text-sm sm:text-base text-nexus-text/90 m-0">
-            <span className={lcuClass}>{lcuLabel}</span>
-            <span className="text-nexus-line"> · </span>
-            <span className="text-nexus-muted">{d.source}</span>
-          </p>
-          {d.patchLabel && (
-            <p className="font-mono text-xs text-nexus-muted m-0 mt-1 leading-snug">
-              Model: <span className="text-nexus-lime/85">{d.patchLabel}</span>
-              {d.trainedEffectsStatus && d.trainedEffectsStatus.hasAnyData && (
-                <span className="text-nexus-muted">
-                  {' '}
-                  · trained {d.trainedEffectsStatus.basePairs} base · {d.trainedEffectsStatus.matchupPairs} lane ·{' '}
-                  {d.trainedEffectsStatus.synergyPairs} synergy
-                </span>
-              )}
-            </p>
-          )}
-          {d.error && <p className="font-mono font-bold text-sm text-nexus-red mt-2 m-0 leading-snug">{d.error}</p>}
-        </section>
-
         {s && (
           <section className="mb-5">
             <SectionLabel>Draft board</SectionLabel>
-            <p className="font-mono font-bold text-sm text-nexus-text/90 m-0 mb-1.5 leading-snug break-words">
-              Allies: {slotLine(s.ally)}
-            </p>
-            <p className="font-mono font-bold text-sm text-nexus-text/90 m-0 leading-snug break-words">
-              Enemies: {slotLine(s.enemy)}
-            </p>
+            <div className="space-y-1.5 font-mono text-xs text-nexus-text/90">
+              <div className="flex flex-wrap gap-1.5">
+                <span className="w-full text-nexus-muted uppercase tracking-[0.12em]">Allies</span>
+                {s.ally.map((slot) => (
+                  <SlotPortrait key={`a-${slot.role}-${slot.cellId ?? slot.championId ?? 'empty'}`} slot={slot} imageUrl={championIconUrl(slot.championId)} />
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <span className="w-full text-nexus-muted uppercase tracking-[0.12em]">Enemies</span>
+                {s.enemy.map((slot) => (
+                  <SlotPortrait key={`e-${slot.role}-${slot.cellId ?? slot.championId ?? 'empty'}`} slot={slot} imageUrl={championIconUrl(slot.championId)} />
+                ))}
+              </div>
+            </div>
             {poolRole && (
               <p className="font-mono font-bold text-sm text-nexus-lime/90 mt-2.5 m-0">Picks for {poolRole} (team-comp–weighted model)</p>
             )}
@@ -589,10 +603,6 @@ export function OverlayPanel() {
 
         <section className="mb-5">
           <SectionLabel>Champion lookup</SectionLabel>
-          <p className="font-mono text-xs text-nexus-muted m-0 mb-2">
-            Type a name (1+ char), champion id, or no-space shorthands (e.g. masteryi) — one unique match
-            auto-selects; Enter picks the top result. Tags come from the main app when DDragon is loaded.
-          </p>
           <input
             type="text"
             className="nexus-focus w-full font-mono text-sm py-1.5 px-2.5 border border-nexus-line bg-nexus-bg text-nexus-text placeholder:text-nexus-muted/70 mb-2"
@@ -619,14 +629,23 @@ export function OverlayPanel() {
                 <li key={c.id}>
                   <button
                     type="button"
-                    className="w-full text-left font-mono text-sm py-1.5 px-2 hover:bg-nexus-lime/10 text-nexus-text"
+                    className="w-full text-left font-mono text-sm py-1.5 px-2 hover:bg-nexus-lime/10 text-nexus-text flex items-center gap-2"
                     onClick={() => {
                       setLookupId(c.id)
                       setLookupDdragon({ tags: c.tags, partype: c.partype })
                       setLookupQuery(c.name)
                     }}
                   >
-                    {c.name}
+                    {championIconUrl(c.id) && (
+                      <img
+                        className="h-6 w-6 border border-nexus-line/70 object-cover"
+                        src={championIconUrl(c.id)!}
+                        alt=""
+                        width={24}
+                        height={24}
+                      />
+                    )}
+                    <span>{c.name}</span>
                   </button>
                 </li>
               ))}
@@ -705,7 +724,17 @@ export function OverlayPanel() {
                   className="relative border border-nexus-line/85 bg-nexus-surface-2/90 px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex gap-2">
+                      {championIconUrl(p.championId) && (
+                        <img
+                          className="h-10 w-10 shrink-0 border border-nexus-line/80 object-cover"
+                          src={championIconUrl(p.championId)!}
+                          alt=""
+                          width={40}
+                          height={40}
+                        />
+                      )}
+                      <div className="min-w-0">
                       <div className="font-mono font-bold text-sm sm:text-base leading-tight">
                         <span className="text-nexus-lime/95">{p.championName}</span>
                         <span className="text-nexus-muted"> · </span>
@@ -721,6 +750,7 @@ export function OverlayPanel() {
                           </span>
                         </div>
                       )}
+                      </div>
                     </div>
                     <div className="flex shrink-0 gap-1 opacity-90">
                       {p.buildProfile && (
@@ -797,8 +827,21 @@ export function OverlayPanel() {
         )}
 
         <div className="border-t border-nexus-line pt-3 flex flex-col gap-1.5">
+          <p className="font-mono font-bold text-xs text-nexus-text/85 m-0">
+            <span className={lcuClass}>{lcuLabel}</span>
+            <span className="text-nexus-line"> · </span>
+            <span className="text-nexus-muted">{d.source}</span>
+          </p>
+          {d.patchLabel && (
+            <p className="font-mono text-[11px] text-nexus-muted m-0 leading-snug">
+              {d.patchLabel}
+              {d.trainedEffectsStatus && d.trainedEffectsStatus.hasAnyData && (
+                <span> · trained {d.trainedEffectsStatus.basePairs}/{d.trainedEffectsStatus.matchupPairs}/{d.trainedEffectsStatus.synergyPairs}</span>
+              )}
+            </p>
+          )}
+          {d.error && <p className="font-mono font-bold text-xs text-nexus-red m-0 leading-snug">{d.error}</p>}
           <p className="font-mono font-bold text-sm text-nexus-muted m-0">Insert / F9 / F10</p>
-          {d.patchLabel && <p className="font-mono font-bold text-sm text-nexus-line/90 m-0 leading-snug">{d.patchLabel}</p>}
         </div>
       </div>
     </div>

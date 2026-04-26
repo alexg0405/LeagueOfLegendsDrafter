@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useState, type ReactNode } from 'react'
-import type { ChampionLite } from '@shared/dataDragon'
+import { ddragonChampionImageUrl, type ChampionLite } from '@shared/dataDragon'
 import type { DraftDeltaListMode, DraftRole, DraftSource, PickSuggestion } from '@shared/draft'
 import { copyDraftSource } from './nexusCopy'
 import { MicroLabel } from './NexusTick'
@@ -113,6 +113,7 @@ export type NexusOperationsViewProps = {
   suggestDeltaListMode: DraftDeltaListMode
   onSuggestDeltaListMode: (v: DraftDeltaListMode) => void
   suggestions: PickSuggestion[]
+  ddragonVersion: string | null
   onToggleOverlay: () => void
 }
 
@@ -141,9 +142,11 @@ export function NexusOperationsView({
   suggestDeltaListMode,
   onSuggestDeltaListMode,
   suggestions,
+  ddragonVersion,
   onToggleOverlay
 }: NexusOperationsViewProps) {
   const sorted = champions.slice().sort((a, b) => a.name.localeCompare(b.name))
+  const championKeyById = new Map(champions.map((c) => [c.id, c.key] as const))
   const [openSectionIds, setOpenSectionIds] = useState<ReadonlySet<string>>(() => new Set())
   const toggleSection = (id: string) => {
     setOpenSectionIds((prev) => {
@@ -319,8 +322,7 @@ export function NexusOperationsView({
             </label>
           )}
           <p className={`${textMuted} text-xs sm:text-sm max-w-xl m-0 flex-1 min-w-0 leading-relaxed`}>
-            0 = V1-only (fast; top order barely moves). Increase so rankings react as picks lock (more rollouts = stronger
-            reaction, more CPU; max {maxSuggestMcRollouts}).
+            0 = fast V1. Higher rollouts react more as picks lock; max {maxSuggestMcRollouts}.
           </p>
         </div>
         <p className={`${textMuted} text-sm sm:text-base leading-relaxed mb-4`}>
@@ -329,8 +331,8 @@ export function NexusOperationsView({
         <p className="font-mono text-xs text-nexus-lime/80 mb-3">
           {suggestSortBy === 'delta'
             ? suggestDeltaListMode === 'worst'
-              ? 'Ordered by smallest winrate delta (risky / downgraded in this lobby) first'
-              : 'Ordered by largest winrate delta (best lift in this lobby) first'
+              ? 'Lowest lobby delta first'
+              : 'Highest lobby delta first'
             : 'Top picks (sorted by model score)'}
         </p>
         <ol className="list-decimal pl-4 sm:pl-5 space-y-3 font-mono text-sm text-nexus-text/90 max-w-3xl">
@@ -339,15 +341,29 @@ export function NexusOperationsView({
               No ideas yet — set role, load League champ select, or use manual picks.
             </li>
           )}
-          {suggestions.map((s) => (
+          {suggestions.map((s) => {
+            const championKey = championKeyById.get(s.championId)
+            const imageUrl = ddragonVersion && championKey ? ddragonChampionImageUrl(ddragonVersion, championKey) : null
+            return (
             <li key={s.championId} className="border-b border-nexus-line/40 pb-3 last:border-0 last:pb-0">
-              <span className="text-nexus-lime/95 font-medium">{s.championName}</span>
-              <span className="text-nexus-line"> </span>
-              <span className="text-nexus-lime/70">({s.score})</span>
-              {s.estWin != null && (
-                <span className="text-nexus-muted text-xs"> ~{(s.estWin * 100).toFixed(1)}% est</span>
-              )}{' '}
-              <span className="text-nexus-text/80">{s.reasons.join(', ')}</span>
+              <div className="flex gap-2">
+                {imageUrl && (
+                  <img
+                    className="mt-0.5 h-9 w-9 shrink-0 border border-nexus-line bg-nexus-bg object-cover"
+                    src={imageUrl}
+                    alt=""
+                    width={36}
+                    height={36}
+                  />
+                )}
+                <div className="min-w-0">
+                  <span className="text-nexus-lime/95 font-medium">{s.championName}</span>
+                  <span className="text-nexus-line"> </span>
+                  <span className="text-nexus-lime/70">({s.score})</span>
+                  {s.estWin != null && (
+                    <span className="text-nexus-muted text-xs"> ~{(s.estWin * 100).toFixed(1)}% est</span>
+                  )}{' '}
+                  <span className="text-nexus-text/80">{s.reasons.join(', ')}</span>
               {s.baseWinRate != null && s.contextWinRate != null && s.winRateDelta != null && (
                 <div className="text-nexus-muted text-xs mt-1">
                   WR {(s.baseWinRate * 100).toFixed(1)}% → {(s.contextWinRate * 100).toFixed(1)}%
@@ -376,8 +392,11 @@ export function NexusOperationsView({
                   <div className="text-nexus-text/80 mt-0.5">{s.buildProfile.buildHint}</div>
                 </div>
               )}
+                </div>
+              </div>
             </li>
-          ))}
+            )
+          })}
         </ol>
       </CollapsibleOpsSection>
 

@@ -401,12 +401,12 @@ export function MainShell() {
     return new Map(champions.map((c) => [c.id, { tags: c.tags, partype: c.partype }]))
   }, [champions])
 
-  const championsSearch = useMemo((): { id: number; name: string; tags: string[]; partype: string }[] | null => {
+  const championsSearch = useMemo((): { id: number; name: string; key: string; tags: string[]; partype: string }[] | null => {
     if (champions.length === 0) {
       return null
     }
     return champions
-      .map((c) => ({ id: c.id, name: c.name, tags: c.tags, partype: c.partype }))
+      .map((c) => ({ id: c.id, name: c.name, key: c.key, tags: c.tags, partype: c.partype }))
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
   }, [champions])
 
@@ -581,17 +581,15 @@ export function MainShell() {
   const draftModelDescription = useMemo(() => {
     const model = patchLabel ?? ENGINE_V1_LABEL
     const trainedOn = model.includes('+trained') || Boolean(trainedEffects?.status.hasAnyData)
-    const dataLine = trainedOn
-      ? 'Uses exported Riot-trained effects when available; bundled heuristics fill sparse gaps.'
-      : 'Using bundled heuristics only (no trained export loaded).'
+    const dataLine = trainedOn ? 'trained + bundled fallback' : 'bundled heuristics'
     const sortLine =
       suggestSortBy === 'delta'
-        ? `winrate delta (${suggestDeltaListMode === 'worst' ? 'weakest in context first' : 'strongest in context first'})`
+        ? `delta: ${suggestDeltaListMode === 'worst' ? 'worst first' : 'best first'}`
         : 'model score'
     if (suggestMcRollouts <= 0) {
-      return `${model} — V1 blend only (base / ally / enemy / comp / comfort). Sort: ${sortLine}. Set “Monte Carlo rollouts” above 0 to re-rank on completed random boards. ${dataLine}`
+      return `${model} - V1 only. Sort: ${sortLine}. Data: ${dataLine}.`
     }
-    return `${model} — V1 blend, then ${suggestMcRollouts} Monte Carlo rollout(s) per candidate on random completed rosters (adjust below; higher = more reactive, more CPU). Sort: ${sortLine}. ${dataLine}`
+    return `${model} - V1 + ${suggestMcRollouts} rollout(s). Sort: ${sortLine}. Data: ${dataLine}.`
   }, [patchLabel, suggestMcRollouts, suggestSortBy, suggestDeltaListMode, trainedEffects])
 
   const rightCol = {
@@ -691,6 +689,7 @@ export function MainShell() {
               suggestDeltaListMode={suggestDeltaListMode}
               onSuggestDeltaListMode={setSuggestDeltaListMode}
               suggestions={suggestions}
+              ddragonVersion={ddVersion && ddVersion[0] !== '(' ? ddVersion : null}
               onToggleOverlay={async () => {
                 await window.drafter.toggleOverlay()
               }}

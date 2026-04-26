@@ -278,6 +278,9 @@ export function isDraftUpdate(x: unknown): x is DraftUpdate {
       if (typeof r.id !== 'number' || typeof r.name !== 'string') {
         return false
       }
+      if (r.key != null && typeof r.key !== 'string') {
+        return false
+      }
       if (r.tags != null) {
         if (!Array.isArray(r.tags) || r.tags.some((t) => typeof t !== 'string')) {
           return false

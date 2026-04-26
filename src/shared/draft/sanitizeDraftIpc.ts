@@ -67,6 +67,7 @@ function sanitizeChampionsSearch(
     .map((r) => ({
       id: r.id,
       name: r.name,
+      key: r.key != null && typeof r.key === 'string' ? r.key : undefined,
       tags:
         r.tags == null
           ? undefined

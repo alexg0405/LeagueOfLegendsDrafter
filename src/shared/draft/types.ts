@@ -152,7 +152,7 @@ export type DraftUpdate = {
    * Champion id/name list for the overlay name search (Data Dragon; sorted by name when provided).
    */
   /** Overlay search: names + DDragon `tags` / partype for AD·AP / tank hints */
-  championsSearch?: { id: number; name: string; tags?: string[]; partype?: string }[] | null
+  championsSearch?: { id: number; name: string; key?: string; tags?: string[]; partype?: string }[] | null
   /**
    * Summary of the trained-effects bundle loaded in main (from `npm run train:export`).
    * When missing or `hasAnyData === false`, the overlay should advertise bundled heuristics only.

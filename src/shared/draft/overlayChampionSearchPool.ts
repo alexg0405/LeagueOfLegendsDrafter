@@ -1,7 +1,7 @@
 import searchIndex from '../data/championSearchIndex.json'
 import type { DraftUpdate } from './types'
 
-type SearchRow = { id: number; name: string; tags: string[]; partype: string }
+type SearchRow = { id: number; name: string; key?: string; tags: string[]; partype: string }
 
 const STATIC_BY_ID: Map<number, SearchRow> = (() => {
   const m = new Map<number, SearchRow>()
@@ -22,6 +22,7 @@ export function buildOverlayChampionSearchPool(fromDraft: DraftUpdate['champions
       m.set(c.id, {
         id: c.id,
         name: c.name,
+        key: c.key,
         tags: c.tags ?? [],
         partype: c.partype ?? 'None'
       })

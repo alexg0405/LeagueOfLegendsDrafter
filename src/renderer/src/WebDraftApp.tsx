@@ -140,6 +140,14 @@ function dataUrlToBase64(dataUrl: string): string {
   return dataUrl.includes(',') ? dataUrl.slice(dataUrl.indexOf(',') + 1) : dataUrl
 }
 
+function shortIntel(text: string | null | undefined, fallback: string): string {
+  if (!text) {
+    return fallback
+  }
+  const first = text.split(/[.!?]/)[0]?.trim()
+  return first ? first.slice(0, 120) : fallback
+}
+
 function buildSnapshot(board: ManualBoard, role: Exclude<DraftRole, 'unknown'>, names: ReadonlyMap<number, string>): DraftSnapshot {
   const localCellId = ROLES.indexOf(role)
   const slot = (side: 'ally' | 'enemy', slotRole: Exclude<DraftRole, 'unknown'>, offset: number) => {
@@ -196,6 +204,10 @@ function SuggestionRow({
   champions: ChampionLite[]
   ddragonVersion: string | null
 }) {
+  const tip = shortIntel(
+    suggestion.runes?.note,
+    suggestion.buildProfile?.buildHint ?? 'Use this pick when it fits your lane matchup and team damage profile.'
+  )
   return (
     <li className="border border-nexus-line/80 bg-nexus-surface-2/80 px-3 py-2">
       <div className="flex gap-2">
@@ -222,6 +234,36 @@ function SuggestionRow({
             </div>
           )}
         </div>
+      </div>
+      <div className="mt-2 grid grid-cols-1 gap-1.5">
+        {suggestion.runes && (
+          <details className="group border border-nexus-line/65 bg-nexus-bg/25 font-mono text-[11px] leading-snug text-nexus-text/75">
+            <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
+              <span>Runes</span>
+              <span className="text-nexus-lime/80 transition-transform group-open:rotate-45">+</span>
+            </summary>
+            <div className="border-t border-nexus-line/55 px-2 py-1.5">
+              <span className="text-nexus-lime/85">{suggestion.runes.keystone}</span>
+              <span className="text-nexus-muted"> / {suggestion.runes.primaryTree}</span>
+              <div className="mt-0.5 text-nexus-muted/85">{suggestion.runes.secondary}</div>
+            </div>
+          </details>
+        )}
+        <details className="group border border-nexus-line/65 bg-nexus-bg/25 font-mono text-[11px] leading-snug text-nexus-text/75">
+          <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
+            <span>Tips</span>
+            <span className="text-nexus-lime/80 transition-transform group-open:rotate-45">+</span>
+          </summary>
+          <div className="border-t border-nexus-line/55 px-2 py-1.5">
+            <span>{tip}</span>
+            {suggestion.buildProfile && (
+              <div className="mt-1 text-nexus-muted">
+                {suggestion.buildProfile.archetype}
+                {suggestion.buildProfile.tagsLine !== '—' && <span> · {suggestion.buildProfile.tagsLine}</span>}
+              </div>
+            )}
+          </div>
+        </details>
       </div>
     </li>
   )

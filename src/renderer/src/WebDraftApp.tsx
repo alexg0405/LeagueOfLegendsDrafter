@@ -515,13 +515,15 @@ export function WebDraftApp() {
   }
 
   const applyVisionRows = (side: 'ally' | 'enemy', rows: VisionPick[] | undefined) => {
+    let fallbackIndex = 0
     for (const row of rows ?? []) {
-      const slotRole = normalizeRole(row.role)
-      if (!slotRole) {
-        continue
-      }
       const name = row.championName?.trim() ?? ''
       if (!name) {
+        continue
+      }
+      const slotRole = normalizeRole(row.role) ?? ROLES[fallbackIndex]
+      fallbackIndex += 1
+      if (!slotRole) {
         continue
       }
       setChampionSlotByName(side, slotRole, name)

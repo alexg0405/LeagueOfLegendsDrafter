@@ -23,6 +23,7 @@ Rules:
 - The ally team is usually the player's team list/columns labeled ally, your team, blue side, left side, or the team containing the selected/local player.
 - The enemy team is usually labeled enemy, opponents, red side, their team, or appears in the opposite team list/column.
 - During champion select, enemy picks may appear on the right side or in a separate opponent column. Do not omit them if visible.
+- If roles are not visibly labeled, assign visible rows in standard order: top, jungle, middle, bottom, support.
 - If only one side is clearly visible, fill that side and leave the other side empty.
 - If a champion is unclear, use an empty championName.
 - Prefer the role labels shown in the screenshot if visible.

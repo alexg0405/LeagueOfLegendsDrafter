@@ -115,6 +115,9 @@ export function parseLcuChampSelectSession(raw: unknown): DraftSnapshot | null {
     return null
   }
 
+  const localCell =
+    typeof o['localPlayerCellId'] === 'number' ? (o['localPlayerCellId'] as number) : null
+
   const mapMember = (m: unknown): SlotPick => {
     if (m == null || typeof m !== 'object') {
       return {
@@ -125,14 +128,16 @@ export function parseLcuChampSelectSession(raw: unknown): DraftSnapshot | null {
       }
     }
     const t = m as LcuTeamMember
-    const cid = typeof t.championId === 'number' ? t.championId : null
-    const intent =
-      typeof t.championPickIntent === 'number' && t.championPickIntent > 0 ? t.championPickIntent : null
-    const effective = cid != null && cid > 0 ? cid : intent
     const cellId = typeof t.cellId === 'number' ? t.cellId : null
+    const cid = typeof t.championId === 'number' && t.championId > 0 ? Math.trunc(t.championId) : null
+    const intent =
+      typeof t.championPickIntent === 'number' && t.championPickIntent > 0
+        ? Math.trunc(t.championPickIntent)
+        : null
+    const isLocalPlayer = localCell != null && cellId === localCell
     return {
       role: mapPosition(t.assignedPosition),
-      championId: effective == null || effective === 0 ? null : effective,
+      championId: cid ?? (isLocalPlayer ? null : intent),
       championName: null,
       cellId
     }
@@ -140,10 +145,7 @@ export function parseLcuChampSelectSession(raw: unknown): DraftSnapshot | null {
 
   const ally: SlotPick[] = (myTeam as unknown[]).slice(0, 5).map(mapMember)
   const enemy: SlotPick[] = (theirTeam as unknown[]).slice(0, 5).map(mapMember)
-  mergePickChampionsFromActions(ally, enemy, o['actions'])
-
-  const localCell =
-    typeof o['localPlayerCellId'] === 'number' ? (o['localPlayerCellId'] as number) : null
+  mergePickChampionsFromActions(ally, enemy, o['actions'], localCell)
   const myRole = inferLocalRoleFromTeam(ally, localCell)
 
   let team: TeamId | null = null
@@ -181,19 +183,37 @@ type LcuAction = {
   pickTurn?: number
 }
 
-function effectiveActionChampionId(a: LcuAction): number | null {
+function actionChampionOrIntentId(a: LcuAction): number | null {
   const cid = typeof a.championId === 'number' && a.championId > 0 ? a.championId : null
   const intent =
     typeof a.championPickIntent === 'number' && a.championPickIntent > 0 ? a.championPickIntent : null
   return cid ?? intent
 }
 
+function pickActionChampionId(a: LcuAction, localCell: number | null): number | null {
+  const isLocalPlayer = localCell != null && a.actorCellId === localCell
+  if (isLocalPlayer) {
+    return a.completed === true && typeof a.championId === 'number' && a.championId > 0
+      ? Math.trunc(a.championId)
+      : null
+  }
+  const cid = actionChampionOrIntentId(a)
+  return cid == null ? null : Math.trunc(cid)
+}
+
 /**
  * `myTeam` / `theirTeam` sometimes lag behind the live `actions` pick rows. Merge any pick
- * action with a non-zero `championId` onto the matching `cellId` so the draft model sees locks
- * (and hover selections) as soon as the client exposes them.
+ * action with a non-zero champion id onto the matching `cellId` so the draft model sees other
+ * players' locks and hovers as soon as the client exposes them. For the local player, ignore
+ * hover / intent rows until the pick is completed so preselecting a champion does not remove it
+ * from the recommendation pool.
  */
-function mergePickChampionsFromActions(ally: SlotPick[], enemy: SlotPick[], actions: unknown): void {
+function mergePickChampionsFromActions(
+  ally: SlotPick[],
+  enemy: SlotPick[],
+  actions: unknown,
+  localCell: number | null
+): void {
   if (!Array.isArray(actions)) {
     return
   }
@@ -210,7 +230,7 @@ function mergePickChampionsFromActions(ally: SlotPick[], enemy: SlotPick[], acti
       if (a.type !== 'pick') {
         continue
       }
-      const cid = effectiveActionChampionId(a)
+      const cid = pickActionChampionId(a, localCell)
       const cell = a.actorCellId
       if (cid == null || typeof cell !== 'number') {
         continue
@@ -313,7 +333,7 @@ function parseBansFromActions(actions: unknown): number[] {
       if (a.type !== 'ban') {
         continue
       }
-      const cid = effectiveActionChampionId(a)
+      const cid = actionChampionOrIntentId(a)
       if (cid != null) {
         out.push(cid)
       }

@@ -1,7 +1,77 @@
 import { describe, expect, it } from 'vitest'
+import { buildEngineState } from './draftState'
 import { parseLcuChampSelectSession } from './lcuMap'
 
 describe('parseLcuChampSelectSession', () => {
+  it('keeps other players pick intents but does not lock the local hover', () => {
+    const raw = {
+      localPlayerCellId: 0,
+      myTeam: [
+        {
+          team: 1,
+          cellId: 0,
+          championId: 0,
+          championPickIntent: 131,
+          assignedPosition: 'jungle'
+        },
+        {
+          team: 1,
+          cellId: 1,
+          championId: 0,
+          championPickIntent: 266,
+          assignedPosition: 'top'
+        },
+        { team: 1, cellId: 2, championId: 0, assignedPosition: 'middle' },
+        { team: 1, cellId: 3, championId: 0, assignedPosition: 'bottom' },
+        { team: 1, cellId: 4, championId: 0, assignedPosition: 'utility' }
+      ],
+      theirTeam: [
+        { team: 2, cellId: 5, championId: 0, assignedPosition: 'top' },
+        { team: 2, cellId: 6, championId: 0, assignedPosition: 'jungle' },
+        { team: 2, cellId: 7, championId: 0, assignedPosition: 'middle' },
+        { team: 2, cellId: 8, championId: 0, assignedPosition: 'bottom' },
+        { team: 2, cellId: 9, championId: 0, assignedPosition: 'utility' }
+      ],
+      actions: [
+        [
+          {
+            type: 'pick',
+            actorCellId: 0,
+            championId: 0,
+            championPickIntent: 131,
+            completed: false,
+            pickTurn: 1
+          },
+          {
+            type: 'pick',
+            actorCellId: 6,
+            championId: 0,
+            championPickIntent: 121,
+            completed: false,
+            pickTurn: 1
+          }
+        ]
+      ]
+    }
+
+    const snap = parseLcuChampSelectSession(raw)
+    expect(snap).not.toBeNull()
+    expect(snap!.myRole).toBe('jungle')
+    expect(snap!.ally.find((p) => p.cellId === 0)?.championId).toBeNull()
+    expect(snap!.ally.find((p) => p.cellId === 1)?.championId).toBe(266)
+    expect(snap!.enemy.find((p) => p.cellId === 6)?.championId).toBe(121)
+
+    const state = buildEngineState(snap!, 'jungle', {
+      bans: snap!.bans,
+      myPickOrder: snap!.myPickOrder,
+      dataDragonVersion: 'test',
+      patch: 'test'
+    })
+    expect(state.unavailable.has(131)).toBe(false)
+    expect(state.unavailable.has(266)).toBe(true)
+    expect(state.unavailable.has(121)).toBe(true)
+  })
+
   it('fills championId from pick actions when team row is still empty', () => {
     const raw = {
       localPlayerCellId: 0,

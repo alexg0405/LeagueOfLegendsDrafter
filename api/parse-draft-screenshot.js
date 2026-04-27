@@ -26,7 +26,18 @@ Rules:
 - If only one side is clearly visible, fill that side and leave the other side empty.
 - If a champion is unclear, use an empty championName.
 - Prefer the role labels shown in the screenshot if visible.
-- If the screenshot is not champion select, return empty arrays and confidence "low".`
+- If the screenshot is not champion select, return empty arrays and confidence "low".
+- Never leave strings unfinished. If unsure, use an empty string.
+- Your full response must start with { and end with }.`
+}
+
+function repairPrompt(badJsonText) {
+  return `The previous response was not valid JSON.
+
+Return a repaired version of this JSON only. Preserve all detected champion names and roles. If a value is incomplete, replace it with an empty string. No markdown.
+
+Broken JSON:
+${badJsonText}`
 }
 
 function normalizeRows(value) {
@@ -73,6 +84,75 @@ function extractJsonObject(text) {
   return withoutFence.slice(start, end + 1)
 }
 
+function safeParseJson(text) {
+  const extracted = extractJsonObject(text)
+  try {
+    return JSON.parse(extracted)
+  } catch (firstError) {
+    let repaired = extracted
+      .replace(/[“”]/g, '"')
+      .replace(/[‘’]/g, "'")
+      .replace(/,\s*([}\]])/g, '$1')
+
+    const quoteCount = (repaired.match(/"/g) ?? []).length
+    if (quoteCount % 2 === 1) {
+      repaired += '"'
+    }
+    const openBraces = (repaired.match(/{/g) ?? []).length
+    const closeBraces = (repaired.match(/}/g) ?? []).length
+    const openBrackets = (repaired.match(/\[/g) ?? []).length
+    const closeBrackets = (repaired.match(/]/g) ?? []).length
+    repaired += ']'.repeat(Math.max(0, openBrackets - closeBrackets))
+    repaired += '}'.repeat(Math.max(0, openBraces - closeBraces))
+
+    try {
+      return JSON.parse(repaired)
+    } catch {
+      throw firstError
+    }
+  }
+}
+
+async function callGemini(apiKey, imageBase64, mimeType, promptText, maxOutputTokens = 1200) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${modelName()}:generateContent`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: promptText },
+              { inline_data: { mime_type: mimeType, data: imageBase64 } }
+            ]
+          }
+        ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          maxOutputTokens,
+          temperature: 0
+        }
+      })
+    }
+  )
+  const raw = await response.text()
+  if (!response.ok) {
+    let hint = raw.slice(0, 500)
+    try {
+      const parsed = JSON.parse(raw)
+      hint = parsed?.error?.message || hint
+    } catch {
+      // keep raw hint
+    }
+    throw new Error(`Vision service failed: ${hint}`)
+  }
+  return firstText(JSON.parse(raw))
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST')
@@ -99,49 +179,23 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelName()}:generateContent`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: prompt(dataDragonVersion) },
-                { inline_data: { mime_type: mimeType, data: imageBase64 } }
-              ]
-            }
-          ],
-          generationConfig: {
-            maxOutputTokens: 700,
-            temperature: 0.1
-          }
-        })
-      }
-    )
-
-    const raw = await response.text()
-    if (!response.ok) {
-      let hint = raw.slice(0, 500)
-      try {
-        const parsed = JSON.parse(raw)
-        hint = parsed?.error?.message || hint
-      } catch {
-        // keep raw hint
-      }
-      res.status(502).json({ error: `Vision service failed: ${hint}` })
-      return
+    const text = await callGemini(apiKey, imageBase64, mimeType, prompt(dataDragonVersion))
+    let parsed
+    try {
+      parsed = safeParseJson(text)
+    } catch {
+      const repaired = await callGemini(apiKey, imageBase64, mimeType, repairPrompt(text), 900)
+      parsed = safeParseJson(repaired)
     }
-
-    const gemini = JSON.parse(raw)
-    const text = firstText(gemini)
-    const parsed = JSON.parse(extractJsonObject(text))
     res.status(200).json(normalizeResponse(parsed))
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
+    res.status(500).json({
+      error:
+        error instanceof SyntaxError
+          ? 'Vision returned unreadable JSON. Try a clearer screenshot or crop the champion select area.'
+          : error instanceof Error
+            ? error.message
+            : String(error)
+    })
   }
 }

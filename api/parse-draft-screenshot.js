@@ -42,7 +42,16 @@ ${badJsonText}`
 }
 
 function normalizeRows(value) {
-  return Array.isArray(value) ? value : []
+  return Array.isArray(value) ? value.map(normalizePick) : []
+}
+
+function normalizePick(row) {
+  if (!row || typeof row !== 'object') {
+    return { role: 'unknown', championName: '' }
+  }
+  const role = typeof row.role === 'string' ? row.role : 'unknown'
+  const championName = typeof row.championName === 'string' ? row.championName : ''
+  return { role, championName }
 }
 
 function normalizeResponse(parsed) {
@@ -85,6 +94,87 @@ function extractJsonObject(text) {
   return withoutFence.slice(start, end + 1)
 }
 
+function extractFieldArrayText(text, fieldName) {
+  const fieldIndex = text.search(new RegExp(`"${fieldName}"\\s*:`))
+  if (fieldIndex < 0) {
+    return ''
+  }
+  const start = text.indexOf('[', fieldIndex)
+  if (start < 0) {
+    return ''
+  }
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i]
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (ch === '\\') {
+      escaped = true
+      continue
+    }
+    if (ch === '"') {
+      inString = !inString
+      continue
+    }
+    if (inString) {
+      continue
+    }
+    if (ch === '[') {
+      depth += 1
+    }
+    if (ch === ']') {
+      depth -= 1
+      if (depth === 0) {
+        return text.slice(start, i + 1)
+      }
+    }
+  }
+  const nextKnownField = text.slice(start).search(/,\s*"(?:enemyPicks|allyPicks|myRole|confidence|enemies|allies|opponentPicks|theirTeam|myTeam)"\s*:/)
+  if (nextKnownField > 0) {
+    return text.slice(start, start + nextKnownField)
+  }
+  return text.slice(start)
+}
+
+function loosePickObjects(arrayText) {
+  const rows = []
+  const objectMatches = arrayText.match(/\{[^{}]*\}/g) ?? []
+  for (const raw of objectMatches) {
+    const role = /"role"\s*:\s*"([^"]*)"/i.exec(raw)?.[1] ?? 'unknown'
+    const championName = /"championName"\s*:\s*"([^"]*)"/i.exec(raw)?.[1] ?? ''
+    rows.push({ role, championName })
+  }
+  return rows
+}
+
+function fallbackParseVisionText(text) {
+  const source = extractJsonObject(text)
+  const allyPicks = loosePickObjects(extractFieldArrayText(source, 'allyPicks'))
+  const enemyPicks =
+    loosePickObjects(extractFieldArrayText(source, 'enemyPicks')).length > 0
+      ? loosePickObjects(extractFieldArrayText(source, 'enemyPicks'))
+      : loosePickObjects(extractFieldArrayText(source, 'enemies')).length > 0
+        ? loosePickObjects(extractFieldArrayText(source, 'enemies'))
+        : loosePickObjects(extractFieldArrayText(source, 'opponentPicks')).length > 0
+          ? loosePickObjects(extractFieldArrayText(source, 'opponentPicks'))
+          : loosePickObjects(extractFieldArrayText(source, 'theirTeam'))
+
+  if (allyPicks.length === 0 && enemyPicks.length === 0) {
+    throw new SyntaxError('Could not recover champion rows from malformed JSON.')
+  }
+
+  return {
+    allyPicks,
+    enemyPicks,
+    myRole: /"myRole"\s*:\s*"([^"]*)"/i.exec(source)?.[1] ?? 'unknown',
+    confidence: /"confidence"\s*:\s*"([^"]*)"/i.exec(source)?.[1] ?? 'low'
+  }
+}
+
 function safeParseJson(text) {
   const extracted = extractJsonObject(text)
   try {
@@ -94,6 +184,8 @@ function safeParseJson(text) {
       .replace(/[“”]/g, '"')
       .replace(/[‘’]/g, "'")
       .replace(/,\s*([}\]])/g, '$1')
+      .replace(/}\s*{/g, '},{')
+      .replace(/]\s*"/g, '],"')
 
     const quoteCount = (repaired.match(/"/g) ?? []).length
     if (quoteCount % 2 === 1) {
@@ -109,7 +201,7 @@ function safeParseJson(text) {
     try {
       return JSON.parse(repaired)
     } catch {
-      throw firstError
+      return fallbackParseVisionText(extracted)
     }
   }
 }

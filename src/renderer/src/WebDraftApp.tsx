@@ -1006,7 +1006,7 @@ export function WebDraftApp() {
                     {ocrResult ? (
                       <p className="m-0 font-mono text-xs text-nexus-text/90">
                         Autofill: <span className="text-nexus-lime/85">{ocrResult.ally}</span> ally name(s),{' '}
-                        <span className="text-nexus-lime/85">{ocrResult.enemy}</span> enemy name(s) from the image.
+                        <span className="text-nexus-red/85">{ocrResult.enemy}</span> enemy name(s) from the image.
                       </p>
                     ) : (
                       <p className="m-0 font-mono text-xs text-nexus-muted">
@@ -1065,8 +1065,21 @@ export function WebDraftApp() {
 
               <div className="mt-5 grid gap-5 xl:grid-cols-2">
                 {(['ally', 'enemy'] as const).map((side) => (
-                  <section key={side} className="rounded-md border border-white/[0.07] bg-nexus-bg/30 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-                    <h3 className="font-display text-base tracking-[0.14em] uppercase text-nexus-lime/90 mb-3">
+                  <section
+                    key={side}
+                    className={
+                      side === 'ally'
+                        ? 'rounded-md border border-nexus-lime/30 border-l-4 border-l-nexus-lime bg-nexus-lime/[0.06] p-3 shadow-[inset_0_1px_0_rgba(35,213,176,0.12)]'
+                        : 'rounded-md border border-nexus-red/30 border-l-4 border-l-nexus-red bg-nexus-red/[0.06] p-3 shadow-[inset_0_1px_0_rgba(248,113,113,0.1)]'
+                    }
+                  >
+                    <h3
+                      className={
+                        side === 'ally'
+                          ? 'font-display text-base tracking-[0.14em] uppercase text-nexus-lime/95 mb-3'
+                          : 'font-display text-base tracking-[0.14em] uppercase text-nexus-red/90 mb-3'
+                      }
+                    >
                       {side === 'ally' ? 'Allies' : 'Enemies'}
                     </h3>
                     <div className="space-y-2">
@@ -1074,11 +1087,25 @@ export function WebDraftApp() {
                         const matches = championMatches(championInputs[side][slotRole])
                         const isActive = activeChampionInput?.side === side && activeChampionInput.role === slotRole
                         const isFirstSlot = side === 'ally' && slotRole === 'top'
+                        const isMyRoleRow = slotRole === role && side === 'ally'
+                        const isLaneOppRow = slotRole === role && side === 'enemy'
+                        const roleClass =
+                          side === 'ally'
+                            ? isMyRoleRow
+                              ? 'font-mono text-xs font-semibold uppercase text-nexus-lime'
+                              : 'font-mono text-xs uppercase text-nexus-lime/75'
+                            : isLaneOppRow
+                              ? 'font-mono text-xs font-semibold uppercase text-nexus-red'
+                              : 'font-mono text-xs uppercase text-nexus-red/70'
                         return (
-                          <label key={`${side}-${slotRole}`} className="grid grid-cols-[4.5rem_2rem_minmax(0,1fr)] gap-2 items-center border-b border-white/[0.05] pb-2 last:border-0 last:pb-0">
-                            <span className={slotRole === role && side === 'ally' ? 'font-mono text-xs uppercase text-nexus-blue' : 'font-mono text-xs uppercase text-nexus-muted'}>
-                              {roleLabel(slotRole)}
-                            </span>
+                          <label
+                            key={`${side}-${slotRole}`}
+                            className={
+                              'grid grid-cols-[4.5rem_2rem_minmax(0,1fr)] gap-2 items-center border-b pb-2 last:border-0 last:pb-0 ' +
+                              (side === 'ally' ? 'border-nexus-lime/15' : 'border-nexus-red/15')
+                            }
+                          >
+                            <span className={roleClass}>{roleLabel(slotRole)}</span>
                             <ChampionIcon championId={board[side][slotRole]} champions={champions} ddragonVersion={ddragonVersion} />
                             <span className="relative min-w-0">
                               <input

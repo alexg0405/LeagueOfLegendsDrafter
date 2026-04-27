@@ -1,0 +1,14 @@
+node_modules
+out
+dist
+release
+etl-out
+training
+draft_v1/data/*.db
+*.log
+*.tsbuildinfo
+.git
+.github
+.cursor
+.vscode
+.idea

@@ -18,3 +18,5 @@ training/data/riot_matches.db
 .idea
 .vscode
 *.tsbuildinfo
+
+.vercel

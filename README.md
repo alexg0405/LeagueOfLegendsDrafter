@@ -66,6 +66,8 @@ The Windows build emits installer/portable `.exe` files into `release/`.
 | In-game overlay | Yes | No |
 | Vercel hosting | No | Yes |
 
+The web app includes a small public visitor counter powered by [Visitor Counter API](https://visitor.6developer.com/api-docs).
+
 ## Vercel Settings
 
 - Framework preset: Vite

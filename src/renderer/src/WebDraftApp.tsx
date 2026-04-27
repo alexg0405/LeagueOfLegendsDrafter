@@ -20,6 +20,7 @@ const VIRUSTOTAL_SCAN_URL =
   'https://www.virustotal.com/gui/file/29e021c773e315e67bfdcbcf753dff204227de7d7c4f257bfd4274686a976afa/detection'
 const GITHUB_PROFILE_URL = 'https://github.com/alexg0405'
 const LINKEDIN_PROFILE_URL = 'https://www.linkedin.com/in/alexanderguodev'
+const VISITOR_COUNTER_URL = 'https://visitor.6developer.com/visit'
 
 const inputClass =
   'nexus-focus w-full bg-nexus-bg border border-nexus-line text-nexus-text font-mono text-sm py-2 px-3 focus:border-nexus-lime/50 focus:outline-none disabled:opacity-45'
@@ -31,6 +32,11 @@ type ManualBoard = {
   enemy: Record<Exclude<DraftRole, 'unknown'>, number | null>
 }
 
+type ManualInputBoard = {
+  ally: Record<Exclude<DraftRole, 'unknown'>, string>
+  enemy: Record<Exclude<DraftRole, 'unknown'>, string>
+}
+
 function emptyBoard(): ManualBoard {
   const row = ROLES.reduce(
     (acc, role) => {
@@ -38,6 +44,17 @@ function emptyBoard(): ManualBoard {
       return acc
     },
     {} as Record<Exclude<DraftRole, 'unknown'>, number | null>
+  )
+  return { ally: { ...row }, enemy: { ...row } }
+}
+
+function emptyInputBoard(): ManualInputBoard {
+  const row = ROLES.reduce(
+    (acc, role) => {
+      acc[role] = ''
+      return acc
+    },
+    {} as Record<Exclude<DraftRole, 'unknown'>, string>
   )
   return { ally: { ...row }, enemy: { ...row } }
 }
@@ -52,6 +69,10 @@ function roleLabel(role: DraftRole): string {
     return 'adc'
   }
   return role
+}
+
+function normalizeChampionQuery(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
 function buildSnapshot(board: ManualBoard, role: Exclude<DraftRole, 'unknown'>, names: ReadonlyMap<number, string>): DraftSnapshot {
@@ -141,6 +162,50 @@ function SuggestionRow({
   )
 }
 
+function VisitorCounter() {
+  const [count, setCount] = useState<number | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    const domain = typeof window === 'undefined' ? 'nexus-draft' : window.location.hostname || 'nexus-draft'
+    const body = {
+      domain,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      page_path: typeof window === 'undefined' ? '/' : window.location.pathname,
+      page_title: typeof document === 'undefined' ? 'Nexus Draft' : document.title,
+      referrer: typeof document === 'undefined' ? '' : document.referrer
+    }
+    void fetch(VISITOR_COUNTER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`visitor counter ${res.status}`)
+        }
+        return res.json() as Promise<{ totalCount?: number; todayCount?: number }>
+      })
+      .then((data) => {
+        setCount(typeof data.totalCount === 'number' ? data.totalCount : null)
+      })
+      .catch(() => {
+        setFailed(true)
+      })
+  }, [])
+
+  return (
+    <div className="border-t border-nexus-line bg-nexus-surface-2/90 px-4 py-3 font-mono text-xs text-nexus-muted">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+        <span>Nexus Draft web</span>
+        <span className="text-nexus-lime/85">
+          Visitors: {count != null ? count.toLocaleString() : failed ? 'unavailable' : 'loading'}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export function WebDraftApp() {
   const [ddragonVersion, setDdragonVersion] = useState<string | null>(null)
   const [champions, setChampions] = useState<ChampionLite[]>([])
@@ -148,6 +213,7 @@ export function WebDraftApp() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [role, setRole] = useState<Exclude<DraftRole, 'unknown'>>('middle')
   const [board, setBoard] = useState<ManualBoard>(emptyBoard)
+  const [championInputs, setChampionInputs] = useState<ManualInputBoard>(emptyInputBoard)
   const [rollouts, setRollouts] = useState(DEFAULT_WEB_ROLLOUTS)
   const [deltaMode, setDeltaMode] = useState<DraftDeltaListMode>('best')
 
@@ -174,6 +240,9 @@ export function WebDraftApp() {
   }, [])
 
   const sortedChampions = useMemo(() => champions.slice().sort((a, b) => a.name.localeCompare(b.name)), [champions])
+  const championByNormalizedName = useMemo(() => {
+    return new Map(sortedChampions.map((champion) => [normalizeChampionQuery(champion.name), champion] as const))
+  }, [sortedChampions])
   const championMetaById = useMemo(() => {
     return new Map(champions.map((c) => [c.id, { tags: c.tags, partype: c.partype }]))
   }, [champions])
@@ -216,10 +285,59 @@ export function WebDraftApp() {
     }))
   }
 
+  const updateChampionInput = (side: 'ally' | 'enemy', slotRole: Exclude<DraftRole, 'unknown'>, value: string) => {
+    setChampionInputs((prev) => ({
+      ...prev,
+      [side]: {
+        ...prev[side],
+        [slotRole]: value
+      }
+    }))
+    const normalized = normalizeChampionQuery(value)
+    if (!normalized) {
+      updateBoard(side, slotRole, null)
+      return
+    }
+    const numericId = parseChampionId(value)
+    if (numericId != null && sortedChampions.some((champion) => champion.id === numericId)) {
+      updateBoard(side, slotRole, numericId)
+      return
+    }
+    const exact = championByNormalizedName.get(normalized)
+    updateBoard(side, slotRole, exact?.id ?? null)
+  }
+
+  const settleChampionInput = (side: 'ally' | 'enemy', slotRole: Exclude<DraftRole, 'unknown'>) => {
+    const value = championInputs[side][slotRole]
+    const normalized = normalizeChampionQuery(value)
+    if (!normalized) {
+      return
+    }
+    const exact = championByNormalizedName.get(normalized)
+    const candidates = sortedChampions.filter((champion) => normalizeChampionQuery(champion.name).startsWith(normalized))
+    const picked = exact ?? (candidates.length === 1 ? candidates[0] : null)
+    if (!picked) {
+      return
+    }
+    updateBoard(side, slotRole, picked.id)
+    setChampionInputs((prev) => ({
+      ...prev,
+      [side]: {
+        ...prev[side],
+        [slotRole]: picked.name
+      }
+    }))
+  }
+
+  const resetBoard = () => {
+    setBoard(emptyBoard())
+    setChampionInputs(emptyInputBoard())
+  }
+
   return (
-    <div className="min-h-screen bg-nexus-bg text-nexus-text font-body antialiased">
+    <div className="min-h-screen bg-nexus-bg text-nexus-text font-body antialiased flex flex-col">
       <div className="nexus-noise fixed inset-0 pointer-events-none" aria-hidden />
-      <main className="relative mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
+      <main className="relative mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:px-6 lg:px-8">
         <section className="mb-4 border border-nexus-line bg-nexus-surface-2/90 p-5">
           <MicroLabel className="text-nexus-lime/80">web app</MicroLabel>
           <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -243,7 +361,7 @@ export function WebDraftApp() {
               >
                 VirusTotal Scan
               </a>
-              <button type="button" className={buttonClass} onClick={() => setBoard(emptyBoard())}>
+              <button type="button" className={buttonClass} onClick={resetBoard}>
                 Reset Board
               </button>
             </div>
@@ -262,6 +380,11 @@ export function WebDraftApp() {
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="min-w-0">
             <NexusPanel kicker="manual" title="Draft board" accent>
+              <datalist id="web-champion-options">
+                {sortedChampions.map((champion) => (
+                  <option key={champion.id} value={champion.name} />
+                ))}
+              </datalist>
               <div className="grid gap-4 md:grid-cols-3">
                 <label className="flex flex-col gap-1.5">
                   <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Your role</span>
@@ -312,19 +435,15 @@ export function WebDraftApp() {
                             {roleLabel(slotRole)}
                           </span>
                           <ChampionIcon championId={board[side][slotRole]} champions={champions} ddragonVersion={ddragonVersion} />
-                          <select
+                          <input
                             className={inputClass + ' text-xs'}
-                            value={board[side][slotRole] ?? ''}
-                            onChange={(e) => updateBoard(side, slotRole, parseChampionId(e.target.value))}
+                            list="web-champion-options"
+                            value={championInputs[side][slotRole]}
+                            placeholder="Type champion..."
+                            onChange={(e) => updateChampionInput(side, slotRole, e.target.value)}
+                            onBlur={() => settleChampionInput(side, slotRole)}
                             disabled={champions.length === 0}
-                          >
-                            <option value="">-- empty --</option>
-                            {sortedChampions.map((champion) => (
-                              <option key={champion.id} value={champion.id}>
-                                {champion.name}
-                              </option>
-                            ))}
-                          </select>
+                          />
                         </label>
                       ))}
                     </div>
@@ -395,6 +514,7 @@ export function WebDraftApp() {
           </aside>
         </div>
       </main>
+      <VisitorCounter />
     </div>
   )
 }

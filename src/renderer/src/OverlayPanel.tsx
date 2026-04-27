@@ -254,9 +254,10 @@ function bestAllySlotsForCandidate(
       const trainedDelta =
         role && slot.role !== 'unknown' ? trainedSynergyDelta(trained, role, slot.role, candidateId, allyId) : null
       const score = trainedDelta ?? heuristicBonus * 0.04
-      return { slot, score }
+      const tie = (candidateId * 0x1f8d2f49 + allyId) >>> 0
+      return { slot, score, tie }
     })
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => b.score - a.score || a.tie - b.tie)
     .slice(0, limit)
     .map((x) => x.slot)
 }
@@ -978,7 +979,7 @@ export function OverlayPanel() {
 
                   <div className="mt-2 grid grid-cols-2 gap-1.5 font-mono text-[10px] leading-snug">
                     <div className="border-l-2 border-[#23d5b0] bg-nexus-bg/20 pl-1.5 pr-1 py-0.5 min-w-0">
-                      <span className="uppercase tracking-[0.12em] text-nexus-lime/80">Synergy</span>
+                      <span className="uppercase tracking-[0.12em] text-nexus-lime/80">Team synergy</span>
                       <span className="text-nexus-line"> · </span>
                       <span className="inline-flex max-w-[75%] align-middle items-center gap-1">
                         {synergySlots.length

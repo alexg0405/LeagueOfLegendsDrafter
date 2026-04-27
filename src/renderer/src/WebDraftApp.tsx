@@ -346,11 +346,11 @@ function SuggestionRow({
         <div
           className="py-2.5"
           role="group"
-          aria-label="Synergy and good-versus lobby context for this pick"
+          aria-label="Team synergy and good-versus lobby context for this pick"
         >
           <p className="m-0 mb-2 flex items-baseline justify-between gap-2 font-mono text-[0.7rem] uppercase tracking-[0.1em] text-nexus-text/80">
             <span>
-              <span className="text-nexus-lime/90">Synergy</span>
+              <span className="text-nexus-lime/90">Team synergy</span>
               <span className="text-nexus-line"> / </span>
               <span className="text-nexus-red/85">Good vs</span>
             </span>
@@ -359,8 +359,8 @@ function SuggestionRow({
             className="grid grid-cols-2 gap-2 rounded-md border border-white/[0.12] bg-nexus-bg/40 p-2 sm:gap-1.5"
             aria-label="Champion faces for best ally synergy and good-versus enemies"
           >
-            <div className="min-w-0 border-l-2 border-nexus-lime/55 bg-nexus-surface-2/40 pl-1.5 pr-1 py-1">
-              <div className="text-[0.65rem] uppercase tracking-[0.1em] text-nexus-lime/90">Synergy</div>
+            <div className="min-w-0 border-l-4 border-nexus-lime bg-nexus-surface-2/40 py-1 pl-2 pr-1">
+              <div className="text-[0.65rem] uppercase tracking-[0.1em] text-nexus-lime/90">Team synergy</div>
               <div className="mt-1 inline-flex min-h-7 max-w-full flex-wrap items-center gap-1 text-nexus-text/90">
                 {synergySlots.length
                   ? synergySlots.map((slot) => (
@@ -376,7 +376,7 @@ function SuggestionRow({
                   : 'pending'}
               </div>
             </div>
-            <div className="min-w-0 border-l-2 border-nexus-red/55 bg-nexus-surface-2/40 pl-1.5 pr-1 py-1">
+            <div className="min-w-0 border-l-4 border-nexus-red bg-nexus-surface-2/40 py-1 pl-2 pr-1">
               <div className="text-[0.65rem] uppercase tracking-[0.1em] text-nexus-red/85">Good vs</div>
               <div className="mt-1 inline-flex min-h-7 max-w-full flex-wrap items-center gap-1 text-nexus-text/90">
                 {goodVsSlots.length

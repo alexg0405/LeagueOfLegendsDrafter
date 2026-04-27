@@ -104,9 +104,11 @@ export function bestAllySlotsForSuggestion(
       const heuristicBonus = ALLY_SYNERGY_BONUS[String(candidateId)]?.[String(allyId)] ?? ALLY_SYNERGY_BONUS[String(allyId)]?.[String(candidateId)] ?? 0
       const trainedDelta = role && slot.role !== 'unknown' ? trainedSynergyDelta(trained, role, slot.role, candidateId, allyId) : null
       const score = trainedDelta ?? heuristicBonus * 0.04
-      return { slot, score }
+      /** If every pair ties at 0, order still depends on the suggested pick so the UI can vary per card (web has no trained effects). */
+      const tie = (candidateId * 0x1f_8d_2f_49 + allyId) >>> 0
+      return { slot, score, tie }
     })
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => b.score - a.score || a.tie - b.tie)
     .slice(0, limit)
     .map((x) => x.slot)
 }

@@ -23,9 +23,9 @@ const LINKEDIN_PROFILE_URL = 'https://www.linkedin.com/in/alexanderguodev'
 const VISITOR_COUNTER_URL = '/api/visit'
 
 const inputClass =
-  'nexus-focus w-full bg-nexus-bg border border-nexus-line text-nexus-text font-mono text-sm py-2 px-3 focus:border-nexus-lime/50 focus:outline-none disabled:opacity-45'
+  'nexus-focus w-full bg-nexus-bg/85 border border-nexus-line text-nexus-text font-mono text-sm py-2 px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] focus:border-nexus-lime/60 focus:bg-nexus-surface-2/90 focus:outline-none disabled:opacity-45'
 const buttonClass =
-  'nexus-focus inline-flex items-center justify-center font-display text-xs sm:text-sm tracking-[0.16em] uppercase px-5 py-2.5 border border-nexus-lime bg-nexus-lime text-nexus-bg border-nexus-lime/90 hover:brightness-110 active:brightness-95 disabled:opacity-40'
+  'nexus-focus inline-flex items-center justify-center font-display text-xs sm:text-sm tracking-[0.16em] uppercase px-5 py-2.5 border border-nexus-lime bg-nexus-lime text-nexus-bg border-nexus-lime/90 shadow-[0_0_24px_rgba(35,213,176,0.18)] hover:brightness-110 active:brightness-95 disabled:opacity-40'
 
 type ManualBoard = {
   ally: Record<Exclude<DraftRole, 'unknown'>, number | null>
@@ -219,7 +219,7 @@ function SuggestionRow({
     suggestion.buildProfile?.buildHint ?? 'Use this pick when it fits your lane matchup and team damage profile.'
   )
   return (
-    <li className="border border-nexus-line/80 bg-nexus-surface-2/80 px-3 py-2">
+    <li className="border border-nexus-line/80 bg-gradient-to-br from-nexus-surface-2/95 to-nexus-bg/80 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_10px_28px_rgba(0,0,0,0.22)] transition-colors hover:border-nexus-lime/45">
       <div className="flex gap-2">
         <ChampionIcon championId={suggestion.championId} champions={champions} ddragonVersion={ddragonVersion} />
         <div className="min-w-0 flex-1">
@@ -239,7 +239,7 @@ function SuggestionRow({
             </div>
           )}
           {suggestion.buildProfile && (
-            <div className="mt-1 font-mono text-[11px] leading-snug text-nexus-muted">
+            <div className="mt-1 inline-flex border border-nexus-line/55 bg-nexus-bg/30 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] leading-snug text-nexus-muted">
               {suggestion.buildProfile.archetype}
             </div>
           )}
@@ -574,14 +574,17 @@ export function WebDraftApp() {
   }
 
   return (
-    <div className="min-h-screen bg-nexus-bg text-nexus-text font-body antialiased flex flex-col">
-      <div className="nexus-noise fixed inset-0 pointer-events-none" aria-hidden />
+    <div className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_20%_0%,rgba(35,213,176,0.16),transparent_32%),radial-gradient(circle_at_80%_10%,rgba(83,166,255,0.12),transparent_28%),linear-gradient(180deg,var(--nexus-bg),#03100c)] text-nexus-text font-body antialiased flex flex-col">
+      <div className="nexus-noise fixed inset-0 pointer-events-none opacity-60" aria-hidden />
+      <div className="pointer-events-none fixed inset-x-0 top-0 h-px bg-nexus-lime/70 shadow-[0_0_24px_rgba(35,213,176,0.7)]" aria-hidden />
       <main className="relative mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:px-6 lg:px-8">
-        <section className="mb-4 border border-nexus-line bg-nexus-surface-2/90 p-5">
-          <MicroLabel className="text-nexus-lime/80">web app</MicroLabel>
+        <section className="relative mb-5 overflow-hidden border border-nexus-line bg-nexus-surface-2/90 p-5 shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
+          <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(35,213,176,0.12),transparent_35%,rgba(83,166,255,0.08))]" aria-hidden />
+          <div className="relative">
+          <MicroLabel className="text-nexus-lime/80">web app // manual draft lab</MicroLabel>
           <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h1 className="font-display text-5xl sm:text-7xl leading-none tracking-[0.06em] text-nexus-text">
+              <h1 className="font-display text-6xl sm:text-8xl leading-none tracking-[0.06em] text-nexus-text drop-shadow-[0_0_18px_rgba(231,255,245,0.10)]">
                 NEXUS <span className="text-nexus-lime">DRAFT</span>
               </h1>
               <p className="mt-3 max-w-2xl font-mono text-sm text-nexus-muted leading-relaxed">
@@ -614,12 +617,13 @@ export function WebDraftApp() {
               LinkedIn @ alexanderguodev
             </a>
           </div>
+          </div>
         </section>
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_390px]">
           <div className="min-w-0">
             <NexusPanel kicker="manual" title="Draft board" accent>
-              <div className="mb-5 border border-nexus-line/80 bg-nexus-bg/25 p-3">
+              <div className="mb-5 border border-nexus-lime/25 bg-gradient-to-br from-nexus-bg/55 to-nexus-surface-2/60 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="m-0 font-display text-base tracking-[0.14em] uppercase text-nexus-lime/90">
@@ -654,7 +658,7 @@ export function WebDraftApp() {
                   </div>
                 </div>
                 <div
-                  className="mt-3 border border-dashed border-nexus-line/80 bg-nexus-bg/20 px-3 py-2 font-mono text-xs text-nexus-muted"
+                  className="mt-3 border border-dashed border-nexus-lime/40 bg-nexus-bg/30 px-3 py-2 font-mono text-xs text-nexus-muted transition-colors hover:border-nexus-lime/70 hover:text-nexus-text"
                   tabIndex={0}
                   role="button"
                   onPaste={handleScreenshotPaste}
@@ -705,7 +709,7 @@ export function WebDraftApp() {
 
               <div className="mt-5 grid gap-5 xl:grid-cols-2">
                 {(['ally', 'enemy'] as const).map((side) => (
-                  <section key={side} className="border border-nexus-line/80 bg-nexus-bg/25 p-3">
+                  <section key={side} className="border border-nexus-line/80 bg-nexus-bg/35 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
                     <h3 className="font-display text-base tracking-[0.14em] uppercase text-nexus-lime/90 mb-3">
                       {side === 'ally' ? 'Allies' : 'Enemies'}
                     </h3>
@@ -714,7 +718,7 @@ export function WebDraftApp() {
                         const matches = championMatches(championInputs[side][slotRole])
                         const isActive = activeChampionInput?.side === side && activeChampionInput.role === slotRole
                         return (
-                          <label key={`${side}-${slotRole}`} className="grid grid-cols-[4.5rem_2rem_minmax(0,1fr)] gap-2 items-center">
+                          <label key={`${side}-${slotRole}`} className="grid grid-cols-[4.5rem_2rem_minmax(0,1fr)] gap-2 items-center border-b border-nexus-line/25 pb-2 last:border-0 last:pb-0">
                             <span className={slotRole === role && side === 'ally' ? 'font-mono text-xs uppercase text-nexus-blue' : 'font-mono text-xs uppercase text-nexus-muted'}>
                               {roleLabel(slotRole)}
                             </span>
@@ -741,7 +745,7 @@ export function WebDraftApp() {
                                 disabled={champions.length === 0}
                               />
                               {isActive && matches.length > 0 && (
-                                <span className="absolute left-0 right-0 top-[calc(100%+2px)] z-30 max-h-44 overflow-y-auto border border-nexus-line bg-nexus-surface-2 shadow-[0_12px_30px_rgba(0,0,0,0.35)]">
+                                <span className="absolute left-0 right-0 top-[calc(100%+2px)] z-30 max-h-44 overflow-y-auto border border-nexus-lime/45 bg-nexus-surface-2 shadow-[0_12px_30px_rgba(0,0,0,0.45),0_0_20px_rgba(35,213,176,0.12)]">
                                   {matches.map((champion) => (
                                     <button
                                       key={champion.id}
@@ -771,7 +775,7 @@ export function WebDraftApp() {
 
           <aside className="min-w-0">
             <NexusPanel kicker="recommendations" title={`Picks for ${roleLabel(role)}`} accent>
-              <div className="mb-3 space-y-1 border-b border-nexus-line/60 pb-3 font-mono text-xs text-nexus-muted">
+              <div className="mb-3 space-y-1 border-b border-nexus-line/60 bg-nexus-bg/25 px-2 py-2 font-mono text-xs text-nexus-muted">
                 <p className="m-0">
                   Data Dragon: <span className="text-nexus-text/90">{ddragonVersion ?? (loadError ? 'unavailable' : 'loading')}</span>
                 </p>
@@ -799,7 +803,7 @@ export function WebDraftApp() {
               )}
             </NexusPanel>
 
-            <NexusPanel kicker="desktop" title="Need live champ select?">
+            <NexusPanel kicker="desktop" title="Need live champ select?" className="bg-gradient-to-br from-nexus-surface-2/95 to-nexus-bg/75">
               <p className="font-mono text-sm text-nexus-muted leading-relaxed">
                 Use the Windows desktop app for League Client API detection, automatic role parsing, and the always-on-top overlay.
               </p>
@@ -814,7 +818,7 @@ export function WebDraftApp() {
               >
                 View Safety Scan
               </a>
-              <div className="mt-4 flex items-center gap-2 text-nexus-muted">
+              <div className="mt-4 flex items-center gap-2 border-t border-nexus-line/50 pt-3 text-nexus-muted">
                 <NexusPlus className="text-[10px]" />
                 <span className="font-mono text-xs">Web build v0.4.0</span>
               </div>

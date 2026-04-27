@@ -627,7 +627,7 @@ export function OverlayPanel() {
               </button>
             </header>
             <div className="h-[calc(100%_-_4.8rem)] overflow-auto nexus-overlay-no-scrollbar">
-              <table className="w-full min-w-[58rem] border-collapse font-mono text-xs sm:text-sm">
+              <table className="w-full min-w-[68rem] border-collapse font-mono text-xs sm:text-sm">
                 <thead className="sticky top-0 z-10 bg-nexus-surface-2 text-nexus-lime/85">
                   <tr className="text-left uppercase tracking-[0.14em]">
                     <th className="px-3 py-2.5 border-b border-nexus-line/80">#</th>
@@ -637,6 +637,7 @@ export function OverlayPanel() {
                     <th className="px-3 py-2.5 border-b border-nexus-line/80">Lobby</th>
                     <th className="px-3 py-2.5 border-b border-nexus-line/80">Delta</th>
                     <th className="px-3 py-2.5 border-b border-nexus-line/80">Runes</th>
+                    <th className="px-3 py-2.5 border-b border-nexus-line/80 max-w-[12rem]">Tip</th>
                     <th className="px-3 py-2.5 border-b border-nexus-line/80">Build</th>
                     <th className="px-3 py-2.5 border-b border-nexus-line/80">Tags</th>
                   </tr>
@@ -644,7 +645,7 @@ export function OverlayPanel() {
                 <tbody>
                   {d.suggestions.length === 0 && (
                     <tr>
-                      <td className="px-3 py-5 text-nexus-muted" colSpan={9}>
+                      <td className="px-3 py-5 text-nexus-muted" colSpan={10}>
                         No picks available.
                       </td>
                     </tr>
@@ -695,6 +696,17 @@ export function OverlayPanel() {
                         ) : (
                           '--'
                         )}
+                      </td>
+                      <td
+                        className="px-3 py-2.5 border-b border-nexus-line/45 text-nexus-muted/90 align-top max-w-[14rem] line-clamp-4"
+                        title={formatRuneTipNote(p.runes?.note, p.buildProfile?.buildHint ?? '')}
+                      >
+                        {p.runes
+                          ? formatRuneTipNote(
+                              p.runes.note,
+                              p.buildProfile?.buildHint ?? '—'
+                            )
+                          : '—'}
                       </td>
                       <td className="px-3 py-2.5 border-b border-nexus-line/45 text-nexus-muted">
                         {p.buildProfile && (

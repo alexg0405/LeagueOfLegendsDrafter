@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useState, type ReactNode } from 'react'
 import { ddragonChampionImageUrl, type ChampionLite } from '@shared/dataDragon'
-import type { DraftDeltaListMode, DraftRole, DraftSource, PickSuggestion } from '@shared/draft'
+import { formatRuneTipNote, type DraftDeltaListMode, type DraftRole, type DraftSource, type PickSuggestion } from '@shared/draft'
 import { copyDraftSource } from './nexusCopy'
 import { MicroLabel } from './NexusTick'
 import { EASING, useNexusMotion } from './nexusMotion'
@@ -324,7 +324,7 @@ export function NexusOperationsView({
               {s.runes && (
                 <div className="text-nexus-muted text-xs mt-1.5">
                   {s.runes.primaryTree} · {s.runes.keystone} · {s.runes.secondary}
-                  {s.runes.note && <span> — {s.runes.note}</span>}
+                  {s.runes.note && <span> — {formatRuneTipNote(s.runes.note, '')}</span>}
                 </div>
               )}
               {s.buildProfile && (

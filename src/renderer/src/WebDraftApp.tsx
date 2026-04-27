@@ -348,13 +348,6 @@ function SuggestionRow({
           role="group"
           aria-label="Team synergy and good-versus lobby context for this pick"
         >
-          <p className="m-0 mb-2 flex items-baseline justify-between gap-2 font-mono text-[0.7rem] uppercase tracking-[0.1em] text-nexus-text/80">
-            <span>
-              <span className="text-nexus-lime/90">Team synergy</span>
-              <span className="text-nexus-line"> / </span>
-              <span className="text-nexus-red/85">Good vs</span>
-            </span>
-          </p>
           <div
             className="grid grid-cols-2 gap-2 rounded-md border border-white/[0.12] bg-nexus-bg/40 p-2 sm:gap-1.5"
             aria-label="Champion faces for best ally synergy and good-versus enemies"

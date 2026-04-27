@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ClipboardEvent as ReactClipboardEvent } from 'react'
 import { ddragonChampionImageUrl, getLatestDDragonVersion, loadChampionMaps, type ChampionLite } from '@shared/dataDragon'
 import {
   ENGINE_V1_LABEL,
@@ -332,6 +332,18 @@ export function WebDraftApp() {
   const [visionBusy, setVisionBusy] = useState(false)
   const [activeChampionInput, setActiveChampionInput] = useState<ActiveChampionInput>(null)
 
+  const handleScreenshotPaste = (event: ClipboardEvent | ReactClipboardEvent<HTMLElement>) => {
+    const items = Array.from(event.clipboardData?.items ?? [])
+    const imageItem = items.find((item) => item.type.startsWith('image/'))
+    const file = imageItem?.getAsFile() ?? null
+    if (!file) {
+      setVisionStatus('Clipboard did not contain an image. Copy a screenshot, then paste here.')
+      return
+    }
+    event.preventDefault()
+    void parseDraftScreenshot(file)
+  }
+
   useEffect(() => {
     let cancelled = false
     void getLatestDDragonVersion()
@@ -353,6 +365,17 @@ export function WebDraftApp() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      if (visionBusy) {
+        return
+      }
+      handleScreenshotPaste(event)
+    }
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+  }, [visionBusy])
 
   const sortedChampions = useMemo(() => champions.slice().sort((a, b) => a.name.localeCompare(b.name)), [champions])
   const championByNormalizedName = useMemo(() => {
@@ -588,23 +611,41 @@ export function WebDraftApp() {
                       Screenshot autofill
                     </p>
                     <p className="m-0 mt-1 font-mono text-xs leading-relaxed text-nexus-muted">
-                      Upload a League champion select screenshot. Vision reads visible ally/enemy champions and fills the board.
+                      Upload or paste a League champion select screenshot. Vision reads visible ally/enemy champions and fills the board.
                     </p>
                   </div>
-                  <label className="nexus-focus inline-flex cursor-pointer items-center justify-center border border-nexus-line px-4 py-2 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10">
-                    {visionBusy ? 'Reading...' : 'Upload Screenshot'}
-                    <input
-                      className="sr-only"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      disabled={visionBusy}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0] ?? null
-                        void parseDraftScreenshot(file)
-                        event.currentTarget.value = ''
-                      }}
-                    />
-                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <label className="nexus-focus inline-flex cursor-pointer items-center justify-center border border-nexus-line px-4 py-2 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10">
+                      {visionBusy ? 'Reading...' : 'Upload Screenshot'}
+                      <input
+                        className="sr-only"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        disabled={visionBusy}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] ?? null
+                          void parseDraftScreenshot(file)
+                          event.currentTarget.value = ''
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="nexus-focus inline-flex items-center justify-center border border-nexus-line px-4 py-2 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10"
+                      onClick={() => setVisionStatus('Copy a screenshot, then press Ctrl+V anywhere on this page.')}
+                    >
+                      Paste Screenshot
+                    </button>
+                  </div>
+                </div>
+                <div
+                  className="mt-3 border border-dashed border-nexus-line/80 bg-nexus-bg/20 px-3 py-2 font-mono text-xs text-nexus-muted"
+                  tabIndex={0}
+                  role="button"
+                  onPaste={handleScreenshotPaste}
+                  onClick={() => setVisionStatus('Copy a screenshot, then press Ctrl+V anywhere on this page.')}
+                >
+                  Paste target: click here, then press Ctrl+V with a copied screenshot.
                 </div>
                 <p className={visionStatus.toLowerCase().includes('failed') || visionStatus.toLowerCase().includes('key') ? 'm-0 mt-2 font-mono text-xs text-nexus-red/80' : 'm-0 mt-2 font-mono text-xs text-nexus-muted'}>
                   {visionStatus}

@@ -1,5 +1,8 @@
 import { getChampionThreatOverride, type ClassLabel, type ThreatLabel } from './championThreatOverrides'
 import { resolveChampionName } from './championNameFallback'
+import { MATCHUP_BONUS } from './matchupData'
+import { publicMetaLaneRate } from './metaStats'
+import { shrunkLaneRate } from './statsModel'
 import type { DraftRole, DraftSnapshot, RuneLoadoutHint, SlotPick } from './types'
 
 type RoleKey = Exclude<DraftRole, 'unknown'>
@@ -674,13 +677,6 @@ function enemyDescriptors(championId: number, role: DraftRole, ctx: RuneMatchupC
     )
 }
 
-function namesFor(enemies: ChampionDescriptor[], count = 2): string {
-  return enemies
-    .slice(0, count)
-    .map((enemy) => enemy.name)
-    .join(' + ')
-}
-
 function archetypeDefault(champion: ChampionDescriptor, role: DraftRole): RuneLoadoutHint {
   const classes = champion.classes
   if (role === 'unknown') {
@@ -812,6 +808,81 @@ function wantsMovementKeystone(champion: ChampionDescriptor, role: DraftRole): b
   )
 }
 
+/**
+ * Ranks who you care about most in rune tips: curated matchup bonus, then public lane rate distance from 0.5, then model lane rate.
+ * Different suggested picks can surface different "primary" enemies for the same board.
+ */
+function relevanceForPickVsEnemy(
+  candidateId: number,
+  myRole: DraftRole,
+  enemy: ChampionDescriptor
+): number {
+  const eid = String(enemy.championId)
+  const bid = String(candidateId)
+  const bonus = MATCHUP_BONUS[bid]?.[eid] ?? MATCHUP_BONUS[eid]?.[bid]
+  if (bonus != null && Number.isFinite(bonus)) {
+    return 1000 + Math.abs(bonus)
+  }
+  if (myRole && myRole !== 'unknown' && enemy.role !== 'unknown') {
+    const lane = publicMetaLaneRate(myRole, candidateId, enemy.championId)
+    if (lane != null) {
+      return 100 + Math.abs(lane - 0.5) * 20
+    }
+  }
+  const sr = shrunkLaneRate(candidateId, enemy.championId)
+  if (sr != null) {
+    return 10 + Math.abs(sr - 0.5) * 20
+  }
+  return 0
+}
+
+function orderEnemiesByRelevanceForPick(
+  candidateId: number,
+  myRole: DraftRole,
+  enemies: ChampionDescriptor[]
+): ChampionDescriptor[] {
+  if (enemies.length === 0) {
+    return []
+  }
+  return [...enemies].sort(
+    (a, b) =>
+      relevanceForPickVsEnemy(candidateId, myRole, b) - relevanceForPickVsEnemy(candidateId, myRole, a)
+  )
+}
+
+/**
+ * One lane sentence naming only the most relevant enemy so tips do not all repeat the same names for every team comp.
+ */
+function laneOpponentRuneLine(
+  my: ChampionDescriptor,
+  role: DraftRole,
+  primary: ChampionDescriptor
+): string {
+  const c = compactName(primary.name)
+  const hasArt = ARTILLERY_OR_SNIPER.has(c)
+  const hasPoke = REPEATED_POKE.has(c)
+  const isBurst = BURST_DIVERS.has(c) || primary.classes.has('assassin')
+  const isAllIn = ALL_IN_TRADERS.has(c) || primary.classes.has('fighter')
+  const isHardCc = HARD_CC.has(c) || (primary.classes.has('tank') && primary.role !== 'top')
+
+  if (hasArt && wantsMovementKeystone(my, role)) {
+    return `Vs ${primary.name} (artillery and angles): value movement (Phase/Fleet) and Celerity for skillshots.`
+  }
+  if (isBurst || isAllIn) {
+    return `Vs ${primary.name} (burst/engage): Bone Plating and Resolve second help short trades.`
+  }
+  if (hasPoke) {
+    return `Vs ${primary.name} (sustained poke): Second Wind, Fleet, or similar sustain is preferred.`
+  }
+  if (isHardCc) {
+    return `Vs ${primary.name} (lockdown): Unflinching, boots, and Cleanse are real options.`
+  }
+  if (primary.classes.has('tank')) {
+    return `Vs ${primary.name} (tankier frontline): %HP and Cut Down can matter in long scrappy fights.`
+  }
+  return `Into ${primary.name}, line up your page to trade on your strengths and respect their best windows.`
+}
+
 function adjustForMatchup(
   base: RuneLoadoutHint,
   champion: ChampionDescriptor,
@@ -847,18 +918,12 @@ function adjustForMatchup(
       hint.keystone = `Phase Rush or ${hint.keystone}`
     }
     preferSecondary(hint, 'Sorcery (Nimbus Cloak + Celerity)')
-    addNote(hint, `Artillery/skillshot pressure from ${namesFor(artillery)}: value movement speed for dodging and spacing.`)
   }
 
   if (burst.length > 0 || allIn.length > 0) {
-    const pressure = burst.length > 0 ? burst : allIn
     preferSecondary(hint, 'Resolve (Bone Plating + Overgrowth)')
-    addNote(hint, `All-in/burst threat from ${namesFor(pressure)}: Bone Plating beats greedy scaling pages.`)
   } else if (poke.length > 0 && artillery.length === 0) {
     preferSecondary(hint, 'Resolve (Second Wind + Overgrowth) or Inspiration (Biscuit Delivery)')
-    addNote(hint, `Repeated poke from ${namesFor(poke)}: Second Wind/Fleet-style sustain is preferred.`)
-  } else if (poke.length > 0) {
-    addNote(hint, `Repeated poke from ${namesFor(poke)}: consider sustain shards or early defensive setup if lane gets oppressive.`)
   }
 
   if (hardCc.length >= 2 || (role === 'bottom' && hardCc.length >= 1)) {
@@ -866,17 +931,34 @@ function adjustForMatchup(
       ? 'Resolve (Bone Plating + Unflinching)'
       : 'Resolve (Unflinching + Conditioning)'
     preferSecondary(hint, ccSecondary)
-    addNote(hint, `Heavy CC from ${namesFor(hardCc)}: prioritize Unflinching, defensive boots, or Cleanse where appropriate.`)
+  }
+
+  const ordered = orderEnemiesByRelevanceForPick(champion.championId, role, enemies)
+  const primary = ordered[0] ?? enemies[0]
+  if (primary) {
+    addNote(hint, laneOpponentRuneLine(champion, role, primary))
+  }
+
+  if (hardCc.length >= 2 || (role === 'bottom' && hardCc.length >= 1)) {
+    if (!hint.note || !/Vs .*\(lockdown\)/.test(hint.note)) {
+      addNote(
+        hint,
+        'Heavy CC in this draft: prioritize Unflinching, defensive boots, and Cleanse where the draft allows.'
+      )
+    }
   }
 
   if (tanks.length >= 2 && (champion.classes.has('marksman') || champion.classes.has('fighter'))) {
-    addNote(hint, `Multiple tanks (${namesFor(tanks)}): keep sustained-damage runes such as Conqueror, Lethal Tempo, or Cut Down in mind.`)
+    addNote(
+      hint,
+      'Multiple tanky enemies: Conqueror, Lethal Tempo, and Cut Down stay high value for sustained damage.'
+    )
   }
 
   if (apThreats.length >= Math.max(2, adThreats.length + 1)) {
-    addNote(hint, `Enemy damage leans AP (${namesFor(apThreats)}): consider MR shard/defensive boots.`)
+    addNote(hint, 'Enemy comp leans AP: MR shard and defensive boots are in play early.')
   } else if (adThreats.length >= Math.max(2, apThreats.length + 1)) {
-    addNote(hint, `Enemy damage leans AD (${namesFor(adThreats)}): consider armor shard/defensive boots.`)
+    addNote(hint, 'Enemy comp leans AD: armor shard and Plated/tabis timing matter.')
   }
 
   return hint
@@ -909,5 +991,11 @@ export function runeLoadoutForChampion(
   const championName = resolveChampionName(championId, ctx.idToName ?? null)
   const champion = descriptorForChampion(championId, role, championName, ctx.championMetaById)
   const base = BY_CHAMPION_ID[championId] ? cloneHint(BY_CHAMPION_ID[championId]) : archetypeDefault(champion, role)
-  return adjustForMatchup(base, champion, role, enemyDescriptors(championId, role, ctx))
+  const hint = adjustForMatchup(base, champion, role, enemyDescriptors(championId, role, ctx))
+  if (championName && hint.note) {
+    if (!hint.note.toLowerCase().includes(championName.toLowerCase())) {
+      hint.note = `${championName} — ${hint.note}`
+    }
+  }
+  return hint
 }

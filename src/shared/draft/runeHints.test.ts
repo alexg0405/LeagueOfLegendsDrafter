@@ -45,7 +45,8 @@ describe('runeLoadoutForChampion', () => {
     expect(runes.keystone).toContain('Fleet Footwork')
     expect(runes.secondary).toContain('Nimbus Cloak')
     expect(runes.secondary).toContain('Celerity')
-    expect(runes.note).toContain('Artillery/skillshot pressure')
+    expect(runes.note).toMatch(/Jinx|Caitlyn/i)
+    expect(runes.note).toMatch(/artillery|angles|skillshot/i)
   })
 
   it('adds Bone Plating guidance into assassin all-in lanes', () => {
@@ -59,7 +60,7 @@ describe('runeLoadoutForChampion', () => {
     )
 
     expect(runes.secondary).toContain('Bone Plating')
-    expect(runes.note).toContain('All-in/burst threat')
+    expect(runes.note).toMatch(/Zed|burst|engage/i)
   })
 
   it('adds Unflinching guidance when jungle is drafting into multiple CC threats', () => {
@@ -76,6 +77,6 @@ describe('runeLoadoutForChampion', () => {
     )
 
     expect(runes.secondary).toContain('Unflinching')
-    expect(runes.note).toContain('Heavy CC')
+    expect(runes.note).toMatch(/Unflinching|Heavy CC|lockdown/i)
   })
 })

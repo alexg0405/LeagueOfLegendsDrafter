@@ -36,6 +36,43 @@ describe('suggestPicks', () => {
     expect(suggestions[0]!.runes?.keystone).toBeDefined()
   })
 
+  it('orders best-first vs worst-first differently for blinds (no board context)', () => {
+    const open = (role: 'top' | 'jungle' | 'middle' | 'bottom' | 'support') => ({
+      role,
+      championId: null as number | null,
+      championName: null as string | null,
+      cellId: null as number | null
+    })
+    const emptyBoard: DraftSnapshot = {
+      ally: [open('top'), open('jungle'), open('middle'), open('bottom'), open('support')],
+      enemy: [open('top'), open('jungle'), open('middle'), open('bottom'), open('support')],
+      myTeam: null,
+      myRole: 'middle',
+      localPlayerCellId: 2,
+      bans: null,
+      myPickOrder: null
+    }
+    const best = suggestPicks({
+      myRole: 'middle',
+      snapshot: emptyBoard,
+      idToName,
+      sortBy: 'delta',
+      deltaListMode: 'best',
+      monteCarloSamples: 0
+    })
+    const worst = suggestPicks({
+      myRole: 'middle',
+      snapshot: emptyBoard,
+      idToName,
+      sortBy: 'delta',
+      deltaListMode: 'worst',
+      monteCarloSamples: 0
+    })
+    expect(best.suggestions.length).toBeGreaterThan(2)
+    expect(worst.suggestions.length).toBeGreaterThan(2)
+    expect(best.suggestions[0]!.championId).not.toBe(worst.suggestions[0]!.championId)
+  })
+
   it('orders winrate delta best-first vs worst-first differently when context exists', () => {
     const snapshot: DraftSnapshot = {
       ally: [],

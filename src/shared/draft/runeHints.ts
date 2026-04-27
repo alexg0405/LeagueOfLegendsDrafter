@@ -882,6 +882,25 @@ function adjustForMatchup(
   return hint
 }
 
+const RUNE_TIP_NOTE_MAX = 400
+
+/**
+ * Rune "Tips" in the UI: keep the full engine note (matchup add-ons are appended to the first sentence
+ * in {@link addNote}) instead of only the first sentence, with a hard cap for layout.
+ */
+export function formatRuneTipNote(note: string | null | undefined, fallback: string): string {
+  if (note == null || !String(note).trim()) {
+    return fallback
+  }
+  const collapsed = String(note)
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (collapsed.length <= RUNE_TIP_NOTE_MAX) {
+    return collapsed
+  }
+  return `${collapsed.slice(0, RUNE_TIP_NOTE_MAX - 1).trimEnd()}…`
+}
+
 export function runeLoadoutForChampion(
   championId: number,
   role: DraftRole,

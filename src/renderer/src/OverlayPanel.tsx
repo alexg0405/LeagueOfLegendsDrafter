@@ -6,6 +6,7 @@ import {
   buildEngineState,
   buildOverlayChampionSearchPool,
   compileTrainedEffects,
+  formatRuneTipNote,
   getChampionBuildProfile,
   isDraftUpdate,
   MATCHUP_BONUS,
@@ -258,14 +259,6 @@ function bestAllySlotsForCandidate(
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map((x) => x.slot)
-}
-
-function shortIntel(text: string | null | undefined, fallback: string): string {
-  if (!text) {
-    return fallback
-  }
-  const first = text.split(/[.!?]/)[0]?.trim()
-  return first ? first.slice(0, 96) : fallback
 }
 
 function SectionLabel({ children }: { children: ReactNode }) {
@@ -933,7 +926,10 @@ export function OverlayPanel() {
               const enemyFallback = focusedSlots(s?.enemy ?? [], poolRole, 'enemy')
               const synergySlots = allies.length ? allies : allyFallback
               const goodVsSlots = enemies.length ? enemies : enemyFallback
-              const intel = shortIntel(p.runes?.note, p.buildProfile?.buildHint ?? 'Matchup notes locked until board has more context.')
+              const intel = formatRuneTipNote(
+                p.runes?.note,
+                p.buildProfile?.buildHint ?? 'Matchup notes locked until board has more context.'
+              )
               return (
                 <li
                   key={`${d.boardSignature ?? d.updatedAt}-${i}-${p.championId}`}

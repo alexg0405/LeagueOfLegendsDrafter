@@ -122,9 +122,7 @@ export function NexusHomeDashboard({
               initial="initial"
               animate="animate"
             >
-              <span>github @ alexg0405</span>
-              <span className="text-nexus-line">/</span>
-              <span>linkedin @ alexanderguodev</span>
+              <span>github</span>
             </motion.div>
           </div>
           <div className="border-t lg:border-t-0 lg:border-l border-nexus-line bg-nexus-bg/90 flex flex-col min-h-[100px]">

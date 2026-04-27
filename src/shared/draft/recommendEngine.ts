@@ -786,14 +786,22 @@ export function recommend(args: RecommendArgs): {
   const deltaOf = (r: (typeof rows)[number]) => r.comp.contextCombined - r.comp.base
   const selectedRows = (() => {
     const n = Math.max(1, Math.trunc(maxResults))
-    if (sortBy !== 'delta' || !contextReady) {
+    if (sortBy !== 'delta') {
       return rows.slice(0, n)
     }
-    const byDelta = rows.slice().sort((a, b) => deltaOf(b) - deltaOf(a))
-    if (deltaListMode === 'worst') {
-      return byDelta.slice().reverse().slice(0, n)
+    if (contextReady) {
+      const byDelta = rows.slice().sort((a, b) => deltaOf(b) - deltaOf(a))
+      if (deltaListMode === 'worst') {
+        return byDelta.slice().reverse().slice(0, n)
+      }
+      return byDelta.slice(0, n)
     }
-    return byDelta.slice(0, n)
+    // Blinds (no other locks on the board): lobby deltas are ~flat; `rows` is already
+    // best-first by EV (MC) or v1 score. Still honor "worst first" by inverting.
+    if (deltaListMode === 'worst') {
+      return rows.slice().reverse().slice(0, n)
+    }
+    return rows.slice(0, n)
   })()
 
   const out: PickSuggestion[] = selectedRows.map((it) => {

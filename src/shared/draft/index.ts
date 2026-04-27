@@ -49,7 +49,15 @@ export {
   type PublicMetaBaseStat,
   type PublicMetaCounterStat
 } from './metaStats'
-export { runeLoadoutForChampion } from './runeHints'
+export { runeLoadoutForChampion, formatRuneTipNote } from './runeHints'
+export {
+  bestAllySlotsForSuggestion,
+  bestEnemySlotsForSuggestion,
+  focusedContextSlots,
+  filledContextSlots,
+  SUGGESTION_ROLE_FOCUS,
+  type SuggestionContextSlot
+} from './suggestionContextSlots'
 export { parseDraftVisionResponse } from './visionJson'
 export type { LcuChampSelectResult } from './lcuTypes'
 export { shrunkWinRate, winRateToBonus } from './shrinkage'

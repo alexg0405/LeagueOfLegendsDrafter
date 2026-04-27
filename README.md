@@ -11,7 +11,7 @@ Download: [Nexus Draft portable EXE](https://drive.google.com/file/d/18GEeVNACW8
 
 Download safety scan: [VirusTotal report](https://www.virustotal.com/gui/file/29e021c773e315e67bfdcbcf753dff204227de7d7c4f257bfd4274686a976afa/detection).
 
-Creator links: [GitHub](https://github.com/alexg0405) · [LinkedIn](https://www.linkedin.com/in/alexanderguodev).
+Creator: [GitHub](https://github.com/alexg0405).
 
 ## Development
 

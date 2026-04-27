@@ -249,10 +249,10 @@ function blindPenalty(
 }
 
 function blendBaseRates(trainedM: number | null, metaM: number | null, fallbackM: number): number {
-  if (trainedM != null && metaM != null) {
-    return clampMatchupRate(0.5 + (trainedM - 0.5) * 0.4 + (metaM - 0.5) * 0.6)
+  if (metaM != null) {
+    return metaM
   }
-  return trainedM ?? metaM ?? fallbackM
+  return trainedM ?? fallbackM
 }
 
 function baseTerm(
@@ -462,6 +462,18 @@ function hasBoardContext(s: DraftSnapshot, myRole: DraftRole, localCell: number 
     }
   }
   return false
+}
+
+function monteCarloFutureWeight(s: DraftSnapshot, myRole: DraftRole, localCell: number | null): number {
+  const allyLocks = teammateLockCountExcludingLocal(s)
+  const enemyLocks = enemyLockCount(s)
+  const knownLocks = allyLocks + enemyLocks
+  if (knownLocks <= 0 || !hasBoardContext(s, myRole, localCell)) {
+    return 0
+  }
+  const lockFactor = clamp01(knownLocks / 8)
+  const laneFactor = enemyLocks > 0 ? 0.35 + 0.65 * laneCertainty(s, myRole) : 0.35
+  return clamp01(0.15 + 0.45 * lockFactor * laneFactor)
 }
 
 /**
@@ -708,6 +720,7 @@ export function recommend(args: RecommendArgs): {
     comp: ReturnType<typeof v1ComponentScores>
     ev?: number
     risk?: number
+    mcWeight?: number
   }> = []
 
   for (const c of pool) {
@@ -729,12 +742,14 @@ export function recommend(args: RecommendArgs): {
       }
       samples.push(snapshotValueV1(c, poolKey, st, idToName, comfortM, trainedEffects, championMetaById))
     }
-    const mean = samples.reduce((a, b) => a + b, 0) / samples.length
-    const v = samples.map((x) => (x - mean) * (x - mean))
+    const sampleMean = samples.reduce((a, b) => a + b, 0) / samples.length
+    const v = samples.map((x) => (x - sampleMean) * (x - sampleMean))
     const stdev = Math.sqrt(v.reduce((a, b) => a + b, 0) / Math.max(1, samples.length))
     const comfC = comfortGet(c, comfortM)
-    const evBlend = 0.75 * mean + 0.25 * comfC - 0.1 * stdev
-    rows.push({ c, comp, ev: evBlend, risk: stdev })
+    const futureWeight = monteCarloFutureWeight(state.snapshot, myRole, localCell)
+    const projectedMean = clamp01(comp.combined + (sampleMean - comp.combined) * futureWeight)
+    const evBlend = clamp01(0.9 * projectedMean + 0.1 * comfC - 0.1 * stdev * futureWeight)
+    rows.push({ c, comp, ev: evBlend, risk: stdev, mcWeight: futureWeight })
   }
 
   if (useMc) {
@@ -845,6 +860,7 @@ export function recommend(args: RecommendArgs): {
       ? [
           `V1 ${(comp.combined * 100).toFixed(1)}%`,
           `EV ${((it.ev ?? 0) * 100).toFixed(1)}%`,
+          `MC ${((it.mcWeight ?? 0) * 100).toFixed(0)}%`,
           `σ${((it.risk ?? 0) * 100).toFixed(0)}%`,
           `adj a${(comp.allyAdj * 100).toFixed(1)} e${(comp.enemyAdj * 100).toFixed(1)} c${(comp.compAdj * 100).toFixed(1)} p${(comp.comfortAdj * 100).toFixed(1)} b-${(comp.blindP * 100).toFixed(1)}`,
           laneOpp ? 'lane' : 'blind'

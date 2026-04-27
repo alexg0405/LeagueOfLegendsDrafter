@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { getMatchupMatchCounts, shrunkLaneRate } from './statsModel'
+import { getMatchupMatchCounts, shrunkBaseRate, shrunkLaneRate } from './statsModel'
 
 describe('statsModel lane matchup scaling', () => {
+  it('keeps missing live base data neutral', () => {
+    expect(shrunkBaseRate('middle', 38)).toBeCloseTo(0.5, 5)
+  })
+
   it('treats explicit hard counters as large lane shifts', () => {
     const malphiteVsTrynd = shrunkLaneRate(54, 23)
     const tryndVsMalphite = shrunkLaneRate(23, 54)

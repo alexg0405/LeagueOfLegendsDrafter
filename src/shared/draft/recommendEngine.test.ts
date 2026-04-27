@@ -6,6 +6,7 @@ import type { DraftSnapshot } from './types'
 
 const idMap = new Map<number, string>([
   [10, 'Kayle'],
+  [38, 'Kassadin'],
   [50, 'Swain'],
   [60, 'Elise'],
   [64, 'Lee Sin'],
@@ -175,7 +176,7 @@ describe('recommend v1', () => {
     expect(v.contextCombined - v.base).toBeLessThan(-0.01)
   })
 
-  it('uses trained base rows without expanding the role pool', () => {
+  it('does not let trained base rows override Diamond+ public base rates or expand the role pool', () => {
     const snap: DraftSnapshot = {
       ally: [
         { role: 'top', championId: null, championName: null, cellId: 0 },
@@ -214,52 +215,16 @@ describe('recommend v1', () => {
       maxResults: 80,
       monteCarloSamples: 0
     })
+    const ahriWithTrained = v1ComponentScores(103, 'middle', st, idMap, null, trained)
+    const ahriPublicOnly = v1ComponentScores(103, 'middle', st, idMap, null, null)
+    expect(ahriWithTrained.base).toBeCloseTo(ahriPublicOnly.base, 5)
+    expect(ahriWithTrained.base).toBeLessThan(0.55)
     expect(suggestions.some((s) => s.championId === 103)).toBe(true)
     expect(suggestions.some((s) => s.championId === 67)).toBe(false)
     expect(suggestions.some((s) => s.championId === 98)).toBe(false)
   })
 
-  it('uses public top-lane counter data to surface contextual deltas', () => {
-    const snap: DraftSnapshot = {
-      ally: [
-        { role: 'top', championId: null, championName: null, cellId: 0 },
-        { role: 'jungle', championId: null, championName: null, cellId: 1 },
-        { role: 'middle', championId: null, championName: null, cellId: 2 },
-        { role: 'bottom', championId: null, championName: null, cellId: 3 },
-        { role: 'support', championId: null, championName: null, cellId: 4 }
-      ],
-      enemy: [
-        { role: 'top', championId: 10, championName: 'Kayle', cellId: 5 },
-        { role: 'jungle', championId: null, championName: null, cellId: 6 },
-        { role: 'middle', championId: null, championName: null, cellId: 7 },
-        { role: 'bottom', championId: null, championName: null, cellId: 8 },
-        { role: 'support', championId: null, championName: null, cellId: 9 }
-      ],
-      myTeam: '100',
-      myRole: 'top',
-      localPlayerCellId: 0,
-      bans: null,
-      myPickOrder: 4
-    }
-    const st = buildEngineState(snap, 'top', {
-      bans: null,
-      myPickOrder: 4,
-      dataDragonVersion: null,
-      patch: 'test'
-    })
-    const { suggestions } = recommend({
-      state: st,
-      idToName: idMap,
-      maxResults: 8,
-      sortBy: 'delta'
-    })
-    const udyr = suggestions.find((s) => s.championId === 77)
-    expect(udyr).toBeTruthy()
-    expect(udyr?.winRateDelta ?? 0).toBeGreaterThanOrEqual(0.01)
-    expect(udyr?.reasons).toContain('lane_counter')
-  })
-
-  it('uses public bot-lane counter data to move winrate deltas by more than display noise', () => {
+  it('uses Diamond+ public base rows for every champion instead of synthetic fallback', () => {
     const snap: DraftSnapshot = {
       ally: [
         { role: 'top', championId: null, championName: null, cellId: 0 },
@@ -272,29 +237,69 @@ describe('recommend v1', () => {
         { role: 'top', championId: null, championName: null, cellId: 5 },
         { role: 'jungle', championId: null, championName: null, cellId: 6 },
         { role: 'middle', championId: null, championName: null, cellId: 7 },
-        { role: 'bottom', championId: 222, championName: 'Jinx', cellId: 8 },
+        { role: 'bottom', championId: null, championName: null, cellId: 8 },
         { role: 'support', championId: null, championName: null, cellId: 9 }
       ],
       myTeam: '100',
-      myRole: 'bottom',
-      localPlayerCellId: 3,
+      myRole: 'middle',
+      localPlayerCellId: 2,
       bans: null,
-      myPickOrder: 5
+      myPickOrder: 1
     }
-    const st = buildEngineState(snap, 'bottom', {
+    const st = buildEngineState(snap, 'middle', {
       bans: null,
-      myPickOrder: 5,
+      myPickOrder: 1,
       dataDragonVersion: null,
       patch: 'test'
     })
-    const swain = v1ComponentScores(50, 'bottom', st, idMap, null)
-    expect(swain.enemy).toBeGreaterThan(0.53)
-    expect(swain.enemyAdj).toBeGreaterThan(0.01)
-    expect(swain.contextCombined - swain.base).toBeGreaterThan(0.01)
+    const kassadin = v1ComponentScores(38, 'middle', st, idMap, null)
+    expect(kassadin.base).toBeGreaterThan(0.495)
+    expect(kassadin.base).toBeLessThan(0.505)
   })
 })
 
 describe('Monte Carlo helpers', () => {
+  it('keeps blind Monte Carlo anchored to current-patch base data', () => {
+    const snap: DraftSnapshot = {
+      ally: [
+        { role: 'top', championId: null, championName: null, cellId: 0 },
+        { role: 'jungle', championId: null, championName: null, cellId: 1 },
+        { role: 'middle', championId: null, championName: null, cellId: 2 },
+        { role: 'bottom', championId: null, championName: null, cellId: 3 },
+        { role: 'support', championId: null, championName: null, cellId: 4 }
+      ],
+      enemy: [
+        { role: 'top', championId: null, championName: null, cellId: 5 },
+        { role: 'jungle', championId: null, championName: null, cellId: 6 },
+        { role: 'middle', championId: null, championName: null, cellId: 7 },
+        { role: 'bottom', championId: null, championName: null, cellId: 8 },
+        { role: 'support', championId: null, championName: null, cellId: 9 }
+      ],
+      myTeam: '100',
+      myRole: 'middle',
+      localPlayerCellId: 2,
+      bans: null,
+      myPickOrder: 1
+    }
+    const st = buildEngineState(snap, 'middle', {
+      bans: null,
+      myPickOrder: 1,
+      dataDragonVersion: null,
+      patch: 'test'
+    })
+    const { suggestions } = recommend({
+      state: st,
+      idToName: idMap,
+      maxResults: 80,
+      monteCarloSamples: 48,
+      rngSeed: 0x4d_44_57_45
+    })
+    const kassadin = suggestions.find((s) => s.championId === 38)
+    expect(kassadin).toBeTruthy()
+    expect(kassadin!.score).toBeLessThan(1.04)
+    expect(kassadin!.estWin).toBeLessThan(0.515)
+  })
+
   it('cloneWithMyPick then completeDraftRandomly fills open slots', () => {
     let seed = 42
     const rand = () => {

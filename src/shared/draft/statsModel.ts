@@ -12,12 +12,14 @@ const MATCHUP_K = 24
 const PRIOR_50 = 0.5
 const BONUS_CLAMP = 8
 
-/** Plausible base lane strength for champions in the curated pool (not live Riot data). */
+/**
+ * Neutral fallback for champions missing public/trained base data.
+ * Real champion strength should come from `publicMetaStatsSeed` or the trained bundle; using
+ * champion-id jitter here can create fake outliers in blind drafts.
+ */
 function defaultBaseWl(championId: number): { w: number; l: number } {
-  const t = (championId % 13) - 6
-  const w = 52 + t
-  const l = 100 - w
-  return { w, l }
+  void championId
+  return { w: 50, l: 50 }
 }
 
 const baseCache = new Map<string, { w: number; l: number }>()

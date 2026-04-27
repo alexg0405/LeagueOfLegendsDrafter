@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Nexus Draft">
+  <rect width="64" height="64" fill="#06130f"/>
+  <rect x="4" y="4" width="56" height="56" fill="#0a2119" stroke="#23d5b0" stroke-width="2"/>
+  <path d="M15 48V16h7l20 19V16h7v32h-7L22 29v19h-7z" fill="#e7fff5"/>
+  <path d="M14 52h36" stroke="#23d5b0" stroke-width="3" stroke-linecap="square"/>
+</svg>

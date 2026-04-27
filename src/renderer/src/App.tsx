@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { MainShell } from './MainShell'
 import { OverlayPanel } from './OverlayPanel'
 import { PreloadGuard } from './PreloadGuard'
+import { WebDraftApp } from './WebDraftApp'
 import { isOverlayRoute } from './route'
 
 /**
@@ -10,6 +11,7 @@ import { isOverlayRoute } from './route'
  */
 export function App() {
   const [overlay, setOverlay] = useState(() => isOverlayRoute())
+  const webMode = import.meta.env.VITE_NEXUS_WEB === '1'
 
   useEffect(() => {
     setOverlay(isOverlayRoute())
@@ -17,6 +19,10 @@ export function App() {
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
+
+  if (webMode) {
+    return <WebDraftApp />
+  }
 
   return (
     <PreloadGuard>

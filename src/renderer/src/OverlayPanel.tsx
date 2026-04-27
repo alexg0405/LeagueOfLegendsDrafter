@@ -133,6 +133,32 @@ function signedPct(v: number | undefined): string {
   return `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`
 }
 
+function fitLabel(v: number): string {
+  if (v >= 0.56) {
+    return 'strong'
+  }
+  if (v >= 0.52) {
+    return 'good'
+  }
+  if (v >= 0.48) {
+    return 'neutral'
+  }
+  if (v >= 0.44) {
+    return 'rough'
+  }
+  return 'risky'
+}
+
+function fitClass(v: number): string {
+  if (v >= 0.52) {
+    return 'text-nexus-lime/90'
+  }
+  if (v >= 0.48) {
+    return 'text-nexus-muted'
+  }
+  return 'text-nexus-red/80'
+}
+
 type OverlaySlot = { role: DraftRole; championName: string | null; championId: number | null }
 
 const ROLE_FOCUS: Record<Exclude<DraftRole, 'unknown'>, { ally: DraftRole[]; enemy: DraftRole[] }> = {
@@ -828,13 +854,29 @@ export function OverlayPanel() {
               {lookupScores && (
                 <details className="group mt-2 border border-nexus-line/65 bg-nexus-bg/25 font-mono text-[11px] leading-snug text-nexus-text/75">
                   <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
-                    <span>Scores</span>
+                    <span>Fit summary</span>
                     <span className="text-nexus-lime/80 group-open:rotate-45 transition-transform">+</span>
                   </summary>
-                  <div className="border-t border-nexus-line/55 px-2 py-1.5">
-                    Base {(lookupScores.base * 100).toFixed(0)}% · allies {(lookupScores.ally * 100).toFixed(0)}% · enemies{' '}
-                    {(lookupScores.enemy * 100).toFixed(0)}% · comp {(lookupScores.comp * 100).toFixed(0)}%
-                    {lookupScores.blindP > 0 && <span> · early blind penalty -{(lookupScores.blindP * 100).toFixed(0)}%</span>}
+                  <div className="border-t border-nexus-line/55 px-2 py-1.5 space-y-1">
+                    <p className="m-0">
+                      <span className="uppercase tracking-[0.12em] text-nexus-lime/80">Overall</span>
+                      <span className="text-nexus-line"> · </span>
+                      <span className={fitClass(lookupScores.combined)}>{fitLabel(lookupScores.combined)}</span>
+                      <span className="text-nexus-muted"> pick for {poolRole} ({pct(lookupScores.combined)})</span>
+                    </p>
+                    <p className="m-0 text-nexus-muted">
+                      Lane baseline is <span className={fitClass(lookupScores.base)}>{fitLabel(lookupScores.base)}</span>; current allies are{' '}
+                      <span className={fitClass(lookupScores.ally)}>{fitLabel(lookupScores.ally)}</span>.
+                    </p>
+                    <p className="m-0 text-nexus-muted">
+                      Enemy matchup is <span className={fitClass(lookupScores.enemy)}>{fitLabel(lookupScores.enemy)}</span>; team comp fit is{' '}
+                      <span className={fitClass(lookupScores.comp)}>{fitLabel(lookupScores.comp)}</span>.
+                    </p>
+                    {lookupScores.blindP > 0 && (
+                      <p className="m-0 text-nexus-red/80">
+                        Early blind risk: -{(lookupScores.blindP * 100).toFixed(0)}%.
+                      </p>
+                    )}
                   </div>
                 </details>
               )}

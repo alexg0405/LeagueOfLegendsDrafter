@@ -15,8 +15,11 @@ import { MicroLabel, NexusPanel, NexusPlus } from './nexus-ui'
 const ROLES: Exclude<DraftRole, 'unknown'>[] = ['top', 'jungle', 'middle', 'bottom', 'support']
 const DEFAULT_WEB_ROLLOUTS = 40
 const MAX_WEB_ROLLOUTS = 200
+const EXE_DOWNLOAD_URL = 'https://drive.google.com/file/d/18GEeVNACW8BYMhElANbsVbFWLC4dsp-3/view?usp=drive_link'
 const VIRUSTOTAL_SCAN_URL =
   'https://www.virustotal.com/gui/file/29e021c773e315e67bfdcbcf753dff204227de7d7c4f257bfd4274686a976afa/detection'
+const GITHUB_PROFILE_URL = 'https://github.com/alexg0405'
+const LINKEDIN_PROFILE_URL = 'https://www.linkedin.com/in/alexanderguodev'
 
 const inputClass =
   'nexus-focus w-full bg-nexus-bg border border-nexus-line text-nexus-text font-mono text-sm py-2 px-3 focus:border-nexus-lime/50 focus:outline-none disabled:opacity-45'
@@ -127,10 +130,11 @@ function SuggestionRow({
               </span>
             </div>
           )}
-          <div className="mt-1 font-mono text-[11px] leading-snug text-nexus-text/80">
-            {suggestion.reasons.join(', ')}
-            {suggestion.buildProfile && <span className="text-nexus-muted"> · {suggestion.buildProfile.archetype}</span>}
-          </div>
+          {suggestion.buildProfile && (
+            <div className="mt-1 font-mono text-[11px] leading-snug text-nexus-muted">
+              {suggestion.buildProfile.archetype}
+            </div>
+          )}
         </div>
       </div>
     </li>
@@ -228,7 +232,7 @@ export function WebDraftApp() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <a className={buttonClass} href="https://github.com/alexg0405/LeagueOfLegendsDrafter/releases/latest">
+              <a className={buttonClass} href={EXE_DOWNLOAD_URL} target="_blank" rel="noreferrer">
                 Download EXE
               </a>
               <a
@@ -243,6 +247,15 @@ export function WebDraftApp() {
                 Reset Board
               </button>
             </div>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-nexus-line/60 pt-3 font-mono text-xs uppercase tracking-[0.12em]">
+            <a className="text-nexus-lime/85 hover:text-nexus-lime" href={GITHUB_PROFILE_URL} target="_blank" rel="noreferrer">
+              GitHub @ alexg0405
+            </a>
+            <span className="text-nexus-line">/</span>
+            <a className="text-nexus-lime/85 hover:text-nexus-lime" href={LINKEDIN_PROFILE_URL} target="_blank" rel="noreferrer">
+              LinkedIn @ alexanderguodev
+            </a>
           </div>
         </section>
 
@@ -355,8 +368,8 @@ export function WebDraftApp() {
               <p className="font-mono text-sm text-nexus-muted leading-relaxed">
                 Use the Windows desktop app for League Client API detection, automatic role parsing, and the always-on-top overlay.
               </p>
-              <a className={buttonClass + ' mt-3'} href="https://github.com/alexg0405/LeagueOfLegendsDrafter/releases/latest">
-                Latest Release
+              <a className={buttonClass + ' mt-3'} href={EXE_DOWNLOAD_URL} target="_blank" rel="noreferrer">
+                Download EXE
               </a>
               <a
                 className="nexus-focus mt-2 inline-flex items-center justify-center border border-nexus-line px-5 py-2.5 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10"
@@ -369,6 +382,14 @@ export function WebDraftApp() {
               <div className="mt-4 flex items-center gap-2 text-nexus-muted">
                 <NexusPlus className="text-[10px]" />
                 <span className="font-mono text-xs">Web build v0.4.0</span>
+              </div>
+              <div className="mt-3 flex flex-col gap-1 font-mono text-xs">
+                <a className="text-nexus-lime/85 hover:text-nexus-lime" href={GITHUB_PROFILE_URL} target="_blank" rel="noreferrer">
+                  GitHub profile
+                </a>
+                <a className="text-nexus-lime/85 hover:text-nexus-lime" href={LINKEDIN_PROFILE_URL} target="_blank" rel="noreferrer">
+                  LinkedIn profile
+                </a>
               </div>
             </NexusPanel>
           </aside>

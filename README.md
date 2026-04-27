@@ -7,7 +7,11 @@ Nexus Draft ships as two separate applications:
 
 The web app cannot read the local League Client API or create a true in-game overlay from a browser. Use the desktop app for live champ select.
 
+Download: [Nexus Draft portable EXE](https://drive.google.com/file/d/18GEeVNACW8BYMhElANbsVbFWLC4dsp-3/view?usp=drive_link).
+
 Download safety scan: [VirusTotal report](https://www.virustotal.com/gui/file/29e021c773e315e67bfdcbcf753dff204227de7d7c4f257bfd4274686a976afa/detection).
+
+Creator links: [GitHub](https://github.com/alexg0405) · [LinkedIn](https://www.linkedin.com/in/alexanderguodev).
 
 ## Development
 

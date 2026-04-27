@@ -20,7 +20,7 @@ const VIRUSTOTAL_SCAN_URL =
   'https://www.virustotal.com/gui/file/29e021c773e315e67bfdcbcf753dff204227de7d7c4f257bfd4274686a976afa/detection'
 const GITHUB_PROFILE_URL = 'https://github.com/alexg0405'
 const LINKEDIN_PROFILE_URL = 'https://www.linkedin.com/in/alexanderguodev'
-const VISITOR_COUNTER_URL = 'https://visitor.6developer.com/visit'
+const VISITOR_COUNTER_URL = '/api/visit'
 
 const inputClass =
   'nexus-focus w-full bg-nexus-bg border border-nexus-line text-nexus-text font-mono text-sm py-2 px-3 focus:border-nexus-lime/50 focus:outline-none disabled:opacity-45'

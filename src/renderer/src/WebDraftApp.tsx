@@ -37,6 +37,11 @@ type ManualInputBoard = {
   enemy: Record<Exclude<DraftRole, 'unknown'>, string>
 }
 
+type ActiveChampionInput = {
+  side: 'ally' | 'enemy'
+  role: Exclude<DraftRole, 'unknown'>
+} | null
+
 type VisionPick = {
   role?: string
   championName?: string
@@ -325,6 +330,7 @@ export function WebDraftApp() {
   const [deltaMode, setDeltaMode] = useState<DraftDeltaListMode>('best')
   const [visionStatus, setVisionStatus] = useState<string>('Upload a champion select screenshot to autofill the board.')
   const [visionBusy, setVisionBusy] = useState(false)
+  const [activeChampionInput, setActiveChampionInput] = useState<ActiveChampionInput>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -392,6 +398,28 @@ export function WebDraftApp() {
         [slotRole]: id
       }
     }))
+  }
+
+  const championMatches = (value: string): ChampionLite[] => {
+    const normalized = normalizeChampionQuery(value)
+    if (!normalized) {
+      return []
+    }
+    return sortedChampions
+      .filter((champion) => normalizeChampionQuery(champion.name).includes(normalized))
+      .slice(0, 5)
+  }
+
+  const pickChampionInput = (side: 'ally' | 'enemy', slotRole: Exclude<DraftRole, 'unknown'>, champion: ChampionLite) => {
+    setChampionInputs((prev) => ({
+      ...prev,
+      [side]: {
+        ...prev[side],
+        [slotRole]: champion.name
+      }
+    }))
+    updateBoard(side, slotRole, champion.id)
+    setActiveChampionInput(null)
   }
 
   const updateChampionInput = (side: 'ally' | 'enemy', slotRole: Exclude<DraftRole, 'unknown'>, value: string) => {
@@ -553,11 +581,6 @@ export function WebDraftApp() {
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="min-w-0">
             <NexusPanel kicker="manual" title="Draft board" accent>
-              <datalist id="web-champion-options">
-                {sortedChampions.map((champion) => (
-                  <option key={champion.id} value={champion.name} />
-                ))}
-              </datalist>
               <div className="mb-5 border border-nexus-line/80 bg-nexus-bg/25 p-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -631,23 +654,58 @@ export function WebDraftApp() {
                       {side === 'ally' ? 'Allies' : 'Enemies'}
                     </h3>
                     <div className="space-y-2">
-                      {ROLES.map((slotRole) => (
-                        <label key={`${side}-${slotRole}`} className="grid grid-cols-[4.5rem_2rem_minmax(0,1fr)] gap-2 items-center">
-                          <span className={slotRole === role && side === 'ally' ? 'font-mono text-xs uppercase text-nexus-blue' : 'font-mono text-xs uppercase text-nexus-muted'}>
-                            {roleLabel(slotRole)}
-                          </span>
-                          <ChampionIcon championId={board[side][slotRole]} champions={champions} ddragonVersion={ddragonVersion} />
-                          <input
-                            className={inputClass + ' text-xs'}
-                            list="web-champion-options"
-                            value={championInputs[side][slotRole]}
-                            placeholder="Type champion..."
-                            onChange={(e) => updateChampionInput(side, slotRole, e.target.value)}
-                            onBlur={() => settleChampionInput(side, slotRole)}
-                            disabled={champions.length === 0}
-                          />
-                        </label>
-                      ))}
+                      {ROLES.map((slotRole) => {
+                        const matches = championMatches(championInputs[side][slotRole])
+                        const isActive = activeChampionInput?.side === side && activeChampionInput.role === slotRole
+                        return (
+                          <label key={`${side}-${slotRole}`} className="grid grid-cols-[4.5rem_2rem_minmax(0,1fr)] gap-2 items-center">
+                            <span className={slotRole === role && side === 'ally' ? 'font-mono text-xs uppercase text-nexus-blue' : 'font-mono text-xs uppercase text-nexus-muted'}>
+                              {roleLabel(slotRole)}
+                            </span>
+                            <ChampionIcon championId={board[side][slotRole]} champions={champions} ddragonVersion={ddragonVersion} />
+                            <span className="relative min-w-0">
+                              <input
+                                className={inputClass + ' text-xs'}
+                                value={championInputs[side][slotRole]}
+                                placeholder="Type champion..."
+                                autoComplete="off"
+                                onFocus={() => setActiveChampionInput({ side, role: slotRole })}
+                                onChange={(e) => {
+                                  setActiveChampionInput({ side, role: slotRole })
+                                  updateChampionInput(side, slotRole, e.target.value)
+                                }}
+                                onBlur={() => {
+                                  window.setTimeout(() => {
+                                    settleChampionInput(side, slotRole)
+                                    setActiveChampionInput((current) =>
+                                      current?.side === side && current.role === slotRole ? null : current
+                                    )
+                                  }, 120)
+                                }}
+                                disabled={champions.length === 0}
+                              />
+                              {isActive && matches.length > 0 && (
+                                <span className="absolute left-0 right-0 top-[calc(100%+2px)] z-30 max-h-44 overflow-y-auto border border-nexus-line bg-nexus-surface-2 shadow-[0_12px_30px_rgba(0,0,0,0.35)]">
+                                  {matches.map((champion) => (
+                                    <button
+                                      key={champion.id}
+                                      type="button"
+                                      className="nexus-focus flex w-full items-center gap-2 px-2 py-1.5 text-left font-mono text-xs text-nexus-text hover:bg-nexus-lime/10"
+                                      onMouseDown={(event) => {
+                                        event.preventDefault()
+                                        pickChampionInput(side, slotRole, champion)
+                                      }}
+                                    >
+                                      <ChampionIcon championId={champion.id} champions={champions} ddragonVersion={ddragonVersion} />
+                                      <span className="truncate">{champion.name}</span>
+                                    </button>
+                                  ))}
+                                </span>
+                              )}
+                            </span>
+                          </label>
+                        )
+                      })}
                     </div>
                   </section>
                 ))}

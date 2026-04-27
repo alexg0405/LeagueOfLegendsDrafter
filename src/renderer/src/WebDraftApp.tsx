@@ -198,8 +198,8 @@ function VisitorCounter() {
     <div className="border-t border-nexus-line bg-nexus-surface-2/90 px-4 py-3 font-mono text-xs text-nexus-muted">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
         <span>Nexus Draft web</span>
-        <span className="text-nexus-lime/85">
-          Visitors: {count != null ? count.toLocaleString() : failed ? 'unavailable' : 'loading'}
+        <span className="text-nexus-lime/85" title="Total page visits recorded for this hosted web app.">
+          Total visits: {count != null ? count.toLocaleString() : failed ? 'unavailable' : 'loading'}
         </span>
       </div>
     </div>

@@ -37,6 +37,19 @@ type ManualInputBoard = {
   enemy: Record<Exclude<DraftRole, 'unknown'>, string>
 }
 
+type VisionPick = {
+  role?: string
+  championName?: string
+}
+
+type VisionResponse = {
+  allyPicks?: VisionPick[]
+  enemyPicks?: VisionPick[]
+  myRole?: string
+  confidence?: string
+  error?: string
+}
+
 function emptyBoard(): ManualBoard {
   const row = ROLES.reduce(
     (acc, role) => {
@@ -73,6 +86,58 @@ function roleLabel(role: DraftRole): string {
 
 function normalizeChampionQuery(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function normalizeRole(value: string | undefined): Exclude<DraftRole, 'unknown'> | null {
+  const v = value?.trim().toLowerCase()
+  if (v === 'top' || v === 'jungle' || v === 'middle' || v === 'support') {
+    return v
+  }
+  if (v === 'mid') {
+    return 'middle'
+  }
+  if (v === 'bottom' || v === 'bot' || v === 'adc') {
+    return 'bottom'
+  }
+  if (v === 'utility' || v === 'sup') {
+    return 'support'
+  }
+  if (v === 'jg' || v === 'jgl') {
+    return 'jungle'
+  }
+  return null
+}
+
+function fileToImageDataUrl(file: File, maxSide = 1400): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('Could not read image file.'))
+    reader.onload = () => {
+      const img = new Image()
+      img.onerror = () => reject(new Error('Could not decode image file.'))
+      img.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height))
+        const width = Math.max(1, Math.round(img.width * scale))
+        const height = Math.max(1, Math.round(img.height * scale))
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          reject(new Error('Could not prepare image for upload.'))
+          return
+        }
+        ctx.drawImage(img, 0, 0, width, height)
+        resolve(canvas.toDataURL('image/jpeg', 0.82))
+      }
+      img.src = String(reader.result ?? '')
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+function dataUrlToBase64(dataUrl: string): string {
+  return dataUrl.includes(',') ? dataUrl.slice(dataUrl.indexOf(',') + 1) : dataUrl
 }
 
 function buildSnapshot(board: ManualBoard, role: Exclude<DraftRole, 'unknown'>, names: ReadonlyMap<number, string>): DraftSnapshot {
@@ -216,6 +281,8 @@ export function WebDraftApp() {
   const [championInputs, setChampionInputs] = useState<ManualInputBoard>(emptyInputBoard)
   const [rollouts, setRollouts] = useState(DEFAULT_WEB_ROLLOUTS)
   const [deltaMode, setDeltaMode] = useState<DraftDeltaListMode>('best')
+  const [visionStatus, setVisionStatus] = useState<string>('Upload a champion select screenshot to autofill the board.')
+  const [visionBusy, setVisionBusy] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -334,6 +401,70 @@ export function WebDraftApp() {
     setChampionInputs(emptyInputBoard())
   }
 
+  const setChampionSlotByName = (side: 'ally' | 'enemy', slotRole: Exclude<DraftRole, 'unknown'>, championName: string) => {
+    const normalized = normalizeChampionQuery(championName)
+    const exact = championByNormalizedName.get(normalized)
+    const candidates = sortedChampions.filter((champion) => normalizeChampionQuery(champion.name).startsWith(normalized))
+    const picked = exact ?? (candidates.length === 1 ? candidates[0] : null)
+    setChampionInputs((prev) => ({
+      ...prev,
+      [side]: {
+        ...prev[side],
+        [slotRole]: picked?.name ?? championName
+      }
+    }))
+    updateBoard(side, slotRole, picked?.id ?? null)
+  }
+
+  const applyVisionRows = (side: 'ally' | 'enemy', rows: VisionPick[] | undefined) => {
+    for (const row of rows ?? []) {
+      const slotRole = normalizeRole(row.role)
+      if (!slotRole) {
+        continue
+      }
+      const name = row.championName?.trim() ?? ''
+      if (!name) {
+        continue
+      }
+      setChampionSlotByName(side, slotRole, name)
+    }
+  }
+
+  const parseDraftScreenshot = async (file: File | null) => {
+    if (!file) {
+      return
+    }
+    setVisionBusy(true)
+    setVisionStatus('Reading screenshot...')
+    try {
+      const dataUrl = await fileToImageDataUrl(file)
+      const res = await fetch('/api/parse-draft-screenshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: dataUrlToBase64(dataUrl),
+          mimeType: 'image/jpeg',
+          dataDragonVersion: ddragonVersion
+        })
+      })
+      const data = (await res.json()) as VisionResponse
+      if (!res.ok) {
+        throw new Error(data.error ?? `Vision request failed (${res.status})`)
+      }
+      applyVisionRows('ally', data.allyPicks)
+      applyVisionRows('enemy', data.enemyPicks)
+      const detectedRole = normalizeRole(data.myRole)
+      if (detectedRole) {
+        setRole(detectedRole)
+      }
+      setVisionStatus(`Autofill complete${data.confidence ? ` (${data.confidence} confidence)` : ''}. Check the board for mistakes.`)
+    } catch (error) {
+      setVisionStatus(error instanceof Error ? error.message : String(error))
+    } finally {
+      setVisionBusy(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-nexus-bg text-nexus-text font-body antialiased flex flex-col">
       <div className="nexus-noise fixed inset-0 pointer-events-none" aria-hidden />
@@ -385,6 +516,35 @@ export function WebDraftApp() {
                   <option key={champion.id} value={champion.name} />
                 ))}
               </datalist>
+              <div className="mb-5 border border-nexus-line/80 bg-nexus-bg/25 p-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="m-0 font-display text-base tracking-[0.14em] uppercase text-nexus-lime/90">
+                      Screenshot autofill
+                    </p>
+                    <p className="m-0 mt-1 font-mono text-xs leading-relaxed text-nexus-muted">
+                      Upload a League champion select screenshot. Vision reads visible ally/enemy champions and fills the board.
+                    </p>
+                  </div>
+                  <label className="nexus-focus inline-flex cursor-pointer items-center justify-center border border-nexus-line px-4 py-2 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10">
+                    {visionBusy ? 'Reading...' : 'Upload Screenshot'}
+                    <input
+                      className="sr-only"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      disabled={visionBusy}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0] ?? null
+                        void parseDraftScreenshot(file)
+                        event.currentTarget.value = ''
+                      }}
+                    />
+                  </label>
+                </div>
+                <p className={visionStatus.toLowerCase().includes('failed') || visionStatus.toLowerCase().includes('key') ? 'm-0 mt-2 font-mono text-xs text-nexus-red/80' : 'm-0 mt-2 font-mono text-xs text-nexus-muted'}>
+                  {visionStatus}
+                </p>
+              </div>
               <div className="grid gap-4 md:grid-cols-3">
                 <label className="flex flex-col gap-1.5">
                   <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Your role</span>

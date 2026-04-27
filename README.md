@@ -74,3 +74,4 @@ The web app includes a small public visitor counter powered by [Visitor Counter 
 - Build command: `npm run build:web`
 - Output directory: `dist/web`
 - Install command: `npm ci`
+- Optional screenshot autofill env var: `GEMINI_API_KEY`

@@ -1255,7 +1255,7 @@ export function WebDraftApp() {
               </a>
               <div className="mt-4 flex items-center gap-2 border-t border-nexus-line/50 pt-3 text-nexus-muted">
                 <NexusPlus className="text-[10px]" />
-                <span className="font-mono text-xs">Web build v0.4.0</span>
+                <span className="font-mono text-xs">Web build v0.5.0</span>
               </div>
             </NexusPanel>
           </aside>

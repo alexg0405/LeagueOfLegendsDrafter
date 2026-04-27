@@ -148,7 +148,7 @@ async function fetchLaneRows(lane) {
 }
 
 function formatRow(row) {
-  return `    { "role": "${row.role}", "championId": ${row.championId}, "winRate": ${row.winRate}, "pickRate": ${row.pickRate}, "banRate": ${row.banRate}, "games": ${row.games}, "sourceAvgWinRate": ${row.sourceAvgWinRate}, "source": "${row.source}" }`
+  return `    { "role": "${row.role}", "championId": ${row.championId}, "winRate": ${row.winRate}, "pickRate": ${row.pickRate}, "banRate": ${row.banRate}, "games": ${row.games}, "sourceAvgWinRate": ${row.sourceAvgWinRate}, "source": "${row.source}", "candidate": ${row.candidate} }`
 }
 
 function formatSeed(seed) {
@@ -208,6 +208,7 @@ for (const rows of rowsByChampion.values()) {
     const { lanePct, defaultLane, ...baseRow } = row
     void lanePct
     void defaultLane
+    baseRow.candidate = includePrimary
     roleBase.push(baseRow)
   }
 }

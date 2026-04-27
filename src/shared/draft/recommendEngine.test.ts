@@ -256,6 +256,43 @@ describe('recommend v1', () => {
     expect(kassadin.base).toBeGreaterThan(0.495)
     expect(kassadin.base).toBeLessThan(0.505)
   })
+
+  it('does not suggest non-primary public-meta flex rows for other roles', () => {
+    const snap: DraftSnapshot = {
+      ally: [
+        { role: 'top', championId: null, championName: null, cellId: 0 },
+        { role: 'jungle', championId: null, championName: null, cellId: 1 },
+        { role: 'middle', championId: null, championName: null, cellId: 2 },
+        { role: 'bottom', championId: null, championName: null, cellId: 3 },
+        { role: 'support', championId: null, championName: null, cellId: 4 }
+      ],
+      enemy: [
+        { role: 'top', championId: null, championName: null, cellId: 5 },
+        { role: 'jungle', championId: null, championName: null, cellId: 6 },
+        { role: 'middle', championId: null, championName: null, cellId: 7 },
+        { role: 'bottom', championId: null, championName: null, cellId: 8 },
+        { role: 'support', championId: null, championName: null, cellId: 9 }
+      ],
+      myTeam: '100',
+      myRole: 'top',
+      localPlayerCellId: 0,
+      bans: null,
+      myPickOrder: 1
+    }
+    const st = buildEngineState(snap, 'top', {
+      bans: null,
+      myPickOrder: 1,
+      dataDragonVersion: null,
+      patch: 'test'
+    })
+    const { suggestions } = recommend({
+      state: st,
+      idToName: idMap,
+      maxResults: 120,
+      monteCarloSamples: 0
+    })
+    expect(suggestions.some((s) => s.championId === 157)).toBe(false)
+  })
 })
 
 describe('Monte Carlo helpers', () => {

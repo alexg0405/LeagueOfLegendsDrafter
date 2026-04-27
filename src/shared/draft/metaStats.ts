@@ -12,6 +12,7 @@ export type PublicMetaBaseStat = {
   games: number
   sourceAvgWinRate: number
   source: string
+  candidate: boolean
 }
 
 export type PublicMetaCounterStat = {
@@ -32,6 +33,7 @@ type RawBaseRow = {
   games?: unknown
   sourceAvgWinRate?: unknown
   source?: unknown
+  candidate?: unknown
 }
 
 type RawCounterRow = {
@@ -115,7 +117,8 @@ function parseBaseRow(raw: RawBaseRow): PublicMetaBaseStat | null {
     banRate: rate(raw.banRate),
     games: positiveInt(raw.games) ?? 1000,
     sourceAvgWinRate: rate(raw.sourceAvgWinRate) ?? 0.5,
-    source: typeof raw.source === 'string' && raw.source.trim() ? raw.source.trim() : 'public-meta-seed'
+    source: typeof raw.source === 'string' && raw.source.trim() ? raw.source.trim() : 'public-meta-seed',
+    candidate: raw.candidate !== false
   }
 }
 
@@ -167,8 +170,10 @@ const candidateIdsByRole: Record<RoleKey, Set<number>> = Object.fromEntries(
 ) as Record<RoleKey, Set<number>>
 
 for (const role of ROLE_KEYS) {
-  for (const id of Array.from(baseByRole[role].keys())) {
-    candidateIdsByRole[role].add(id)
+  for (const row of Array.from(baseByRole[role].values())) {
+    if (row.candidate) {
+      candidateIdsByRole[role].add(row.championId)
+    }
   }
   for (const id of Array.from(countersByRole[role].keys())) {
     candidateIdsByRole[role].add(id)

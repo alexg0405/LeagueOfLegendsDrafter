@@ -17,6 +17,8 @@ describe('public meta stats seed', () => {
     expect(championSearchIndex.champions.every((champion) => ids.has(champion.id))).toBe(true)
     expect(publicMetaCandidateIdsForRole('middle')).toContain(38)
     expect(publicMetaCandidateIdsForRole('support')).toContain(267)
+    expect(publicMetaCandidateIdsForRole('top')).not.toContain(157)
+    expect(publicMetaCandidateIdsForRole('bottom')).not.toContain(157)
   })
 
   it('does not expose matchup counter rows from non-Diamond+ sources', () => {

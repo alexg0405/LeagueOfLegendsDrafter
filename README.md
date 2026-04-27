@@ -5,7 +5,7 @@ Nexus Draft ships as two separate applications:
 - **Windows desktop app**: live League Client API integration, automatic champion select parsing, and the in-game overlay.
 - **Hosted web app**: browser-safe manual draft entry with the same recommendation model and Nexus UI style.
 
-The web app cannot read the local League Client API or create a true in-game overlay from GitHub Pages. Use the desktop app for live champ select.
+The web app cannot read the local League Client API or create a true in-game overlay from a browser. Use the desktop app for live champ select.
 
 Download safety scan: [VirusTotal report](https://www.virustotal.com/gui/file/29e021c773e315e67bfdcbcf753dff204227de7d7c4f257bfd4274686a976afa/detection).
 
@@ -30,7 +30,7 @@ Build the Electron desktop app:
 npm run build
 ```
 
-Build the GitHub Pages web app:
+Build the Vercel web app:
 
 ```sh
 npm run build:web
@@ -50,7 +50,7 @@ The Windows build emits installer/portable `.exe` files into `release/`.
 2. Run `npm run dist:win` to produce the desktop `.exe` artifacts.
 3. Upload the desktop artifacts to a GitHub Release.
 4. Include the [VirusTotal safety scan](https://www.virustotal.com/gui/file/29e021c773e315e67bfdcbcf753dff204227de7d7c4f257bfd4274686a976afa/detection) in the release notes.
-5. Push `main`; `.github/workflows/pages.yml` builds and deploys the web app to GitHub Pages.
+5. Push `main`; Vercel builds the web app from `vercel.json` using `npm run build:web`.
 
 ## Feature Split
 
@@ -60,4 +60,11 @@ The Windows build emits installer/portable `.exe` files into `release/`.
 | Shared recommendation model | Yes | Yes |
 | Live League Client API | Yes | No |
 | In-game overlay | Yes | No |
-| GitHub Pages hosting | No | Yes |
+| Vercel hosting | No | Yes |
+
+## Vercel Settings
+
+- Framework preset: Vite
+- Build command: `npm run build:web`
+- Output directory: `dist/web`
+- Install command: `npm ci`

@@ -7,6 +7,8 @@ Nexus Draft ships as two separate applications:
 
 The web app cannot read the local League Client API or create a true in-game overlay from GitHub Pages. Use the desktop app for live champ select.
 
+Download safety scan: [VirusTotal report](https://www.virustotal.com/gui/file/29e021c773e315e67bfdcbcf753dff204227de7d7c4f257bfd4274686a976afa/detection).
+
 ## Development
 
 ```sh
@@ -47,7 +49,8 @@ The Windows build emits installer/portable `.exe` files into `release/`.
 1. Run `npm run build` and `npm run build:web`.
 2. Run `npm run dist:win` to produce the desktop `.exe` artifacts.
 3. Upload the desktop artifacts to a GitHub Release.
-4. Push `main`; `.github/workflows/pages.yml` builds and deploys the web app to GitHub Pages.
+4. Include the [VirusTotal safety scan](https://www.virustotal.com/gui/file/29e021c773e315e67bfdcbcf753dff204227de7d7c4f257bfd4274686a976afa/detection) in the release notes.
+5. Push `main`; `.github/workflows/pages.yml` builds and deploys the web app to GitHub Pages.
 
 ## Feature Split
 

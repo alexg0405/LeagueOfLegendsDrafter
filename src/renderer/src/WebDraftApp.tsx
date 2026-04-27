@@ -15,6 +15,8 @@ import { MicroLabel, NexusPanel, NexusPlus } from './nexus-ui'
 const ROLES: Exclude<DraftRole, 'unknown'>[] = ['top', 'jungle', 'middle', 'bottom', 'support']
 const DEFAULT_WEB_ROLLOUTS = 40
 const MAX_WEB_ROLLOUTS = 200
+const VIRUSTOTAL_SCAN_URL =
+  'https://www.virustotal.com/gui/file/29e021c773e315e67bfdcbcf753dff204227de7d7c4f257bfd4274686a976afa/detection'
 
 const inputClass =
   'nexus-focus w-full bg-nexus-bg border border-nexus-line text-nexus-text font-mono text-sm py-2 px-3 focus:border-nexus-lime/50 focus:outline-none disabled:opacity-45'
@@ -229,6 +231,14 @@ export function WebDraftApp() {
               <a className={buttonClass} href="https://github.com/alexg0405/LeagueOfLegendsDrafter/releases/latest">
                 Download EXE
               </a>
+              <a
+                className="nexus-focus inline-flex items-center justify-center border border-nexus-line px-5 py-2.5 font-display text-xs sm:text-sm tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10"
+                href={VIRUSTOTAL_SCAN_URL}
+                target="_blank"
+                rel="noreferrer"
+              >
+                VirusTotal Scan
+              </a>
               <button type="button" className={buttonClass} onClick={() => setBoard(emptyBoard())}>
                 Reset Board
               </button>
@@ -347,6 +357,14 @@ export function WebDraftApp() {
               </p>
               <a className={buttonClass + ' mt-3'} href="https://github.com/alexg0405/LeagueOfLegendsDrafter/releases/latest">
                 Latest Release
+              </a>
+              <a
+                className="nexus-focus mt-2 inline-flex items-center justify-center border border-nexus-line px-5 py-2.5 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10"
+                href={VIRUSTOTAL_SCAN_URL}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View Safety Scan
               </a>
               <div className="mt-4 flex items-center gap-2 text-nexus-muted">
                 <NexusPlus className="text-[10px]" />

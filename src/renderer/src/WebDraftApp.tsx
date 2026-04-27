@@ -35,7 +35,7 @@ import { nexusWebTrack } from './web/webAnalytics'
 const ROLES: Exclude<DraftRole, 'unknown'>[] = ['top', 'jungle', 'middle', 'bottom', 'support']
 const DEFAULT_WEB_ROLLOUTS = 40
 const MAX_WEB_ROLLOUTS = 200
-const EXE_DOWNLOAD_URL = 'https://drive.google.com/file/d/18GEeVNACW8BYMhElANbsVbFWLC4dsp-3/view?usp=drive_link'
+const EXE_DOWNLOAD_URL = 'https://drive.google.com/file/d/1aFnu-ezRLUzk5SPOGNLj2j9fhK5CfNSK/view?usp=sharing'
 const VIRUSTOTAL_SCAN_URL =
   'https://www.virustotal.com/gui/file/29e021c773e315e67bfdcbcf753dff204227de7d7c4f257bfd4274686a976afa/detection'
 const GITHUB_PROFILE_URL = 'https://github.com/alexg0405'

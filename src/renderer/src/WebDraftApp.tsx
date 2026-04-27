@@ -50,6 +50,11 @@ type VisionPick = {
 type VisionResponse = {
   allyPicks?: VisionPick[]
   enemyPicks?: VisionPick[]
+  allies?: VisionPick[]
+  enemies?: VisionPick[]
+  opponentPicks?: VisionPick[]
+  theirTeam?: VisionPick[]
+  myTeam?: VisionPick[]
   myRole?: string
   confidence?: string
   error?: string
@@ -544,8 +549,16 @@ export function WebDraftApp() {
       if (!res.ok) {
         throw new Error(data.error ?? `Vision request failed (${res.status})`)
       }
-      applyVisionRows('ally', data.allyPicks)
-      applyVisionRows('enemy', data.enemyPicks)
+      const allyRows = data.allyPicks?.length ? data.allyPicks : data.allies?.length ? data.allies : data.myTeam
+      const enemyRows = data.enemyPicks?.length
+        ? data.enemyPicks
+        : data.enemies?.length
+          ? data.enemies
+          : data.opponentPicks?.length
+            ? data.opponentPicks
+            : data.theirTeam
+      applyVisionRows('ally', allyRows)
+      applyVisionRows('enemy', enemyRows)
       const detectedRole = normalizeRole(data.myRole)
       if (detectedRole) {
         setRole(detectedRole)

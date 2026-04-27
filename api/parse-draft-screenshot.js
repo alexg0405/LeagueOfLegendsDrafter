@@ -20,9 +20,42 @@ Schema:
 
 Rules:
 - Include up to five allies and five enemies.
+- The ally team is usually the player's team list/columns labeled ally, your team, blue side, left side, or the team containing the selected/local player.
+- The enemy team is usually labeled enemy, opponents, red side, their team, or appears in the opposite team list/column.
+- During champion select, enemy picks may appear on the right side or in a separate opponent column. Do not omit them if visible.
+- If only one side is clearly visible, fill that side and leave the other side empty.
 - If a champion is unclear, use an empty championName.
 - Prefer the role labels shown in the screenshot if visible.
 - If the screenshot is not champion select, return empty arrays and confidence "low".`
+}
+
+function normalizeRows(value) {
+  return Array.isArray(value) ? value : []
+}
+
+function normalizeResponse(parsed) {
+  const allyPicks =
+    normalizeRows(parsed.allyPicks).length > 0
+      ? normalizeRows(parsed.allyPicks)
+      : normalizeRows(parsed.allies).length > 0
+        ? normalizeRows(parsed.allies)
+        : normalizeRows(parsed.myTeam)
+
+  const enemyPicks =
+    normalizeRows(parsed.enemyPicks).length > 0
+      ? normalizeRows(parsed.enemyPicks)
+      : normalizeRows(parsed.enemies).length > 0
+        ? normalizeRows(parsed.enemies)
+        : normalizeRows(parsed.opponentPicks).length > 0
+          ? normalizeRows(parsed.opponentPicks)
+          : normalizeRows(parsed.theirTeam)
+
+  return {
+    allyPicks,
+    enemyPicks,
+    myRole: typeof parsed.myRole === 'string' ? parsed.myRole : 'unknown',
+    confidence: typeof parsed.confidence === 'string' ? parsed.confidence : 'low'
+  }
 }
 
 function firstText(json) {
@@ -107,7 +140,7 @@ export default async function handler(req, res) {
     const gemini = JSON.parse(raw)
     const text = firstText(gemini)
     const parsed = JSON.parse(extractJsonObject(text))
-    res.status(200).json(parsed)
+    res.status(200).json(normalizeResponse(parsed))
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
   }

@@ -329,6 +329,11 @@ function SuggestionRow({
             <span className="text-nexus-lime/95">{suggestion.championName}</span>
             <span className="text-nexus-muted"> · </span>
             <span className="text-nexus-text/90 tabular-nums">{suggestion.score}</span>
+            {suggestion.isLockedPick && (
+              <span className="ml-2 rounded-sm border border-nexus-lime/60 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">
+                Picked
+              </span>
+            )}
           </div>
           {suggestion.buildProfile && (
             <p className="m-0 mt-1.5 text-[11px] font-mono uppercase tracking-[0.16em] text-nexus-muted/75">

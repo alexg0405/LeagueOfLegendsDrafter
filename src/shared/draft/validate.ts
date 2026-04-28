@@ -96,6 +96,9 @@ function isPickSuggestion(x: unknown): x is PickSuggestion {
   if (typeof o.championId !== 'number' || typeof o.championName !== 'string' || typeof o.score !== 'number') {
     return false
   }
+  if (o.isLockedPick != null && typeof o.isLockedPick !== 'boolean') {
+    return false
+  }
   if (o.estWin != null && typeof o.estWin !== 'number') {
     return false
   }

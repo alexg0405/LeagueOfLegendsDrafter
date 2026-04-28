@@ -658,6 +658,18 @@ function snapshotValueV1(
   return v1ComponentScores(c, poolKey, st, idToName, comfortBy, trained, championMetaById).combined
 }
 
+function localLockedPickId(snap: DraftSnapshot, myRole: DraftRole): number | null {
+  const localCell = snap.localPlayerCellId
+  if (localCell != null) {
+    const localSlot = snap.ally.find((p) => p.cellId === localCell)
+    if (localSlot?.championId != null && localSlot.championId > 0) {
+      return localSlot.championId
+    }
+  }
+  const roleSlot = snap.ally.find((p) => p.role === myRole && p.championId != null && p.championId > 0)
+  return roleSlot?.championId ?? null
+}
+
 export function recommend(args: RecommendArgs): {
   suggestions: PickSuggestion[]
   patchLabel: string
@@ -691,11 +703,15 @@ export function recommend(args: RecommendArgs): {
     legal.add(c)
   }
   const un = state.unavailable
+  const pinnedLocalPickId = localLockedPickId(state.snapshot, myRole)
   const pool: number[] = []
   for (const c of Array.from(legal)) {
-    if (!un.has(c)) {
+    if (!un.has(c) || c === pinnedLocalPickId) {
       pool.push(c)
     }
+  }
+  if (pinnedLocalPickId != null && pinnedLocalPickId > 0 && !pool.includes(pinnedLocalPickId)) {
+    pool.push(pinnedLocalPickId)
   }
 
   const nameOf = (id: number) => resolveChampionName(id, idToName)
@@ -801,24 +817,31 @@ export function recommend(args: RecommendArgs): {
   }
 
   const deltaOf = (r: (typeof rows)[number]) => r.comp.contextCombined - r.comp.base
+  const withPinnedLocalPick = (candidateRows: typeof rows, n: number): typeof rows => {
+    const pinned = pinnedLocalPickId == null ? null : rows.find((r) => r.c === pinnedLocalPickId) ?? null
+    if (!pinned) {
+      return candidateRows.slice(0, n)
+    }
+    return [pinned, ...candidateRows.filter((r) => r.c !== pinned.c)].slice(0, n)
+  }
   const selectedRows = (() => {
     const n = Math.max(1, Math.trunc(maxResults))
     if (sortBy !== 'delta') {
-      return rows.slice(0, n)
+      return withPinnedLocalPick(rows, n)
     }
     if (contextReady) {
       const byDelta = rows.slice().sort((a, b) => deltaOf(b) - deltaOf(a))
       if (deltaListMode === 'worst') {
-        return byDelta.slice().reverse().slice(0, n)
+        return withPinnedLocalPick(byDelta.slice().reverse(), n)
       }
-      return byDelta.slice(0, n)
+      return withPinnedLocalPick(byDelta, n)
     }
     // Blinds (no other locks on the board): lobby deltas are ~flat; `rows` is already
     // best-first by EV (MC) or v1 score. Still honor "worst first" by inverting.
     if (deltaListMode === 'worst') {
-      return rows.slice().reverse().slice(0, n)
+      return withPinnedLocalPick(rows.slice().reverse(), n)
     }
-    return rows.slice(0, n)
+    return withPinnedLocalPick(rows, n)
   })()
 
   const out: PickSuggestion[] = selectedRows.map((it) => {
@@ -884,6 +907,7 @@ export function recommend(args: RecommendArgs): {
       championId: c,
       championName: nameOf(c),
       score: displayScore,
+      isLockedPick: c === pinnedLocalPickId ? true : undefined,
       baseWinRate: baseWinRate == null ? undefined : Math.round(baseWinRate * 1000) / 1000,
       contextWinRate: contextWinRate == null ? undefined : Math.round(contextWinRate * 1000) / 1000,
       winRateDelta: winRateDelta == null ? undefined : Math.round(winRateDelta * 1000) / 1000,

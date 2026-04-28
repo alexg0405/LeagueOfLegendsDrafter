@@ -304,6 +304,11 @@ export function NexusOperationsView({
                 )}
                 <div className="min-w-0">
                   <span className="text-nexus-lime/95 font-medium">{s.championName}</span>
+                  {s.isLockedPick && (
+                    <span className="ml-2 border border-nexus-lime/60 px-1 py-0.5 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">
+                      Picked
+                    </span>
+                  )}
                   <span className="text-nexus-line"> </span>
                   <span className="text-nexus-lime/70">({s.score})</span>
                   {s.estWin != null && (

@@ -77,6 +77,8 @@ export type PickSuggestion = {
   championName: string
   score: number
   reasons: SuggestionReason[]
+  /** True when this row is the local player's already locked champion, pinned for post-lock info. */
+  isLockedPick?: boolean
   /** Baseline role winrate proxy for this champion (0-1). */
   baseWinRate?: number
   /** Contextual winrate proxy for this board (0-1). */

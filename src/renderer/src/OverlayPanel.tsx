@@ -969,6 +969,11 @@ export function OverlayPanel() {
                         <span className="text-nexus-lime/95">{p.championName}</span>
                         <span className="text-nexus-muted"> · </span>
                         <span className="text-nexus-text/90 tabular-nums">{p.score}</span>
+                        {p.isLockedPick && (
+                          <span className="ml-2 border border-nexus-lime/70 px-1 py-0.5 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/90">
+                            Picked
+                          </span>
+                        )}
                       </div>
                       {p.baseWinRate != null && p.contextWinRate != null && p.winRateDelta != null && (
                         <div className="font-mono font-bold text-xs text-nexus-muted mt-1 tabular-nums">

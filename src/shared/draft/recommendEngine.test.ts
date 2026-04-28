@@ -346,6 +346,48 @@ describe('recommend v1', () => {
     const naut = suggestions.find((s) => s.championId === 111)
     expect(naut?.reasons).toContain('team_synergy')
   })
+
+  it('pins the local locked pick first so its info card remains visible', () => {
+    const snap: DraftSnapshot = {
+      ally: [
+        { role: 'top', championId: null, championName: null, cellId: 0 },
+        { role: 'jungle', championId: 64, championName: 'Lee Sin', cellId: 1 },
+        { role: 'middle', championId: 103, championName: 'Ahri', cellId: 2 },
+        { role: 'bottom', championId: null, championName: null, cellId: 3 },
+        { role: 'support', championId: null, championName: null, cellId: 4 }
+      ],
+      enemy: [
+        { role: 'top', championId: null, championName: null, cellId: 5 },
+        { role: 'jungle', championId: null, championName: null, cellId: 6 },
+        { role: 'middle', championId: 238, championName: 'Zed', cellId: 7 },
+        { role: 'bottom', championId: null, championName: null, cellId: 8 },
+        { role: 'support', championId: null, championName: null, cellId: 9 }
+      ],
+      myTeam: '100',
+      myRole: 'middle',
+      localPlayerCellId: 2,
+      bans: null,
+      myPickOrder: null
+    }
+    const st = buildEngineState(snap, 'middle', {
+      bans: null,
+      myPickOrder: null,
+      dataDragonVersion: null,
+      patch: 'test'
+    })
+    expect(st.unavailable.has(103)).toBe(true)
+
+    const { suggestions } = recommend({
+      state: st,
+      idToName: idMap,
+      maxResults: 5,
+      sortBy: 'delta',
+      monteCarloSamples: 0
+    })
+    expect(suggestions[0]?.championId).toBe(103)
+    expect(suggestions[0]?.isLockedPick).toBe(true)
+    expect(suggestions[0]?.runes).toBeTruthy()
+  })
 })
 
 describe('Monte Carlo helpers', () => {

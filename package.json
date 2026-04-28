@@ -60,7 +60,7 @@
   "build": {
     "appId": "dev.nexusdraft.app",
     "productName": "Nexus Draft",
-    "icon": "LOGO.png",
+    "icon": "favicon.png",
     "copyright": "Copyright © 2026",
     "directories": {
       "output": "release"
@@ -68,7 +68,7 @@
     "files": [
       "out/**/*",
       "package.json",
-      "LOGO.png"
+      "favicon.png"
     ],
     "extraResources": [
       {
@@ -78,7 +78,7 @@
     ],
     "asar": true,
     "win": {
-      "icon": "LOGO.png",
+      "icon": "favicon.png",
       "target": [
         {
           "target": "nsis",

@@ -47,7 +47,7 @@ const _dirname = dirname(fileURLToPath(import.meta.url))
 const isDev = !app.isPackaged
 
 function windowIconPath(): string {
-  return isDev ? resolve(process.cwd(), 'LOGO.png') : resolve(app.getAppPath(), 'LOGO.png')
+  return isDev ? resolve(process.cwd(), 'favicon.png') : resolve(app.getAppPath(), 'favicon.png')
 }
 
 /** Avoid spam when the renderer posts draft payloads that fail `isDraftUpdate` (e.g. mid-hydration). */

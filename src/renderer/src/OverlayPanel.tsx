@@ -10,6 +10,7 @@ import {
   getChampionBuildProfile,
   isDraftUpdate,
   MATCHUP_BONUS,
+  MEANINGFUL_TEAM_SYNERGY_DELTA,
   nameMatchesChampionQuery,
   publicMetaLaneRate,
   publicMetaCandidateIdsForRole,
@@ -933,11 +934,15 @@ export function OverlayPanel() {
             key={d.boardSignature ? d.boardSignature : d.updatedAt}
           >
             {topPicks.map((p, i) => {
+              const showTeamSynergy =
+                p.reasons.includes('team_synergy') &&
+                p.winRateDelta != null &&
+                Math.abs(p.winRateDelta) >= MEANINGFUL_TEAM_SYNERGY_DELTA
               const allies = bestAllySlotsForCandidate(p.championId, poolRole, s?.ally ?? [], trainedEffects)
               const enemies = bestEnemySlotsForCandidate(p.championId, poolRole, s?.enemy ?? [])
               const allyFallback = focusedSlots(s?.ally ?? [], poolRole, 'ally')
               const enemyFallback = focusedSlots(s?.enemy ?? [], poolRole, 'enemy')
-              const synergySlots = allies.length ? allies : allyFallback
+              const synergySlots = showTeamSynergy ? (allies.length ? allies : allyFallback) : []
               const goodVsSlots = enemies.length ? enemies : enemyFallback
               const intel = formatRuneTipNote(
                 p.runes?.note,
@@ -989,7 +994,8 @@ export function OverlayPanel() {
                     </div>
                   </div>
 
-                  <div className="mt-2 grid grid-cols-2 gap-1.5 font-mono text-[10px] leading-snug">
+                  <div className={['mt-2 grid gap-1.5 font-mono text-[10px] leading-snug', showTeamSynergy ? 'grid-cols-2' : 'grid-cols-1'].join(' ')}>
+                    {showTeamSynergy && (
                     <div className="border-l-2 border-[#23d5b0] bg-nexus-bg/20 pl-1.5 pr-1 py-0.5 min-w-0">
                       <span className="uppercase tracking-[0.12em] text-nexus-lime/80">Team synergy</span>
                       <span className="text-nexus-line"> · </span>
@@ -1006,6 +1012,7 @@ export function OverlayPanel() {
                           : <span className="text-nexus-text/80">pending</span>}
                       </span>
                     </div>
+                    )}
                     <div className="border-l-2 border-[#f87171] bg-nexus-bg/20 pl-1.5 pr-1 py-0.5 min-w-0">
                       <span className="uppercase tracking-[0.12em] text-nexus-red/80">Good vs</span>
                       <span className="text-nexus-line"> · </span>

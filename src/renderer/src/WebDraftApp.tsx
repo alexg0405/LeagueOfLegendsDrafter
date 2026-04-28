@@ -15,6 +15,7 @@ import {
   ENGINE_V1_LABEL,
   focusedContextSlots,
   formatRuneTipNote,
+  MEANINGFUL_TEAM_SYNERGY_DELTA,
   resolveChampionName,
   suggestPicks,
   type DraftDeltaListMode,
@@ -299,6 +300,10 @@ function SuggestionRow({
   nameById: ReadonlyMap<number, string>
 }) {
   const poolRole: DraftRole = myRole
+  const showTeamSynergy =
+    suggestion.reasons.includes('team_synergy') &&
+    suggestion.winRateDelta != null &&
+    Math.abs(suggestion.winRateDelta) >= MEANINGFUL_TEAM_SYNERGY_DELTA
   const allyCtx = useMemo(() => slotPicksToContextSlots(snapshot.ally), [snapshot.ally])
   const enemyCtx = useMemo(() => slotPicksToContextSlots(snapshot.enemy), [snapshot.enemy])
   const { synergySlots, goodVsSlots } = useMemo(() => {
@@ -307,10 +312,10 @@ function SuggestionRow({
     const allyFallback = focusedContextSlots(allyCtx, poolRole, 'ally')
     const enemyFallback = focusedContextSlots(enemyCtx, poolRole, 'enemy')
     return {
-      synergySlots: rankedAllies.length ? rankedAllies : allyFallback,
+      synergySlots: showTeamSynergy ? (rankedAllies.length ? rankedAllies : allyFallback) : [],
       goodVsSlots: rankedEnemies.length ? rankedEnemies : enemyFallback
     }
-  }, [suggestion.championId, poolRole, allyCtx, enemyCtx])
+  }, [suggestion.championId, showTeamSynergy, poolRole, allyCtx, enemyCtx])
   const tip = formatRuneTipNote(
     suggestion.runes?.note,
     suggestion.buildProfile?.buildHint ?? 'Use this pick when it fits your lane matchup and team damage profile.'
@@ -346,29 +351,34 @@ function SuggestionRow({
         <div
           className="py-2.5"
           role="group"
-          aria-label="Team synergy and good-versus lobby context for this pick"
+          aria-label={showTeamSynergy ? 'Team synergy and good-versus lobby context for this pick' : 'Good-versus lobby context for this pick'}
         >
           <div
-            className="grid grid-cols-2 gap-2 rounded-md border border-white/[0.12] bg-nexus-bg/40 p-2 sm:gap-1.5"
-            aria-label="Champion faces for best ally synergy and good-versus enemies"
+            className={[
+              'grid gap-2 rounded-md border border-white/[0.12] bg-nexus-bg/40 p-2 sm:gap-1.5',
+              showTeamSynergy ? 'grid-cols-2' : 'grid-cols-1'
+            ].join(' ')}
+            aria-label={showTeamSynergy ? 'Champion faces for best ally synergy and good-versus enemies' : 'Champion faces for good-versus enemies'}
           >
-            <div className="min-w-0 border-l-4 border-nexus-lime bg-nexus-surface-2/40 py-1 pl-2 pr-1">
-              <div className="text-[0.65rem] uppercase tracking-[0.1em] text-nexus-lime/90">Team synergy</div>
-              <div className="mt-1 inline-flex min-h-7 max-w-full flex-wrap items-center gap-1 text-nexus-text/90">
-                {synergySlots.length
-                  ? synergySlots.map((slot) => (
-                      <SuggestionContextPortrait
-                        key={`syn-${suggestion.championId}-${slot.role}-${slot.championId}`}
-                        slot={slot}
-                        champions={champions}
-                        ddragonVersion={ddragonVersion}
-                        nameById={nameById}
-                        tone="ally"
-                      />
-                    ))
-                  : 'pending'}
+            {showTeamSynergy && (
+              <div className="min-w-0 border-l-4 border-nexus-lime bg-nexus-surface-2/40 py-1 pl-2 pr-1">
+                <div className="text-[0.65rem] uppercase tracking-[0.1em] text-nexus-lime/90">Team synergy</div>
+                <div className="mt-1 inline-flex min-h-7 max-w-full flex-wrap items-center gap-1 text-nexus-text/90">
+                  {synergySlots.length
+                    ? synergySlots.map((slot) => (
+                        <SuggestionContextPortrait
+                          key={`syn-${suggestion.championId}-${slot.role}-${slot.championId}`}
+                          slot={slot}
+                          champions={champions}
+                          ddragonVersion={ddragonVersion}
+                          nameById={nameById}
+                          tone="ally"
+                        />
+                      ))
+                    : 'pending'}
+                </div>
               </div>
-            </div>
+            )}
             <div className="min-w-0 border-l-4 border-nexus-red bg-nexus-surface-2/40 py-1 pl-2 pr-1">
               <div className="text-[0.65rem] uppercase tracking-[0.1em] text-nexus-red/85">Good vs</div>
               <div className="mt-1 inline-flex min-h-7 max-w-full flex-wrap items-center gap-1 text-nexus-text/90">

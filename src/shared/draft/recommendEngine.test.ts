@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { buildEngineState, legalChampionSetForRole } from './draftState'
-import { cloneWithMyPick, completeDraftRandomly, recommend, v1ComponentScores, ENGINE_V1_LABEL } from './recommendEngine'
+import {
+  cloneWithMyPick,
+  completeDraftRandomly,
+  recommend,
+  v1ComponentScores,
+  ENGINE_V1_LABEL,
+  MEANINGFUL_TEAM_SYNERGY_DELTA
+} from './recommendEngine'
 import type { CompiledTrainedEffects } from './trainedEffects'
 import type { DraftSnapshot } from './types'
 
@@ -12,6 +19,9 @@ const idMap = new Map<number, string>([
   [64, 'Lee Sin'],
   [77, 'Udyr'],
   [103, 'Ahri'],
+  [111, 'Nautilus'],
+  [22, 'Ashe'],
+  [81, 'Ezreal'],
   [222, 'Jinx']
 ])
 
@@ -292,6 +302,49 @@ describe('recommend v1', () => {
       monteCarloSamples: 0
     })
     expect(suggestions.some((s) => s.championId === 157)).toBe(false)
+  })
+
+  it('lets strong ally hovers create a visible team-synergy delta', () => {
+    const snap: DraftSnapshot = {
+      ally: [
+        { role: 'top', championId: 81, championName: 'Ezreal', cellId: 0 },
+        { role: 'jungle', championId: null, championName: null, cellId: 1 },
+        { role: 'middle', championId: null, championName: null, cellId: 2 },
+        { role: 'bottom', championId: 22, championName: 'Ashe', cellId: 3 },
+        { role: 'support', championId: null, championName: null, cellId: 4 }
+      ],
+      enemy: [
+        { role: 'top', championId: null, championName: null, cellId: 5 },
+        { role: 'jungle', championId: null, championName: null, cellId: 6 },
+        { role: 'middle', championId: null, championName: null, cellId: 7 },
+        { role: 'bottom', championId: null, championName: null, cellId: 8 },
+        { role: 'support', championId: null, championName: null, cellId: 9 }
+      ],
+      myTeam: '100',
+      myRole: 'support',
+      localPlayerCellId: 4,
+      bans: null,
+      myPickOrder: null
+    }
+    const st = buildEngineState(snap, 'support', {
+      bans: null,
+      myPickOrder: null,
+      dataDragonVersion: null,
+      patch: 'test'
+    })
+    const scores = v1ComponentScores(111, 'support', st, idMap, null)
+    expect(scores.ally).toBeGreaterThan(0.53)
+    expect(scores.contextCombined - scores.base).toBeGreaterThanOrEqual(MEANINGFUL_TEAM_SYNERGY_DELTA)
+
+    const { suggestions } = recommend({
+      state: st,
+      idToName: idMap,
+      maxResults: 120,
+      sortBy: 'delta',
+      monteCarloSamples: 0
+    })
+    const naut = suggestions.find((s) => s.championId === 111)
+    expect(naut?.reasons).toContain('team_synergy')
   })
 })
 

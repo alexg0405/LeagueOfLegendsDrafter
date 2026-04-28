@@ -33,6 +33,7 @@ export {
   completeDraftRandomly,
   ENGINE_V1_LABEL,
   ENGINE_MC_LABEL,
+  MEANINGFUL_TEAM_SYNERGY_DELTA,
   type RecommendArgs
 } from './recommendEngine'
 export { ALLY_SYNERGY_BONUS } from './synergyData'

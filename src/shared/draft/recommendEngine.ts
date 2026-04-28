@@ -32,6 +32,7 @@ import type { DraftDeltaListMode, DraftRole, DraftSnapshot, PickSuggestion, Sugg
 
 export const ENGINE_V1_LABEL = 'engine-v1'
 export const ENGINE_MC_LABEL = 'engine-v1+mc'
+export const MEANINGFUL_TEAM_SYNERGY_DELTA = 0.003
 
 export type RecommendArgs = {
   state: DraftEngineState
@@ -51,15 +52,16 @@ export type RecommendArgs = {
   deltaListMode?: DraftDeltaListMode
 }
 
-const ALLY_ADJ_MIN = 0.05
-const ALLY_ADJ_GROWTH = 0.05
+const ALLY_ADJ_MIN = 0.09
+const ALLY_ADJ_GROWTH = 0.08
+const ALLY_HEURISTIC_SCALE = 1.4
 const ENEMY_ADJ_MIN = 0.2
 const ENEMY_ADJ_GROWTH = 0.3
 const COMP_ADJ_MIN = 0.02
 const COMP_ADJ_GROWTH = 0.06
 const COMFORT_ADJ_MAX = 0.04
 
-const R_ALLY_PRIOR = 150
+const R_ALLY_PRIOR = 80
 const R_ENEMY_PRIOR = 35
 const R_COMP_PRIOR = 500
 const R_PERSONAL_PRIOR = 40
@@ -221,7 +223,7 @@ function allyTerm(
     } else {
       const f =
         ALLY_SYNERGY_BONUS[String(c)]?.[String(al)] ?? ALLY_SYNERGY_BONUS[String(al)]?.[String(c)] ?? 0
-      t += bonusToP(f, 0.4)
+      t += bonusToP(f, ALLY_HEURISTIC_SCALE)
     }
     n += 1
   }
@@ -826,15 +828,17 @@ export function recommend(args: RecommendArgs): {
     const baseWinRate = contextReady ? comp.base : undefined
     const contextWinRate = contextReady ? comp.contextCombined : undefined
     const winRateDelta = contextReady ? contextWinRate! - baseWinRate! : undefined
+    const hasMeaningfulTeamSynergyDelta =
+      winRateDelta != null && Math.abs(winRateDelta) >= MEANINGFUL_TEAM_SYNERGY_DELTA
     const displayScore = Math.round((1 + winRateToBonus(pScore, useMc ? 2.6 : 3.2)) * 100) / 100
     const reasons: SuggestionReason[] = ['fill_role']
     if (comp.base > 0.51) {
       reasons.push('base_wr')
     }
-    if (comp.ally > 0.51) {
+    if (hasMeaningfulTeamSynergyDelta && comp.ally > 0.51) {
       reasons.push('team_synergy')
     }
-    if (comp.comp > 0.53) {
+    if (hasMeaningfulTeamSynergyDelta && comp.comp > 0.53) {
       reasons.push('team_synergy')
     }
     if (comp.enemy > 0.51) {
@@ -853,7 +857,12 @@ export function recommend(args: RecommendArgs): {
     if (useMc && (it.risk ?? 0) < 0.1) {
       reasons.push('meta_safe')
     }
-    if (state.myRole === 'support' && [12, 53, 111, 201].includes(c) && comp.ally > 0.5) {
+    if (
+      hasMeaningfulTeamSynergyDelta &&
+      state.myRole === 'support' &&
+      [12, 53, 111, 201].includes(c) &&
+      comp.ally > 0.5
+    ) {
       reasons.push('team_synergy')
     }
     const detailParts = useMc

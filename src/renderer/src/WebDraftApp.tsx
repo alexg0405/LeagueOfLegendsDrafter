@@ -170,11 +170,11 @@ function readWebRoute(): WebRoute {
     return 'draft'
   }
   const path = window.location.pathname.replace(/\/+$/, '')
-  return path.endsWith('/suggestions') ? 'suggestions' : 'draft'
+  return path.endsWith('/ask') || path.endsWith('/suggestions') ? 'suggestions' : 'draft'
 }
 
 function suggestionCategoryLabel(value: SuggestionCategory): string {
-  return SUGGESTION_CATEGORIES.find((category) => category.value === value)?.label ?? 'Request'
+  return SUGGESTION_CATEGORIES.find((category) => category.value === value)?.label ?? 'Ask'
 }
 
 function compactValue(value: string): string {
@@ -189,7 +189,7 @@ function suggestionRequestText(form: SuggestionForm): string {
     `Summoner / region: ${compactValue(form.summoner) || 'Not specified'}`,
     `Contact: ${compactValue(form.contact) || 'Not specified'}`,
     '',
-    'Request:',
+    'Ask:',
     form.message.trim() || 'Not specified',
     '',
     'Draft context:',
@@ -203,7 +203,7 @@ function suggestionIssueUrl(form: SuggestionForm): string {
   const titleSeed = message ? message.slice(0, 78) : suggestionCategoryLabel(form.category)
   const title = `[${suggestionCategoryLabel(form.category)}] ${titleSeed}`
   const body = [
-    '## Nexus Draft request',
+    '## Ask Nexus',
     '',
     `**Category:** ${suggestionCategoryLabel(form.category)}`,
     `**Role:** ${roleLabel(form.role)}`,
@@ -211,7 +211,7 @@ function suggestionIssueUrl(form: SuggestionForm): string {
     `**Summoner / region:** ${compactValue(form.summoner) || 'Not specified'}`,
     `**Contact:** ${compactValue(form.contact) || 'Not specified'}`,
     '',
-    '## Request',
+    '## Ask',
     '',
     form.message.trim() || 'Not specified',
     '',
@@ -596,23 +596,23 @@ function WebSuggestionsPage({ onNavigateDraft }: { onNavigateDraft: () => void }
   const handleOpenRequest = (event: ReactFormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!canOpenRequest) {
-      setStatus('Add a little more detail before opening the request.')
+      setStatus('Add a little more detail before opening Ask Nexus.')
       return
     }
     nexusWebTrack('open_request', { category: form.category })
     window.open(issueUrl, '_blank', 'noopener,noreferrer')
-    setStatus('Request opened in GitHub.')
+    setStatus('Ask Nexus opened in GitHub.')
   }
 
   const copyRequest = async () => {
     if (!canOpenRequest) {
-      setStatus('Add a little more detail before copying the request.')
+      setStatus('Add a little more detail before copying this ask.')
       return
     }
     try {
       await navigator.clipboard.writeText(requestText)
       nexusWebTrack('copy_request', { category: form.category })
-      setStatus('Request copied to clipboard.')
+      setStatus('Ask copied to clipboard.')
     } catch {
       setStatus('Copy failed. You can still select the preview text.')
     }
@@ -632,7 +632,7 @@ function WebSuggestionsPage({ onNavigateDraft }: { onNavigateDraft: () => void }
         <section className="relative mb-5 overflow-hidden border border-nexus-line bg-nexus-surface-2/90 p-5 shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
           <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(35,213,176,0.12),transparent_35%,rgba(83,166,255,0.08))]" aria-hidden />
           <div className="relative">
-            <MicroLabel className="text-nexus-lime/80">requests // draft help</MicroLabel>
+            <MicroLabel className="text-nexus-lime/80">ask nexus // feedback</MicroLabel>
             <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <h1 className="font-display text-5xl leading-none tracking-[0.06em] text-nexus-text drop-shadow-[0_0_18px_rgba(231,255,245,0.10)] sm:text-7xl">
@@ -662,7 +662,7 @@ function WebSuggestionsPage({ onNavigateDraft }: { onNavigateDraft: () => void }
         </section>
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_390px]">
-          <NexusPanel kicker="request" title="Suggestion request" accent>
+          <NexusPanel kicker="ask nexus" title="Ask or report" accent>
             <form className="space-y-4" onSubmit={handleOpenRequest}>
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="flex flex-col gap-1.5">
@@ -748,7 +748,7 @@ function WebSuggestionsPage({ onNavigateDraft }: { onNavigateDraft: () => void }
 
               <div className="flex flex-wrap items-center gap-2">
                 <button className={buttonClass} type="submit" disabled={!canOpenRequest}>
-                  Open Request
+                  Open Ask
                 </button>
                 <button
                   type="button"
@@ -776,14 +776,14 @@ function WebSuggestionsPage({ onNavigateDraft }: { onNavigateDraft: () => void }
           </NexusPanel>
 
           <aside className="min-w-0">
-            <NexusPanel kicker="preview" title="Request draft" className="lg:sticky lg:top-5">
+            <NexusPanel kicker="preview" title="Prepared ask" className="lg:sticky lg:top-5">
               <pre className="nexus-allow-select m-0 max-h-[30rem] overflow-auto whitespace-pre-wrap border border-nexus-line bg-nexus-bg/55 p-3 font-mono text-xs leading-relaxed text-nexus-muted">
                 {requestText}
               </pre>
               <div className="mt-4 border-t border-nexus-line/50 pt-3 font-mono text-xs leading-relaxed text-nexus-muted">
-                <p className="m-0">Opening the request uses a prefilled GitHub issue so nothing gets lost.</p>
+                <p className="m-0">Opening Ask Nexus uses a prefilled GitHub issue so nothing gets lost.</p>
                 <a className="mt-3 inline-flex text-nexus-lime/90 hover:text-nexus-lime" href={GITHUB_ISSUE_URL} target="_blank" rel="noreferrer">
-                  View existing requests
+                  View existing Ask Nexus posts
                 </a>
               </div>
             </NexusPanel>
@@ -791,7 +791,7 @@ function WebSuggestionsPage({ onNavigateDraft }: { onNavigateDraft: () => void }
         </div>
       </main>
       <VisitorCounter
-        dataLine="Nexus Draft requests page."
+        dataLine="Nexus Draft Ask Nexus page."
         legalLine="Nexus Draft is a fan project and is not affiliated with or endorsed by Riot Games, Inc. League of Legends and Riot Games are trademarks of Riot Games, Inc."
       />
     </div>
@@ -830,7 +830,7 @@ export function WebDraftApp() {
   const [webRoute, setWebRoute] = useState<WebRoute>(() => readWebRoute())
 
   const navigateWebRoute = useCallback((next: WebRoute) => {
-    const nextPath = next === 'suggestions' ? '/suggestions' : '/'
+    const nextPath = next === 'suggestions' ? '/ask' : '/'
     if (window.location.pathname !== nextPath) {
       window.history.pushState({}, '', nextPath)
     }
@@ -891,7 +891,7 @@ export function WebDraftApp() {
   }, [])
 
   useEffect(() => {
-    document.title = webRoute === 'suggestions' ? 'Requests | Nexus Draft' : 'Nexus Draft'
+    document.title = webRoute === 'suggestions' ? 'Ask Nexus | Nexus Draft' : 'Nexus Draft'
   }, [webRoute])
 
   useEffect(() => {
@@ -1289,13 +1289,13 @@ export function WebDraftApp() {
               </a>
               <a
                 className="nexus-focus inline-flex items-center justify-center border border-nexus-line px-5 py-2.5 font-display text-xs sm:text-sm tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10"
-                href="/suggestions"
+                href="/ask"
                 onClick={(event) => {
                   event.preventDefault()
                   navigateWebRoute('suggestions')
                 }}
               >
-                Requests
+                Ask Nexus
               </a>
               <button type="button" className={buttonClass} onClick={resetBoard}>
                 Reset Board
@@ -1303,6 +1303,19 @@ export function WebDraftApp() {
             </div>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-nexus-line/60 pt-3 font-mono text-xs uppercase tracking-[0.12em]">
+            <a
+              className="text-nexus-lime hover:text-nexus-text"
+              href="/ask"
+              onClick={(event) => {
+                event.preventDefault()
+                navigateWebRoute('suggestions')
+              }}
+            >
+              Ask Nexus
+            </a>
+            <span className="text-nexus-line" aria-hidden>
+              /
+            </span>
             <a className="text-nexus-lime/85 hover:text-nexus-lime" href={GITHUB_PROFILE_URL} target="_blank" rel="noreferrer">
               GitHub
             </a>

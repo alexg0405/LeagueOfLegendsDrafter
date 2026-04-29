@@ -41,7 +41,7 @@ const EXE_DOWNLOAD_URL = 'https://drive.google.com/file/d/1aFnu-ezRLUzk5SPOGNLj2
 const VIRUSTOTAL_SCAN_URL =
   'https://www.virustotal.com/gui/file/29e021c773e315e67bfdcbcf753dff204227de7d7c4f257bfd4274686a976afa/detection'
 const GITHUB_PROFILE_URL = 'https://github.com/alexg0405'
-const GITHUB_REPO_URL = 'https://github.com/alexg0405/LeagueOfLegendsDrafter'
+const GITHUB_REPO_URL = 'https://github.com/alexg0405/NexusDraftFeedback'
 const GITHUB_ISSUE_URL = `${GITHUB_REPO_URL}/issues/new`
 const VISITOR_COUNTER_URL = '/api/visit'
 

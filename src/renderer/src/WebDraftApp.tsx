@@ -10,7 +10,14 @@ import {
   type FormEvent as ReactFormEvent,
   type KeyboardEvent as ReactKeyEvent
 } from 'react'
-import { ddragonChampionImageUrl, getLatestDDragonVersion, loadChampionMaps, type ChampionLite } from '@shared/dataDragon'
+import {
+  ddragonChampionImageUrl,
+  getLatestDDragonVersion,
+  loadChampionMaps,
+  loadItemMaps,
+  type ChampionLite,
+  type ItemLite
+} from '@shared/dataDragon'
 import {
   bestAllySlotsForSuggestion,
   bestEnemySlotsForSuggestion,
@@ -42,7 +49,7 @@ import {
   type SuggestionContextSlot
 } from '@shared/draft'
 import { DraftItemPlanBlock as ItemPlanBlock, MicroLabel, NexusPanel, NexusPlus } from './nexus-ui'
-import { idbGetChampions, idbSetChampions } from './web/ddragonIndexedDbCache'
+import { idbGetChampions, idbGetItems, idbSetChampions, idbSetItems } from './web/ddragonIndexedDbCache'
 import {
   clearPersistedWebDraft,
   loadPersistedWebDraft,
@@ -682,7 +689,7 @@ function SuggestionRow({
                 <span className="text-nexus-lime/80">Plan:</span> {matchupPlan.summonerSpells}; {matchupPlan.startingItem}
               </p>
             )}
-            <ItemPlanBlock itemPlan={matchupPlan?.itemPlan} limit={2} />
+            <ItemPlanBlock itemPlan={matchupPlan?.itemPlan} ddragonVersion={ddragonVersion} limit={4} />
             {suggestion.buildProfile && suggestion.buildProfile.tagsLine !== '—' && (
               <p className="m-0 mt-1.5 text-nexus-muted/85">{suggestion.buildProfile.tagsLine}</p>
             )}
@@ -966,6 +973,7 @@ export function WebDraftApp() {
   const initialPlayerPoolProfile = useMemo(readPlayerChampionPoolProfile, [])
   const [ddragonVersion, setDdragonVersion] = useState<string | null>(null)
   const [champions, setChampions] = useState<ChampionLite[]>([])
+  const [items, setItems] = useState<ItemLite[]>([])
   const [nameById, setNameById] = useState(() => new Map<number, string>())
   const [loadError, setLoadError] = useState<string | null>(null)
   const [liveDataRevision, setLiveDataRevision] = useState(0)
@@ -1032,20 +1040,32 @@ export function WebDraftApp() {
           return
         }
         const cached = await idbGetChampions(version)
+        const cachedItems = await idbGetItems(version)
         if (cached && cached.length > 0) {
           setDdragonVersion(version)
           setChampions(cached)
           setNameById(new Map(cached.map((c) => [c.id, c.name] as const)))
+          if (cachedItems?.length) {
+            setItems(cachedItems)
+            return
+          }
+          const itemMaps = await loadItemMaps(version)
+          if (!cancelled) {
+            setItems(itemMaps.items)
+            void idbSetItems(version, itemMaps.items)
+          }
           return
         }
-        const maps = await loadChampionMaps(version)
+        const [maps, itemMaps] = await Promise.all([loadChampionMaps(version), loadItemMaps(version)])
         if (cancelled) {
           return
         }
         setDdragonVersion(version)
         setChampions(maps.champions)
+        setItems(itemMaps.items)
         setNameById(new Map(maps.champions.map((c) => [c.id, c.name] as const)))
         void idbSetChampions(version, maps.champions)
+        void idbSetItems(version, itemMaps.items)
       } catch (error) {
         if (!cancelled) {
           setLoadError(error instanceof Error ? error.message : String(error))
@@ -1195,7 +1215,7 @@ export function WebDraftApp() {
     return match
   }, [championByNormalizedName, championSearchRows])
   const championMetaById = useMemo(() => {
-    return new Map(champions.map((c) => [c.id, { tags: c.tags, partype: c.partype }]))
+    return new Map(champions.map((c) => [c.id, { tags: c.tags, partype: c.partype, passive: c.passive, spells: c.spells }]))
   }, [champions])
   const importedChampionPoolPrefs = useMemo(() => importedProfileToPreferences(playerPoolProfile), [playerPoolProfile])
   const effectiveChampionPoolPrefs = useMemo(
@@ -1269,7 +1289,8 @@ export function WebDraftApp() {
       enemyRoleInference,
       patchLabel,
       dataDragonVersion: ddragonVersion,
-      championPoolPreferences: championPoolPreferenceMap
+      championPoolPreferences: championPoolPreferenceMap,
+      itemCatalog: items
     })
   }, [
     snapshot,
@@ -1280,6 +1301,7 @@ export function WebDraftApp() {
     enemyRoleInference,
     patchLabel,
     ddragonVersion,
+    items,
     championPoolPreferenceMap,
     liveDataRevision
   ])
@@ -2099,7 +2121,7 @@ export function WebDraftApp() {
                       </p>
                       <p className="m-0 mt-1">Start: {topMatchupPlan.startingItem}</p>
                       <p className="m-0">Recall: {topMatchupPlan.firstRecall}</p>
-                      <ItemPlanBlock itemPlan={topMatchupPlan.itemPlan} limit={2} />
+                      <ItemPlanBlock itemPlan={topMatchupPlan.itemPlan} ddragonVersion={ddragonVersion} limit={4} />
                     </div>
                   )}
                   <details className="rounded-md border border-white/[0.08] bg-nexus-bg/35 px-2 py-2 text-nexus-muted">

@@ -191,12 +191,57 @@ function isDraftItemPlan(x: unknown): x is DraftItemPlan {
     return false
   }
   const o = x as Record<string, unknown>
+  const isItemRef = (row: unknown): boolean => {
+    if (row == null || typeof row !== 'object') {
+      return false
+    }
+    const r = row as Record<string, unknown>
+    return (
+      typeof r.itemId === 'number' &&
+      typeof r.name === 'string' &&
+      typeof r.reason === 'string' &&
+      typeof r.score === 'number' &&
+      typeof r.cost === 'number' &&
+      (r.phase === 'starter' || r.phase === 'component' || r.phase === 'boots' || r.phase === 'completed' || r.phase === 'consumable') &&
+      isStringArray(r.tags, 16)
+    )
+  }
+  const isItemRefs = (rows: unknown, max: number): boolean => Array.isArray(rows) && rows.length <= max && rows.every(isItemRef)
+  const isMatrixRows = (rows: unknown, max: number): boolean =>
+    Array.isArray(rows) &&
+    rows.length <= max &&
+    rows.every((row) => {
+      if (!isItemRef(row)) {
+        return false
+      }
+      const r = row as Record<string, unknown>
+      return isStringArray(r.goodInto, 8) && isStringArray(r.avoidWhen, 8)
+    })
+  const isThreats = (rows: unknown, max: number): boolean =>
+    Array.isArray(rows) &&
+    rows.length <= max &&
+    rows.every((row) => {
+      if (row == null || typeof row !== 'object') {
+        return false
+      }
+      const r = row as Record<string, unknown>
+      return typeof r.label === 'string' && typeof r.reason === 'string' && (r.tone === 'info' || r.tone === 'warning' || r.tone === 'danger')
+    })
   return (
     typeof o.core === 'string' &&
     typeof o.boots === 'string' &&
     typeof o.defensive === 'string' &&
     isStringArray(o.situational, 6) &&
-    isStringArray(o.notes, 6)
+    isStringArray(o.notes, 6) &&
+    (o.starting == null || isItemRefs(o.starting, 4)) &&
+    (o.firstRecall == null || isItemRefs(o.firstRecall, 6)) &&
+    (o.bootChoice == null || isItemRef(o.bootChoice)) &&
+    (o.bootAlternatives == null || isItemRefs(o.bootAlternatives, 4)) &&
+    (o.coreBuild == null || isItemRefs(o.coreBuild, 6)) &&
+    (o.finalBuild == null || isItemRefs(o.finalBuild, 8)) &&
+    (o.situationalItems == null || isItemRefs(o.situationalItems, 12)) &&
+    (o.matrixRows == null || isMatrixRows(o.matrixRows, 80)) &&
+    (o.threatSummary == null || isThreats(o.threatSummary, 12))
   )
 }
 

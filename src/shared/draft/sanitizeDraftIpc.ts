@@ -1,4 +1,15 @@
-import type { ChampionBuildProfile, DraftIntel, DraftItemPlan, DraftUpdate, EnemyRoleInference, PickSuggestion } from './types'
+import type {
+  ChampionBuildProfile,
+  DraftIntel,
+  DraftItemMatrixRow,
+  DraftItemPhase,
+  DraftItemPlan,
+  DraftItemRef,
+  DraftItemThreat,
+  DraftUpdate,
+  EnemyRoleInference,
+  PickSuggestion
+} from './types'
 import { isOverlayEngineEcho } from './validate'
 
 /**
@@ -151,12 +162,70 @@ function sanitizeDraftItemPlan(plan: unknown): DraftItemPlan | undefined {
   if (typeof p.core !== 'string' || typeof p.boots !== 'string' || typeof p.defensive !== 'string') {
     return undefined
   }
+  const itemRef = (raw: unknown): DraftItemRef | null => {
+    if (raw == null || typeof raw !== 'object') {
+      return null
+    }
+    const r = raw as Record<string, unknown>
+    const phase = r.phase as DraftItemPhase
+    if (phase !== 'starter' && phase !== 'component' && phase !== 'boots' && phase !== 'completed' && phase !== 'consumable') {
+      return null
+    }
+    return {
+      itemId: finiteOr(r.itemId as number | null | undefined, 0),
+      name: text(r.name, 'Item'),
+      reason: text(r.reason),
+      score: finiteOr(r.score as number | null | undefined, 0),
+      tags: sanitizeStringArray(r.tags, 16),
+      phase,
+      cost: finiteOr(r.cost as number | null | undefined, 0)
+    }
+  }
+  const itemRefs = (rows: unknown, max: number): DraftItemRef[] | undefined =>
+    Array.isArray(rows) ? rows.map(itemRef).filter((row): row is NonNullable<ReturnType<typeof itemRef>> => row != null && row.itemId > 0).slice(0, max) : undefined
+  const matrixRows: DraftItemMatrixRow[] | undefined = Array.isArray(p.matrixRows)
+    ? p.matrixRows
+        .map((row) => {
+          const base = itemRef(row)
+          if (!base || row == null || typeof row !== 'object') {
+            return null
+          }
+          const r = row as Record<string, unknown>
+          return {
+            ...base,
+            goodInto: sanitizeStringArray(r.goodInto, 8),
+            avoidWhen: sanitizeStringArray(r.avoidWhen, 8)
+          }
+        })
+        .filter((row): row is DraftItemMatrixRow => row != null && row.itemId > 0)
+        .slice(0, 80)
+    : undefined
+  const threats: DraftItemThreat[] | undefined = Array.isArray(p.threatSummary)
+    ? p.threatSummary
+        .filter((row) => row != null && typeof row === 'object')
+        .map((row) => {
+          const r = row as Record<string, unknown>
+          const tone: DraftItemThreat['tone'] = r.tone === 'danger' || r.tone === 'warning' || r.tone === 'info' ? r.tone : 'info'
+          return { label: text(r.label), tone, reason: text(r.reason) }
+        })
+        .filter((row) => row.label.length > 0)
+        .slice(0, 12)
+    : undefined
   return {
     core: p.core,
     boots: p.boots,
     defensive: p.defensive,
     situational: sanitizeStringArray(p.situational, 6),
-    notes: sanitizeStringArray(p.notes, 6)
+    notes: sanitizeStringArray(p.notes, 6),
+    starting: itemRefs(p.starting, 4),
+    firstRecall: itemRefs(p.firstRecall, 6),
+    bootChoice: itemRef(p.bootChoice),
+    bootAlternatives: itemRefs(p.bootAlternatives, 4),
+    coreBuild: itemRefs(p.coreBuild, 6),
+    finalBuild: itemRefs(p.finalBuild, 8),
+    situationalItems: itemRefs(p.situationalItems, 12),
+    matrixRows,
+    threatSummary: threats
   }
 }
 

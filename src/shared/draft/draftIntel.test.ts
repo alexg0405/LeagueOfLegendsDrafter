@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildDraftIntel, championPoolPreferenceToComfort } from './draftIntel'
 import type { DraftSnapshot, PickSuggestion } from './types'
+import type { ItemLite } from '../dataDragon'
 
 const names = new Map<number, string>([
   [81, 'Ezreal'],
@@ -63,6 +64,19 @@ function suggestion(championId: number, championName: string): PickSuggestion {
       tagsLine: 'Marksman',
       partype: 'Mana'
     }
+  }
+}
+
+function item(id: number, name: string, description: string, tags: string[], stats: Record<string, number>, total: number): ItemLite {
+  return {
+    id,
+    name,
+    description,
+    plaintext: description,
+    tags,
+    stats,
+    gold: { base: total, total, sell: Math.round(total * 0.7), purchasable: true },
+    maps: { 11: true }
   }
 }
 
@@ -134,6 +148,34 @@ describe('buildDraftIntel', () => {
     expect(plan?.situational.join(' ')).toMatch(/Anti-heal/)
     expect(plan?.situational.join(' ')).toMatch(/Team damage/)
     expect(plan?.notes.join(' ')).toMatch(/Ziggs/)
+  })
+
+  it('adds rich item ids and matrix rows when an item catalog is available', () => {
+    const s = snapshot()
+    s.enemy = [slot('top', 54), slot('jungle', 32), slot('middle', 99), slot('bottom', 115), slot('support', 267)]
+    const intel = buildDraftIntel({
+      snapshot: s,
+      myRole: 'bottom',
+      suggestions: [suggestion(81, 'Ezreal')],
+      idToName: names,
+      championMetaById: new Map([
+        [54, { tags: ['Tank'], partype: 'Mana', spells: [{ name: 'Unstoppable Force', description: 'Knocks enemies up.', tooltip: '' }] }],
+        [267, { tags: ['Support'], partype: 'Mana', spells: [{ name: 'Ebb and Flow', description: 'Heals an ally and shields them with water.', tooltip: '' }] }]
+      ]),
+      itemCatalog: [
+        item(1055, "Doran's Blade", 'Starter attack damage and health.', ['Damage', 'Health'], { FlatPhysicalDamageMod: 10, FlatHPPoolMod: 80 }, 450),
+        item(1037, 'Pickaxe', 'Attack damage component.', ['Damage'], { FlatPhysicalDamageMod: 25 }, 875),
+        item(3111, "Mercury's Treads", 'Magic Resist and Tenacity.', ['Boots', 'SpellBlock'], { FlatSpellBlockMod: 25 }, 1200),
+        item(3165, 'Morellonomicon', 'Ability Power and Grievous Wounds.', ['SpellDamage'], { FlatMagicDamageMod: 75 }, 2900),
+        item(3071, 'Black Cleaver', 'Attack damage, health, and armor reduction.', ['Damage', 'Health'], { FlatPhysicalDamageMod: 40, FlatHPPoolMod: 400 }, 3000)
+      ]
+    })
+
+    const plan = intel?.matchupPlans[0]?.itemPlan
+    expect(plan?.starting?.[0]?.itemId).toBe(1055)
+    expect(plan?.bootChoice?.name).toMatch(/Mercury/)
+    expect(plan?.matrixRows?.some((row) => row.tags.includes('anti-heal'))).toBe(true)
+    expect(plan?.threatSummary?.map((row) => row.label)).toEqual(expect.arrayContaining(['Hard CC', 'Healing']))
   })
 
   it('maps champion pool preferences to comfort weights', () => {

@@ -7,7 +7,9 @@ import {
   type PublicMetaBaseStat,
   type RoleKey
 } from './metaStats'
+import { buildAdaptiveItemPlan, championKitProfileFromTexts } from './itemIntelligence'
 import { resolveChampionName } from './championNameFallback'
+import type { ChampionSpellLite, ItemLite } from '../dataDragon'
 import type {
   ChampionPoolPreference,
   DraftIntel,
@@ -23,7 +25,7 @@ import type {
 const ROLE_KEYS = ['top', 'jungle', 'middle', 'bottom', 'support'] as const
 const PATCH_DATA_NOTE = 'Current-patch Emerald+ public meta seed; early-patch winrates can move as games accumulate.'
 
-type ChampionMeta = { tags: string[]; partype: string }
+type ChampionMeta = { tags: string[]; partype: string; passive?: ChampionSpellLite; spells?: ChampionSpellLite[] }
 
 export type BuildDraftIntelArgs = {
   snapshot: DraftSnapshot | null
@@ -35,6 +37,7 @@ export type BuildDraftIntelArgs = {
   patchLabel?: string | null
   dataDragonVersion?: string | null
   championPoolPreferences?: ReadonlyMap<number, ChampionPoolPreference> | null
+  itemCatalog?: readonly ItemLite[] | null
 }
 
 type SlotRead = {
@@ -401,6 +404,37 @@ function teamDamageCounts(team: TeamRead): { magic: number; physical: number } {
   }
 }
 
+function kitTexts(meta: ChampionMeta | null | undefined): string[] {
+  if (!meta) {
+    return []
+  }
+  return [
+    meta.passive?.name,
+    meta.passive?.description,
+    meta.passive?.tooltip,
+    ...(meta.spells ?? []).flatMap((spell) => [spell.name, spell.description, spell.tooltip])
+  ].filter((line): line is string => typeof line === 'string' && line.length > 0)
+}
+
+function teamKitSignals(team: TeamRead, championMetaById: ReadonlyMap<number, ChampionMeta> | null | undefined) {
+  const signals = {
+    hardCc: 0,
+    healing: 0,
+    shielding: 0,
+    mobility: 0,
+    burst: 0
+  }
+  for (const slot of team.slots) {
+    const kit = championKitProfileFromTexts(kitTexts(championMetaById?.get(slot.championId)))
+    if (kit.hardCc) signals.hardCc += 1
+    if (kit.heal || kit.sustain) signals.healing += 1
+    if (kit.shield) signals.shielding += 1
+    if (kit.mobility) signals.mobility += 1
+    if (kit.burst || kit.execute) signals.burst += 1
+  }
+  return signals
+}
+
 function canAddMagicDamage(s: PickSuggestion): boolean {
   const dmg = s.buildProfile?.damage
   return dmg === 'ap' || dmg === 'mixed' || dmg === 'flex' || hasSuggestionClass(s, 'mage')
@@ -557,7 +591,7 @@ function itemNotes(s: PickSuggestion, myRole: DraftRole, ally: TeamRead, enemy: 
   return notes.slice(0, 4)
 }
 
-function itemPlan(
+function fallbackItemPlan(
   s: PickSuggestion,
   myRole: DraftRole,
   ally: TeamRead,
@@ -571,6 +605,58 @@ function itemPlan(
     situational: situationalItemPlans(s, myRole, ally, enemy),
     notes: itemNotes(s, myRole, ally, enemy, laneOpponent)
   }
+}
+
+function itemPlan(
+  s: PickSuggestion,
+  myRole: DraftRole,
+  ally: TeamRead,
+  enemy: TeamRead,
+  laneOpponent: SlotPick | null,
+  championMetaById: ReadonlyMap<number, ChampionMeta> | null | undefined,
+  itemCatalog: readonly ItemLite[] | null | undefined
+): DraftItemPlan {
+  const fallback = fallbackItemPlan(s, myRole, ally, enemy, laneOpponent)
+  if (!itemCatalog?.length) {
+    return fallback
+  }
+  const allyDamage = teamDamageCounts(ally)
+  const enemyDamage = teamDamageCounts(enemy)
+  const enemyKit = teamKitSignals(enemy, championMetaById)
+  const laneThreat = laneOpponent?.championName ? getChampionThreatOverride(laneOpponent.championName)?.threat ?? null : null
+  return buildAdaptiveItemPlan(itemCatalog, {
+    championName: s.championName,
+    role: myRole,
+    buildProfile: s.buildProfile,
+    ally: {
+      magic: allyDamage.magic,
+      physical: allyDamage.physical,
+      frontline: ally.frontline,
+      engage: ally.engage,
+      scaling: ally.scaling,
+      slots: ally.slots.length
+    },
+    enemy: {
+      magic: enemyDamage.magic,
+      physical: enemyDamage.physical,
+      frontline: enemy.frontline,
+      tanks: enemy.tanks,
+      assassins: enemy.assassins,
+      supports: enemy.supports,
+      dive: enemy.dive,
+      poke: enemy.poke,
+      pick: enemy.pick,
+      sustain: enemy.sustain,
+      marksmen: enemy.marksmen,
+      hardCc: enemyKit.hardCc,
+      healing: enemyKit.healing,
+      shielding: enemyKit.shielding,
+      mobility: enemyKit.mobility,
+      burst: enemyKit.burst
+    },
+    laneThreat,
+    fallback
+  })
 }
 
 function runeExport(runes: RuneLoadoutHint | null | undefined): string {
@@ -605,7 +691,9 @@ function matchupPlans(
   ally: TeamRead,
   enemy: TeamRead,
   idToName: ReadonlyMap<number, string> | null,
-  enemyRoleInference?: EnemyRoleInference[] | null
+  enemyRoleInference?: EnemyRoleInference[] | null,
+  championMetaById?: ReadonlyMap<number, ChampionMeta> | null,
+  itemCatalog?: readonly ItemLite[] | null
 ): DraftIntel['matchupPlans'] {
   const laneOpponent = likelyLaneOpponent(snapshot, myRole, enemyRoleInference)
   const laneOpponentId = laneOpponent?.championId ?? null
@@ -620,7 +708,7 @@ function matchupPlans(
     firstRecall: firstRecall(s, myRole, enemy),
     runeExport: runeExport(s.runes),
     gamePlan: planLine(s, myRole, ally, enemy, laneOpponent),
-    itemPlan: itemPlan(s, myRole, ally, enemy, laneOpponent)
+    itemPlan: itemPlan(s, myRole, ally, enemy, laneOpponent, championMetaById, itemCatalog)
   }))
 }
 
@@ -718,7 +806,8 @@ export function buildDraftIntel({
   championMetaById,
   enemyRoleInference,
   patchLabel,
-  dataDragonVersion
+  dataDragonVersion,
+  itemCatalog
 }: BuildDraftIntelArgs): DraftIntel | null {
   if (!snapshot && suggestions.length === 0) {
     return null
@@ -730,7 +819,7 @@ export function buildDraftIntel({
     (note): note is string => Boolean(note)
   )
   const bans = banRecommendations(snapshot, myRole, idToName, enemyRoleInference)
-  const plans = matchupPlans(suggestions, snapshot, myRole, ally, enemy, idToName, enemyRoleInference)
+  const plans = matchupPlans(suggestions, snapshot, myRole, ally, enemy, idToName, enemyRoleInference, championMetaById, itemCatalog)
   const compIdentity: DraftIntel['compIdentity'] = {
     ally: identityLabels(ally, 'ally'),
     enemy: identityLabels(enemy, 'enemy'),

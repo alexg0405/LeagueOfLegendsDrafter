@@ -85,7 +85,58 @@ describe('DraftUpdate enemy role inference payload', () => {
               boots: "Mercury's Treads into heavy CC.",
               defensive: 'Buy MR if mid/jungle burst is fed.',
               situational: ['Anti-heal into sustain.', 'Anti-tank into frontline.'],
-              notes: ['Team damage is mostly physical.']
+              notes: ['Team damage is mostly physical.'],
+              starting: [
+                {
+                  itemId: 1055,
+                  name: "Doran's Blade",
+                  reason: 'safe ranged start',
+                  score: 77,
+                  tags: ['ad', 'starter'],
+                  phase: 'starter',
+                  cost: 450
+                }
+              ],
+              bootChoice: {
+                itemId: 3111,
+                name: "Mercury's Treads",
+                reason: 'answers hard CC',
+                score: 91,
+                tags: ['boots', 'mr', 'anti-cc'],
+                phase: 'boots',
+                cost: 1200
+              },
+              coreBuild: [
+                {
+                  itemId: 3071,
+                  name: 'Black Cleaver',
+                  reason: 'answers frontline',
+                  score: 88,
+                  tags: ['ad', 'health', 'anti-tank'],
+                  phase: 'completed',
+                  cost: 3000
+                }
+              ],
+              matrixRows: [
+                {
+                  itemId: 3071,
+                  name: 'Black Cleaver',
+                  reason: 'answers frontline',
+                  score: 88,
+                  tags: ['ad', 'health', 'anti-tank'],
+                  phase: 'completed',
+                  cost: 3000,
+                  goodInto: ['frontline'],
+                  avoidWhen: []
+                }
+              ],
+              threatSummary: [
+                {
+                  label: 'Hard CC',
+                  tone: 'danger',
+                  reason: 'Enemy lockdown can deny rotations.'
+                }
+              ]
             }
           }
         ],
@@ -106,5 +157,7 @@ describe('DraftUpdate enemy role inference payload', () => {
     const sanitized = sanitizeDraftUpdateForIpc(update)
     expect(isDraftUpdate(sanitized)).toBe(true)
     expect(sanitized.draftIntel?.matchupPlans[0]?.championName).toBe('Ezreal')
+    expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.bootChoice?.itemId).toBe(3111)
+    expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.matrixRows?.[0]?.goodInto).toContain('frontline')
   })
 })

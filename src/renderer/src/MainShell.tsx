@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import type { AppUpdateStatus } from '@shared/appUpdate'
-import { getLatestDDragonVersion, loadChampionMaps, type ChampionLite } from '@shared/dataDragon'
+import { getLatestDDragonVersion, loadChampionMaps, loadItemMaps, type ChampionLite, type ItemLite } from '@shared/dataDragon'
 import {
   applyChampionNames,
   buildDraftIntel,
@@ -281,6 +281,7 @@ function appUpdateStatusLine(status: AppUpdateStatus | null): string {
 export function MainShell() {
   const [ddVersion, setDdVersion] = useState<string | null>(null)
   const [champions, setChampions] = useState<ChampionLite[]>([])
+  const [items, setItems] = useState<ItemLite[]>([])
   const [nameById, setNameById] = useState(() => new Map<number, string>())
 
   const [lcu, setLcu] = useState<LcuChampSelectResult | null>(null)
@@ -472,11 +473,11 @@ export function MainShell() {
     })
   }, [activeSnapshot, roleForSuggestions, mcForSuggestions, sortForSuggestions, deltaListForSuggestions])
 
-  const championMetaById = useMemo((): ReadonlyMap<number, { tags: string[]; partype: string }> | null => {
+  const championMetaById = useMemo((): ReadonlyMap<number, Pick<ChampionLite, 'tags' | 'partype' | 'passive' | 'spells'>> | null => {
     if (champions.length === 0) {
       return null
     }
-    return new Map(champions.map((c) => [c.id, { tags: c.tags, partype: c.partype }]))
+    return new Map(champions.map((c) => [c.id, { tags: c.tags, partype: c.partype, passive: c.passive, spells: c.spells }]))
   }, [champions])
 
   const championsSearch = useMemo((): { id: number; name: string; key: string; tags: string[]; partype: string }[] | null => {
@@ -561,7 +562,8 @@ export function MainShell() {
       enemyRoleInference,
       patchLabel,
       dataDragonVersion: ddVersion,
-      championPoolPreferences: championPoolPreferenceMap
+      championPoolPreferences: championPoolPreferenceMap,
+      itemCatalog: items
     })
   }, [
     activeSnapshot,
@@ -572,6 +574,7 @@ export function MainShell() {
     enemyRoleInference,
     patchLabel,
     ddVersion,
+    items,
     championPoolPreferenceMap,
     liveDataRevision
   ])
@@ -754,8 +757,9 @@ export function MainShell() {
       try {
         const v = await getLatestDDragonVersion()
         setDdVersion(v)
-        const { champions: ch } = await loadChampionMaps(v)
+        const [{ champions: ch }, { items: itemRows }] = await Promise.all([loadChampionMaps(v), loadItemMaps(v)])
         setChampions(ch)
+        setItems(itemRows)
         const idMap = new Map(ch.map((c) => [c.id, c.name] as const))
         setNameById(idMap)
       } catch {

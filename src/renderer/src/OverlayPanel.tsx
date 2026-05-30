@@ -892,7 +892,7 @@ export function OverlayPanel() {
                       {d.draftIntel.matchupPlans[0].championName} - {d.draftIntel.matchupPlans[0].summonerSpells}
                     </p>
                     <p className="m-0 text-nexus-muted">Start: {d.draftIntel.matchupPlans[0].startingItem}</p>
-                    <OverlayItemPlan itemPlan={d.draftIntel.matchupPlans[0].itemPlan} limit={2} />
+                    <OverlayItemPlan itemPlan={d.draftIntel.matchupPlans[0].itemPlan} ddragonVersion={d.dataDragonVersion} compact limit={2} />
                   </div>
                 )}
               </div>
@@ -1258,7 +1258,7 @@ export function OverlayPanel() {
                           <span className="text-nexus-lime/80">Items:</span> {p.buildProfile.itemHint}
                         </div>
                       )}
-                      <OverlayItemPlan itemPlan={matchupPlan?.itemPlan} limit={2} />
+                      <OverlayItemPlan itemPlan={matchupPlan?.itemPlan} ddragonVersion={d.dataDragonVersion} compact limit={2} />
                       {p.buildProfile && (
                         <div className="mt-1 text-nexus-muted">
                           {p.buildProfile.archetype}

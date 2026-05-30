@@ -460,7 +460,7 @@ export function NexusOperationsView({
                   <p className="m-0 mt-1">Start: {topPlan.startingItem}</p>
                   <p className="m-0">Recall: {topPlan.firstRecall}</p>
                   <p className="m-0">Plan: {topPlan.gamePlan}</p>
-                  <ItemPlanBlock itemPlan={topPlan.itemPlan} limit={2} />
+                  <ItemPlanBlock itemPlan={topPlan.itemPlan} ddragonVersion={ddragonVersion} limit={4} />
                 </div>
               ) : (
                 <p className="m-0 text-nexus-muted">No pick plan yet.</p>
@@ -765,7 +765,7 @@ export function NexusOperationsView({
                       <span className="text-nexus-lime/75 uppercase">Items</span> · {s.buildProfile.itemHint}
                     </div>
                   )}
-                  <ItemPlanBlock itemPlan={plan?.itemPlan} limit={2} />
+                  <ItemPlanBlock itemPlan={plan?.itemPlan} ddragonVersion={ddragonVersion} limit={4} />
                 </div>
               )}
                 </div>

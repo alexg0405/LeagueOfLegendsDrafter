@@ -21,6 +21,14 @@ export {
 export { suggestPicks } from './suggestPicks'
 export { buildDraftIntel, championPoolPreferenceToComfort, type BuildDraftIntelArgs } from './draftIntel'
 export {
+  buildAdaptiveItemPlan,
+  championKitProfileFromTexts,
+  classifyItem,
+  normalizeRulesText,
+  type ChampionKitProfile,
+  type ItemProfile
+} from './itemIntelligence'
+export {
   buildEngineState,
   collectLockedChampionIds,
   legalChampionSetForRole,

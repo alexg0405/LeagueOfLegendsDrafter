@@ -75,12 +75,44 @@ export type RuneLoadoutHint = {
 
 export type ChampionPoolPreference = 'main' | 'comfortable' | 'learning' | 'never'
 
+export type DraftItemPhase = 'starter' | 'component' | 'boots' | 'completed' | 'consumable'
+
+export type DraftItemRef = {
+  itemId: number
+  name: string
+  reason: string
+  score: number
+  tags: string[]
+  phase: DraftItemPhase
+  cost: number
+}
+
+export type DraftItemMatrixRow = DraftItemRef & {
+  goodInto: string[]
+  avoidWhen: string[]
+}
+
+export type DraftItemThreat = {
+  label: string
+  tone: 'info' | 'warning' | 'danger'
+  reason: string
+}
+
 export type DraftItemPlan = {
   core: string
   boots: string
   defensive: string
   situational: string[]
   notes: string[]
+  starting?: DraftItemRef[]
+  firstRecall?: DraftItemRef[]
+  bootChoice?: DraftItemRef | null
+  bootAlternatives?: DraftItemRef[]
+  coreBuild?: DraftItemRef[]
+  finalBuild?: DraftItemRef[]
+  situationalItems?: DraftItemRef[]
+  matrixRows?: DraftItemMatrixRow[]
+  threatSummary?: DraftItemThreat[]
 }
 
 export type DraftIntel = {

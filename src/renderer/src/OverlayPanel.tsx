@@ -178,12 +178,6 @@ type InferredOverlaySlot = OverlaySlot & {
   assignedRole?: DraftRole
   inferredRole?: DraftRole | null
   roleProbabilities?: RoleProbabilityMap | null
-  inferenceLabel?: string | null
-}
-
-function enemyInferenceLabel(row: NonNullable<DraftUpdate['enemyRoleInference']>[number] | null | undefined): string | null {
-  void row
-  return null
 }
 
 const ROLE_FOCUS: Record<Exclude<DraftRole, 'unknown'>, { ally: DraftRole[]; enemy: DraftRole[] }> = {
@@ -478,8 +472,7 @@ export function OverlayPanel() {
         assignedRole: slot.role,
         inferredRole: inferred?.inferredRole ?? null,
         role: inferred?.inferredRole ?? slot.role,
-        roleProbabilities: inferred?.roleProbabilities ?? null,
-        inferenceLabel: enemyInferenceLabel(inferred)
+        roleProbabilities: inferred?.roleProbabilities ?? null
       }
     })
   }, [s?.enemy, d.enemyRoleInference])
@@ -865,21 +858,6 @@ export function OverlayPanel() {
                 {enemySlotsWithInference.map((slot) => (
                   <SlotPortrait key={`e-${slot.role}-${slot.cellId ?? slot.championId ?? 'empty'}`} slot={slot} imageUrl={championIconUrl(slot.championId)} />
                 ))}
-                {enemySlotsWithInference.some((slot) => slot.inferenceLabel) && (
-                  <div className="w-full flex flex-wrap gap-1 pt-1">
-                    {enemySlotsWithInference
-                      .filter((slot) => slot.championId != null && slot.inferenceLabel)
-                      .map((slot) => (
-                        <span
-                          key={`inf-${slot.cellId ?? slot.championId}`}
-                          className="border border-nexus-red/35 bg-nexus-red/10 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.1em] text-nexus-red/80"
-                          title={slotName(slot)}
-                        >
-                          {slot.inferenceLabel}
-                        </span>
-                      ))}
-                  </div>
-                )}
               </div>
             </div>
             {poolRole && (

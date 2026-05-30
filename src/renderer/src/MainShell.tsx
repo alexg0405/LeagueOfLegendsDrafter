@@ -888,7 +888,6 @@ export function MainShell() {
               onSuggestDeltaListMode={setSuggestDeltaListMode}
               suggestions={suggestions}
               ddragonVersion={ddVersion && ddVersion[0] !== '(' ? ddVersion : null}
-              enemyRoleInference={enemyRoleInference}
               draftIntel={draftIntel}
               appUpdateStatusLine={appUpdateStatusLine(appUpdateStatus)}
               appUpdateBusy={appUpdateBusy}

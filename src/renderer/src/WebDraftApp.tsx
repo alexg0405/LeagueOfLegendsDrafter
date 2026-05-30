@@ -272,11 +272,6 @@ function roleLabel(role: DraftRole): string {
   return role
 }
 
-function enemyInferenceLabel(row: EnemyRoleInference | null | undefined): string | null {
-  void row
-  return null
-}
-
 function readWebRoute(): WebRoute {
   if (typeof window === 'undefined') {
     return 'draft'
@@ -820,7 +815,7 @@ function WebSuggestionsPage({ onNavigateDraft }: { onNavigateDraft: () => void }
                 >
                   Draft Lab
                 </a>
-                <a className={buttonClass} href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">
+                <a className={buttonClass} href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer">
                   GitHub
                 </a>
               </div>
@@ -949,7 +944,7 @@ function WebSuggestionsPage({ onNavigateDraft }: { onNavigateDraft: () => void }
               </pre>
               <div className="mt-4 border-t border-nexus-line/50 pt-3 font-mono text-xs leading-relaxed text-nexus-muted">
                 <p className="m-0">Opening Ask Nexus uses a prefilled GitHub issue so nothing gets lost.</p>
-                <a className="mt-3 inline-flex text-nexus-lime/90 hover:text-nexus-lime" href={GITHUB_ISSUE_URL} target="_blank" rel="noreferrer">
+                <a className="mt-3 inline-flex text-nexus-lime/90 hover:text-nexus-lime" href={GITHUB_ISSUE_URL} target="_blank" rel="noopener noreferrer">
                   View existing Ask Nexus posts
                 </a>
               </div>
@@ -1659,14 +1654,14 @@ export function WebDraftApp() {
               ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
-              <a className={buttonClass} href={EXE_DOWNLOAD_URL} target="_blank" rel="noreferrer">
+              <a className={buttonClass} href={EXE_DOWNLOAD_URL} target="_blank" rel="noopener noreferrer">
                 Download EXE
               </a>
               <a
                 className="nexus-focus inline-flex items-center justify-center border border-nexus-line px-5 py-2.5 font-display text-xs sm:text-sm tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10"
                 href={VIRUSTOTAL_SCAN_URL}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
               >
                 VirusTotal Scan
               </a>
@@ -1699,7 +1694,7 @@ export function WebDraftApp() {
             <span className="text-nexus-line" aria-hidden>
               /
             </span>
-            <a className="text-nexus-lime/85 hover:text-nexus-lime" href={GITHUB_PROFILE_URL} target="_blank" rel="noreferrer">
+            <a className="text-nexus-lime/85 hover:text-nexus-lime" href={GITHUB_PROFILE_URL} target="_blank" rel="noopener noreferrer">
               GitHub
             </a>
           </div>
@@ -1827,13 +1822,6 @@ export function WebDraftApp() {
                         const isFirstSlot = side === 'ally' && slotRole === 'top'
                         const isMyRoleRow = slotRole === role && side === 'ally'
                         const isLaneOppRow = slotRole === role && side === 'enemy'
-                        const inferredEnemy =
-                          side === 'enemy'
-                            ? enemyRoleInference.find(
-                                (row) => row.enemyIndex === ROLES.indexOf(slotRole) && row.championId === board.enemy[slotRole]
-                              )
-                            : null
-                        const inferredEnemyLabel = enemyInferenceLabel(inferredEnemy)
                         const roleClass =
                           side === 'ally'
                             ? isMyRoleRow
@@ -1909,11 +1897,6 @@ export function WebDraftApp() {
                                   ))}
                                 </span>
                               )}
-                              {side === 'enemy' && inferredEnemyLabel ? (
-                                <p className="m-0 mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-red/75">
-                                  {inferredEnemyLabel}
-                                </p>
-                              ) : null}
                             </span>
                           </label>
                         )
@@ -2186,14 +2169,14 @@ export function WebDraftApp() {
               <p className="font-mono text-sm text-nexus-muted leading-relaxed">
                 Use the Windows desktop app for League Client API detection, automatic role parsing, and the always-on-top overlay.
               </p>
-              <a className={buttonClass + ' mt-3'} href={EXE_DOWNLOAD_URL} target="_blank" rel="noreferrer">
+              <a className={buttonClass + ' mt-3'} href={EXE_DOWNLOAD_URL} target="_blank" rel="noopener noreferrer">
                 Download EXE
               </a>
               <a
                 className="nexus-focus mt-2 inline-flex items-center justify-center border border-nexus-line px-5 py-2.5 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10"
                 href={VIRUSTOTAL_SCAN_URL}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
               >
                 View Safety Scan
               </a>

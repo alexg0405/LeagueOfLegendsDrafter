@@ -56,11 +56,15 @@ async function checkForUpdates(isDev: boolean): Promise<AppUpdateCheckResult> {
   try {
     const result = await autoUpdater.checkForUpdates()
     const info = result?.updateInfo as UpdateInfoLike | null | undefined
-    return { ok: true, status: currentStatus.state === 'checking' ? publishStatus({
+    if (currentStatus.state !== 'checking') {
+      return { ok: true, status: currentStatus }
+    }
+    const status = publishStatus({
       state: 'not-available',
       message: 'Nexus Draft is up to date.',
       version: versionFromInfo(info)
-    }) : currentStatus }
+    })
+    return { ok: true, status }
   } catch (error) {
     const message = errorMessage(error)
     const status = publishStatus({ state: 'error', message })

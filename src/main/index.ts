@@ -6,6 +6,7 @@ import {
   ipcMain,
   screen,
   desktopCapturer,
+  shell,
   type Rectangle,
   type WebContents
 } from 'electron'
@@ -114,6 +115,53 @@ function wireWebContentsStabilityLogging(wc: WebContents, label: string) {
   })
 }
 
+function isExternalOpenUrl(rawUrl: string): boolean {
+  try {
+    const { protocol } = new URL(rawUrl)
+    return protocol === 'https:' || protocol === 'http:' || protocol === 'mailto:'
+  } catch {
+    return false
+  }
+}
+
+function isLocalDevHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1'
+}
+
+function isAllowedAppNavigation(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl)
+    if (url.protocol === 'file:' || url.protocol === 'data:') {
+      return true
+    }
+    return isDev && (url.protocol === 'http:' || url.protocol === 'https:') && isLocalDevHost(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+function wireNavigationGuards(wc: WebContents, label: string) {
+  wc.setWindowOpenHandler(({ url }) => {
+    if (isExternalOpenUrl(url)) {
+      void shell.openExternal(url)
+    } else {
+      console.warn(`[drafter] blocked ${label} popup: ${url}`)
+    }
+    return { action: 'deny' }
+  })
+  wc.on('will-navigate', (event, url) => {
+    if (isAllowedAppNavigation(url)) {
+      return
+    }
+    event.preventDefault()
+    if (isExternalOpenUrl(url)) {
+      void shell.openExternal(url)
+    } else {
+      console.warn(`[drafter] blocked ${label} navigation: ${url}`)
+    }
+  })
+}
+
 const OVERLAY_WIDTH = 380
 
 let mainWindow: BrowserWindow | null = null
@@ -210,6 +258,7 @@ function createMainWindow() {
     webPreferences: defaultWebPreferences()
   })
   mainWindow.setMenuBarVisibility(false)
+  wireNavigationGuards(mainWindow.webContents, 'main')
   wirePreloadErrorLogging(mainWindow, 'main')
   wireWebContentsStabilityLogging(mainWindow.webContents, 'main')
   if (isDev) {
@@ -286,6 +335,7 @@ function createOverlayWindow() {
     webPreferences: defaultWebPreferences()
   })
   applyOverlayPriority(overlayWindow)
+  wireNavigationGuards(overlayWindow.webContents, 'overlay')
   wirePreloadErrorLogging(overlayWindow, 'overlay')
   wireWebContentsStabilityLogging(overlayWindow.webContents, 'overlay')
   overlayWindow.once('ready-to-show', () => {

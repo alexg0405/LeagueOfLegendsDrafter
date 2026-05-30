@@ -12,11 +12,12 @@ const store = new Store<SettingsSchema>({
 })
 
 export function getCaptureSourceId(): string | null {
-  return store.get('captureSourceId', null) ?? null
+  const id = store.get('captureSourceId', null)
+  return typeof id === 'string' && id.trim() ? id : null
 }
 
-export function setCaptureSourceId(id: string | null) {
-  store.set('captureSourceId', id)
+export function setCaptureSourceId(id: unknown) {
+  store.set('captureSourceId', typeof id === 'string' && id.trim() ? id : null)
 }
 
 /** Gemini key is never persisted; optional env for dev/CI. */

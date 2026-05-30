@@ -84,13 +84,7 @@ export function applyLivePublicDataPayload(payload: LivePublicDataPayload): Live
 
   let nextSynergy = currentSynergy
   if (payload.synergySeed != null) {
-    const synergy = isRecord(payload.synergySeed) ? payload.synergySeed : null
-    const synergyPatch = synergy ? stringField(synergy.patch) : null
-    if (synergyPatch === nextMeta.patch) {
-      nextSynergy = applyPublicSynergyStatsSeed(payload.synergySeed, source) ?? getPublicSynergyStatsInfo()
-    } else {
-      nextSynergy = applyPublicSynergyStatsSeed(payload.synergySeed, source) ?? getPublicSynergyStatsInfo()
-    }
+    nextSynergy = applyPublicSynergyStatsSeed(payload.synergySeed, source) ?? getPublicSynergyStatsInfo()
   }
 
   clearEnemyRoleInferenceCaches()

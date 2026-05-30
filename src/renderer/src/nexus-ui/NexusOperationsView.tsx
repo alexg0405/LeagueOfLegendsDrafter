@@ -8,7 +8,6 @@ import {
   type DraftIntel,
   type DraftRole,
   type DraftSource,
-  type EnemyRoleInference,
   type ChampionPoolPreference,
   type PickSuggestion,
   type PlayerChampionPoolProfile,
@@ -42,11 +41,6 @@ function parseChampionSelectValue(value: string): number | null {
   }
   const n = Number(value)
   return Number.isFinite(n) && n > 0 ? n : null
-}
-
-function enemyInferenceLabel(row: EnemyRoleInference | null | undefined): string | null {
-  void row
-  return null
 }
 
 function parsePoolDragChampionId(event: ReactDragEvent<HTMLElement>): number | null {
@@ -166,7 +160,6 @@ export type NexusOperationsViewProps = {
   onSuggestDeltaListMode: (v: DraftDeltaListMode) => void
   suggestions: PickSuggestion[]
   ddragonVersion: string | null
-  enemyRoleInference?: EnemyRoleInference[] | null
   draftIntel?: DraftIntel | null
   appUpdateStatusLine: string
   appUpdateBusy: boolean
@@ -206,7 +199,6 @@ export function NexusOperationsView({
   onSuggestDeltaListMode,
   suggestions,
   ddragonVersion,
-  enemyRoleInference,
   draftIntel,
   appUpdateStatusLine,
   appUpdateBusy,
@@ -390,7 +382,6 @@ export function NexusOperationsView({
                     </option>
                   ))}
                 </select>
-                <div className="min-w-0">
                 <select
                   className={inField + ' max-w-none w-full text-xs'}
                   value={manual.enemy[role] ?? ''}
@@ -405,15 +396,6 @@ export function NexusOperationsView({
                     </option>
                   ))}
                 </select>
-                  {(() => {
-                    const idx = ROLES.indexOf(role)
-                    const row = enemyRoleInference?.find((x) => x.enemyIndex === idx && x.championId === manual.enemy[role])
-                    const label = enemyInferenceLabel(row)
-                    return label ? (
-                      <p className="m-0 mt-1 font-mono text-[10px] uppercase tracking-wide text-nexus-red/75">{label}</p>
-                    ) : null
-                  })()}
-                </div>
               </div>
             ))}
           </div>

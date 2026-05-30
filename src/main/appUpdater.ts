@@ -1,8 +1,9 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
-import { autoUpdater } from 'electron-updater'
+import electronUpdater from 'electron-updater'
 import type { AppUpdateCheckResult, AppUpdateStatus } from '../shared/appUpdate'
 
 const DEFAULT_FEED_URL = 'https://nexusdraft.lol/downloads/'
+const { autoUpdater } = electronUpdater
 
 type UpdateInfoLike = {
   version?: string

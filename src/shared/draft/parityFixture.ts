@@ -6,7 +6,7 @@
  * - Python `my_role: "adc"` maps to TS `bottom` (ROLE_CHAMPION_POOL + engine convention).
  */
 import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildEngineState, type DraftEngineState, type DraftTier } from './draftState'
 import type { DraftRole, DraftSnapshot, SlotPick } from './types'

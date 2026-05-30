@@ -481,7 +481,6 @@ function jungleSetupNote(snapshot: DraftSnapshot | null, myRole: DraftRole, enem
 
 function loadingBrief(
   snapshot: DraftSnapshot | null,
-  myRole: DraftRole,
   ally: TeamRead,
   enemy: TeamRead,
   intel: Pick< DraftIntel, 'compIdentity' | 'matchupPlans' >
@@ -562,7 +561,7 @@ export function buildDraftIntel({
   return {
     ...partial,
     pickComparison: [],
-    loadingBrief: loadingBrief(snapshot, myRole, ally, enemy, partial),
+    loadingBrief: loadingBrief(snapshot, ally, enemy, partial),
     confidenceNotes: confidenceNotes(snapshot, enemyRoleInference, patchLabel, dataDragonVersion)
   }
 }

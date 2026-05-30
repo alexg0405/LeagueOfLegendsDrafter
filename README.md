@@ -7,7 +7,7 @@ Nexus Draft ships as two separate applications:
 
 The web app cannot read the local League Client API or create a true in-game overlay from a browser. Use the desktop app for live champ select.
 
-Download: [Nexus Draft Windows installer](https://nexusdraft.lol/downloads/Nexus-Draft-Setup-3.11.0.exe).
+Download: [Nexus Draft Windows installer](https://drive.google.com/file/d/1ORAhqSexe8hx4Ci5Yq-haW1n9UfQDbCh/view?usp=sharing).
 
 Download safety scan: [VirusTotal report](https://www.virustotal.com/gui/file-analysis/OWQyYjU0YWQwNzU0NmE5ZTgzY2QwN2QxMWQyZWZjYzc6MTc4MDE2NTI4Mg==).
 

@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import { NexusCross, MicroLabel } from './NexusTick'
-import { DUR, EASING, useNexusMotion, cardStaggerItem } from './nexusMotion'
+import { EASING, useNexusMotion, cardStaggerItem } from './nexusMotion'
 
 type Props = {
   title: string

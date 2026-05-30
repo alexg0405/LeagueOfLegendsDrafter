@@ -3,7 +3,6 @@ import { useState, type ReactNode } from 'react'
 import { MicroLabel, NexusPlus } from './NexusTick'
 import { NexusProgressSegmented } from './NexusProgressSegmented'
 import {
-  DUR,
   EASING,
   useNexusMotion,
   homeTitleLineVars,

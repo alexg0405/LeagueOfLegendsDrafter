@@ -34,8 +34,6 @@ function extractJsonObject(text: string): string {
   return code.slice(start, end + 1)
 }
 
-type Row = { role: string; championName: string }
-
 function toSlot(
   row: unknown,
   nameToId: ReadonlyMap<string, number>

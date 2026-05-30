@@ -683,7 +683,7 @@ export function MainShell() {
     void window.drafter
       .getTrainedEffects()
       .then(applyLoad)
-      .catch((e) => {
+      .catch(() => {
         if (cancelled) {
           return
         }

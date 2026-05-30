@@ -90,8 +90,10 @@ type OpsSectionProps = {
 
 function CollapsibleOpsSection({ id, kicker, title, children, open, onToggle, accent = false }: OpsSectionProps) {
   const { reduce } = useNexusMotion()
+  const contentId = `${id}-body`
   return (
     <motion.section
+      id={id}
       layout={!reduce}
       className={[
         'relative border border-nexus-line bg-nexus-surface-2/90 mb-3 overflow-hidden',
@@ -107,6 +109,7 @@ function CollapsibleOpsSection({ id, kicker, title, children, open, onToggle, ac
         className="nexus-focus w-full px-4 py-3 text-left flex items-center justify-between gap-3 font-mono text-sm"
         onClick={onToggle}
         aria-expanded={open}
+        aria-controls={contentId}
       >
         <span className="text-nexus-muted">{title}</span>
         <motion.span
@@ -121,6 +124,7 @@ function CollapsibleOpsSection({ id, kicker, title, children, open, onToggle, ac
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
+            id={contentId}
             key="ops-section-body"
             className="border-t border-nexus-line px-4 py-4 sm:px-5 sm:py-5 text-sm sm:text-base leading-relaxed"
             initial={reduce ? false : { height: 0, opacity: 0, scale: 0.98, y: -6 }}

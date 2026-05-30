@@ -1,6 +1,6 @@
 import { MATCHUP_BONUS } from './matchupData'
 import { ALLY_SYNERGY_BONUS } from './synergyData'
-import { publicMetaLaneRate, publicMetaCandidateIdsForRole } from './metaStats'
+import { publicMetaLaneRate } from './metaStats'
 import { trainedSynergyDelta, type CompiledTrainedEffects } from './trainedEffects'
 import { shrunkLaneRate } from './statsModel'
 import type { DraftRole, RoleProbabilityMap } from './types'

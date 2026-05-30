@@ -61,7 +61,7 @@ const MAX_WEB_ROLLOUTS = 200
 const LS_WEB_CHAMPION_POOL_PREFS = 'nexusdraft.web.v1.championPoolPrefs'
 const LS_WEB_PLAYER_POOL_PROFILE = 'nexusdraft.web.v1.playerChampionPoolProfile'
 const LS_WEB_RECOMMENDATION_POOL_MODE = 'nexusdraft.web.v1.recommendationPoolMode'
-const EXE_DOWNLOAD_URL = 'https://nexusdraft.lol/downloads/Nexus-Draft-Setup-3.11.0.exe'
+const EXE_DOWNLOAD_URL = 'https://drive.google.com/file/d/1ORAhqSexe8hx4Ci5Yq-haW1n9UfQDbCh/view?usp=sharing'
 const VIRUSTOTAL_SCAN_URL =
   'https://www.virustotal.com/gui/file-analysis/OWQyYjU0YWQwNzU0NmE5ZTgzY2QwN2QxMWQyZWZjYzc6MTc4MDE2NTI4Mg=='
 const GITHUB_PROFILE_URL = 'https://github.com/alexg0405'
@@ -250,12 +250,6 @@ function readRecommendationPoolMode(): RecommendationPoolMode {
     /* ignore */
   }
   return 'all-champs'
-}
-
-type OcrUndoState = {
-  board: ManualBoard
-  championInputs: ManualInputBoard
-  role: Exclude<DraftRole, 'unknown'>
 }
 
 function parseChampionId(value: string): number | null {
@@ -988,12 +982,6 @@ export function WebDraftApp() {
   const [visionBusy, setVisionBusy] = useState(false)
   const [activeChampionInput, setActiveChampionInput] = useState<ActiveChampionInput>(null)
   const [listCursor, setListCursor] = useState(0)
-  const [ocrUndoSnapshot, setOcrUndoSnapshot] = useState<OcrUndoState | null>(null)
-  const [ocrResult, setOcrResult] = useState<{
-    ally: number
-    enemy: number
-    roleChanged: boolean
-  } | null>(null)
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
   const [championPoolPrefs, setChampionPoolPrefs] = useState<ChampionPoolPrefs>(readChampionPoolPrefs)
   const [playerPoolProfile, setPlayerPoolProfile] = useState<PlayerChampionPoolProfile | null>(
@@ -1432,18 +1420,6 @@ export function WebDraftApp() {
     }
   }, [riotIdInput, riotPlatform])
 
-  const undoOcr = useCallback(() => {
-    if (!ocrUndoSnapshot) {
-      return
-    }
-    setBoard(cloneBoard(ocrUndoSnapshot.board))
-    setChampionInputs(cloneInputs(ocrUndoSnapshot.championInputs))
-    setRole(ocrUndoSnapshot.role)
-    setOcrUndoSnapshot(null)
-    setOcrResult(null)
-    nexusWebTrack('ocr_undo')
-  }, [ocrUndoSnapshot])
-
   const pickChampionInput = (side: 'ally' | 'enemy', slotRole: Exclude<DraftRole, 'unknown'>, champion: ChampionLite) => {
     setChampionInputs((prev) => ({
       ...prev,
@@ -1505,8 +1481,6 @@ export function WebDraftApp() {
     clearPersistedWebDraft()
     setBoard(emptyBoard())
     setChampionInputs(emptyInputBoard())
-    setOcrUndoSnapshot(null)
-    setOcrResult(null)
   }
 
   const setChampionSlotByName = (side: 'ally' | 'enemy', slotRole: Exclude<DraftRole, 'unknown'>, championName: string) => {
@@ -1548,12 +1522,6 @@ export function WebDraftApp() {
       setVisionStatus('Wait for champion data to load before autofill.')
       return
     }
-    const roleAtStart = role
-    setOcrUndoSnapshot({
-      board: cloneBoard(board),
-      championInputs: cloneInputs(championInputs),
-      role: roleAtStart
-    })
     setVisionBusy(true)
     setVisionStatus('Reading screenshot...')
     try {
@@ -1589,11 +1557,6 @@ export function WebDraftApp() {
       if (detectedRole) {
         setRole(detectedRole)
       }
-      setOcrResult({
-        ally: allyN,
-        enemy: enemyN,
-        roleChanged: Boolean(detectedRole && detectedRole !== roleAtStart)
-      })
       nexusWebTrack('ocr_autofill', { ally: allyN, enemy: enemyN })
       setVisionStatus(`Autofill complete${data.confidence ? ` (${data.confidence} confidence)` : ''}. Check the board for mistakes.`)
     } catch (error) {

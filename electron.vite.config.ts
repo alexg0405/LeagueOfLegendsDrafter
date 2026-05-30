@@ -25,6 +25,9 @@ export default defineConfig({
   },
   renderer: {
     root: 'src/renderer',
+    define: {
+      'import.meta.env.VITE_NEXUS_WEB': JSON.stringify('0')
+    },
     server: {
       port: 5173,
       /** If 5173 is busy (old dev, another Vite), use the next free port. electron-vite sets ELECTRON_RENDERER_URL to match. */

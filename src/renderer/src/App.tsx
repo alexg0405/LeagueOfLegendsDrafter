@@ -1,32 +1,27 @@
-import { useEffect, useState } from 'react'
-import { MainShell } from './MainShell'
-import { OverlayPanel } from './OverlayPanel'
-import { PreloadGuard } from './PreloadGuard'
-import { WebDraftApp } from './WebDraftApp'
-import { isOverlayRoute } from './route'
+import { lazy, Suspense } from 'react'
 
-/**
- * Re-read route when the hash changes (Vite HMR, or if #/overlay loads after first paint).
- * Do not cache with useMemo([]) or the overlay window can show MainShell.
- */
+const IS_WEB_BUILD = import.meta.env.VITE_NEXUS_WEB === '1'
+const WebDraftApp = IS_WEB_BUILD
+  ? lazy(() => import('./WebDraftApp').then((mod) => ({ default: mod.WebDraftApp })))
+  : null
+const DesktopApp = IS_WEB_BUILD
+  ? null
+  : lazy(() => import('./DesktopApp').then((mod) => ({ default: mod.DesktopApp })))
+
+function AppLoading() {
+  return (
+    <div className="min-h-screen bg-nexus-bg px-6 py-5 font-mono text-sm text-nexus-muted">
+      Loading Nexus Draft...
+    </div>
+  )
+}
+
 export function App() {
-  const [overlay, setOverlay] = useState(() => isOverlayRoute())
-  const webMode = import.meta.env.VITE_NEXUS_WEB === '1'
-
-  useEffect(() => {
-    setOverlay(isOverlayRoute())
-    const onHash = () => setOverlay(isOverlayRoute())
-    window.addEventListener('hashchange', onHash)
-    return () => window.removeEventListener('hashchange', onHash)
-  }, [])
-
-  if (webMode) {
-    return <WebDraftApp />
-  }
+  const LoadedApp = IS_WEB_BUILD ? WebDraftApp : DesktopApp
 
   return (
-    <PreloadGuard>
-      {overlay ? <OverlayPanel /> : <MainShell />}
-    </PreloadGuard>
+    <Suspense fallback={<AppLoading />}>
+      {LoadedApp ? <LoadedApp /> : <AppLoading />}
+    </Suspense>
   )
 }

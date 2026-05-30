@@ -113,6 +113,11 @@ type VisionResponse = {
 type WebRoute = 'draft' | 'suggestions'
 
 type ChampionPoolPrefs = Record<string, ChampionPoolPreference>
+type ChampionSearchRow = {
+  champion: ChampionLite
+  normalizedName: string
+}
+
 type PoolUndoState = {
   championId: number
   championName: string
@@ -961,37 +966,35 @@ function WebSuggestionsPage({ onNavigateDraft }: { onNavigateDraft: () => void }
 }
 
 export function WebDraftApp() {
+  const initialPersistedDraft = useMemo(() => loadPersistedWebDraft(), [])
+  const initialPlayerPoolProfile = useMemo(readPlayerChampionPoolProfile, [])
   const [ddragonVersion, setDdragonVersion] = useState<string | null>(null)
   const [champions, setChampions] = useState<ChampionLite[]>([])
   const [nameById, setNameById] = useState(() => new Map<number, string>())
   const [loadError, setLoadError] = useState<string | null>(null)
   const [liveDataRevision, setLiveDataRevision] = useState(0)
   const [liveDataStatus, setLiveDataStatus] = useState<LivePublicDataRefreshStatus | null>(null)
-  const [board, setBoard] = useState<ManualBoard>(() => {
-    const p = loadPersistedWebDraft()
-    return p ? cloneBoard(p.board as ManualBoard) : emptyBoard()
-  })
-  const [championInputs, setChampionInputs] = useState<ManualInputBoard>(() => {
-    const p = loadPersistedWebDraft()
-    return p ? cloneInputs(p.championInputs) : emptyInputBoard()
-  })
-  const [role, setRole] = useState<Exclude<DraftRole, 'unknown'>>(() => loadPersistedWebDraft()?.role ?? 'middle')
-  const [rollouts, setRollouts] = useState(() => loadPersistedWebDraft()?.rollouts ?? DEFAULT_WEB_ROLLOUTS)
-  const [deltaMode, setDeltaMode] = useState<DraftDeltaListMode>(() => loadPersistedWebDraft()?.deltaMode ?? 'best')
+  const [board, setBoard] = useState<ManualBoard>(() =>
+    initialPersistedDraft ? cloneBoard(initialPersistedDraft.board as ManualBoard) : emptyBoard()
+  )
+  const [championInputs, setChampionInputs] = useState<ManualInputBoard>(() =>
+    initialPersistedDraft ? cloneInputs(initialPersistedDraft.championInputs) : emptyInputBoard()
+  )
+  const [role, setRole] = useState<Exclude<DraftRole, 'unknown'>>(() => initialPersistedDraft?.role ?? 'middle')
+  const [rollouts, setRollouts] = useState(() => initialPersistedDraft?.rollouts ?? DEFAULT_WEB_ROLLOUTS)
+  const [deltaMode, setDeltaMode] = useState<DraftDeltaListMode>(() => initialPersistedDraft?.deltaMode ?? 'best')
   const [visionStatus, setVisionStatus] = useState<string>('Upload a champion select screenshot to autofill the board.')
   const [visionBusy, setVisionBusy] = useState(false)
   const [activeChampionInput, setActiveChampionInput] = useState<ActiveChampionInput>(null)
   const [listCursor, setListCursor] = useState(0)
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
   const [championPoolPrefs, setChampionPoolPrefs] = useState<ChampionPoolPrefs>(readChampionPoolPrefs)
-  const [playerPoolProfile, setPlayerPoolProfile] = useState<PlayerChampionPoolProfile | null>(
-    readPlayerChampionPoolProfile
-  )
+  const [playerPoolProfile, setPlayerPoolProfile] = useState<PlayerChampionPoolProfile | null>(initialPlayerPoolProfile)
   const [recommendationPoolMode, setRecommendationPoolMode] = useState<RecommendationPoolMode>(
     readRecommendationPoolMode
   )
-  const [riotIdInput, setRiotIdInput] = useState(() => readPlayerChampionPoolProfile()?.riotId ?? '')
-  const [riotPlatform, setRiotPlatform] = useState<RiotPlatform>(() => readPlayerChampionPoolProfile()?.platform ?? 'na1')
+  const [riotIdInput, setRiotIdInput] = useState(() => initialPlayerPoolProfile?.riotId ?? '')
+  const [riotPlatform, setRiotPlatform] = useState<RiotPlatform>(() => initialPlayerPoolProfile?.platform ?? 'na1')
   const [playerPoolStatus, setPlayerPoolStatus] = useState<string | null>(null)
   const [playerPoolBusy, setPlayerPoolBusy] = useState(false)
   const [poolChampionId, setPoolChampionId] = useState<number | null>(null)
@@ -1165,9 +1168,36 @@ export function WebDraftApp() {
   }, [])
 
   const sortedChampions = useMemo(() => champions.slice().sort((a, b) => a.name.localeCompare(b.name)), [champions])
-  const championByNormalizedName = useMemo(() => {
-    return new Map(sortedChampions.map((champion) => [normalizeChampionQuery(champion.name), champion] as const))
+  const championSearchRows = useMemo<ChampionSearchRow[]>(() => {
+    return sortedChampions.map((champion) => ({
+      champion,
+      normalizedName: normalizeChampionQuery(champion.name)
+    }))
   }, [sortedChampions])
+  const championByNormalizedName = useMemo(() => {
+    return new Map(championSearchRows.map((row) => [row.normalizedName, row.champion] as const))
+  }, [championSearchRows])
+  const findChampionByInput = useCallback((value: string): ChampionLite | null => {
+    const normalized = normalizeChampionQuery(value)
+    if (!normalized) {
+      return null
+    }
+    const exact = championByNormalizedName.get(normalized)
+    if (exact) {
+      return exact
+    }
+    let match: ChampionLite | null = null
+    for (const row of championSearchRows) {
+      if (!row.normalizedName.startsWith(normalized)) {
+        continue
+      }
+      if (match) {
+        return null
+      }
+      match = row.champion
+    }
+    return match
+  }, [championByNormalizedName, championSearchRows])
   const championMetaById = useMemo(() => {
     return new Map(champions.map((c) => [c.id, { tags: c.tags, partype: c.partype }]))
   }, [champions])
@@ -1276,9 +1306,16 @@ export function WebDraftApp() {
     if (!normalized) {
       return []
     }
-    return sortedChampions
-      .filter((champion) => normalizeChampionQuery(champion.name).includes(normalized))
-      .slice(0, 5)
+    const matches: ChampionLite[] = []
+    for (const row of championSearchRows) {
+      if (row.normalizedName.includes(normalized)) {
+        matches.push(row.champion)
+        if (matches.length >= 5) {
+          break
+        }
+      }
+    }
+    return matches
   }
 
   const activeMatches = useMemo(() => {
@@ -1286,7 +1323,7 @@ export function WebDraftApp() {
       return [] as ChampionLite[]
     }
     return championMatches(championInputs[activeChampionInput.side][activeChampionInput.role])
-  }, [activeChampionInput, championInputs, sortedChampions])
+  }, [activeChampionInput, championInputs, championSearchRows])
 
   useEffect(() => {
     setListCursor(0)
@@ -1461,9 +1498,7 @@ export function WebDraftApp() {
     if (!normalized) {
       return
     }
-    const exact = championByNormalizedName.get(normalized)
-    const candidates = sortedChampions.filter((champion) => normalizeChampionQuery(champion.name).startsWith(normalized))
-    const picked = exact ?? (candidates.length === 1 ? candidates[0] : null)
+    const picked = findChampionByInput(value)
     if (!picked) {
       return
     }
@@ -1484,10 +1519,7 @@ export function WebDraftApp() {
   }
 
   const setChampionSlotByName = (side: 'ally' | 'enemy', slotRole: Exclude<DraftRole, 'unknown'>, championName: string) => {
-    const normalized = normalizeChampionQuery(championName)
-    const exact = championByNormalizedName.get(normalized)
-    const candidates = sortedChampions.filter((champion) => normalizeChampionQuery(champion.name).startsWith(normalized))
-    const picked = exact ?? (candidates.length === 1 ? candidates[0] : null)
+    const picked = findChampionByInput(championName)
     setChampionInputs((prev) => ({
       ...prev,
       [side]: {

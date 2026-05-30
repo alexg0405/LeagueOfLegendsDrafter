@@ -37,7 +37,8 @@ import { fetchChampSelectSession } from './lcuClient'
 import { fetchLivePublicDataPayload } from './livePublicDataFetcher'
 import { getPlayerChampionPool } from './riotPlayerChampionPool'
 import { getCaptureSourceId, setCaptureSourceId } from './settingsStore'
-import { isDraftUpdate, isOverlayEnginePrefsPatch, type DraftUpdate } from '../shared/draft'
+import { type DraftUpdate } from '../shared/draft/types'
+import { isDraftUpdate, isOverlayEnginePrefsPatch } from '../shared/draft/validate'
 import {
   loadTrainedEffectsFromDisk,
   watchTrainedEffects,

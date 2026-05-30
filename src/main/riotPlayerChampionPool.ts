@@ -7,7 +7,7 @@ import {
   riotPlatformToRegion,
   type PlayerChampionPoolProfile,
   type PlayerChampionPoolResponse
-} from '../shared/draft'
+} from '../shared/draft/playerChampionPool'
 
 const MAX_TOP_MASTERY = 20
 type RiotFetchJsonResult = { ok: true; json: unknown } | Extract<PlayerChampionPoolResponse, { ok: false }>

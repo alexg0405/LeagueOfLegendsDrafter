@@ -75,6 +75,8 @@ const BLIND_CAP_BY_ROLE: Record<Exclude<DraftRole, 'unknown'>, number> = {
   jungle: 0.04
 }
 
+type RolePoolCache = Partial<Record<Exclude<DraftRole, 'unknown'>, readonly number[]>>
+
 function bonusToP(bonus: number, scale: number): number {
   return 0.5 + scale * Math.max(-0.1, Math.min(0.1, bonus * 0.04))
 }
@@ -583,19 +585,36 @@ function mulberry32(a: number): () => number {
 function pickFromPoolExcluding(
   role: DraftRole,
   exclude: Set<number>,
-  rand: () => number
+  rand: () => number,
+  rolePools?: RolePoolCache
 ): number | null {
   if (role === 'unknown') {
     return null
   }
-  const key = role as keyof typeof ROLE_CHAMPION_POOL
-  const list = Array.from(
-    new Set([...(ROLE_CHAMPION_POOL[key] ?? []), ...publicMetaCandidateIdsForRole(role)])
-  ).filter((id) => !exclude.has(id))
-  if (list.length === 0) {
+  const key = role as Exclude<DraftRole, 'unknown'>
+  const list =
+    rolePools?.[key] ??
+    Array.from(new Set([...(ROLE_CHAMPION_POOL[key] ?? []), ...publicMetaCandidateIdsForRole(role)]))
+  let available = 0
+  for (const id of list) {
+    if (!exclude.has(id)) {
+      available += 1
+    }
+  }
+  if (available === 0) {
     return null
   }
-  return list[Math.floor(rand() * list.length)]!
+  let target = Math.floor(rand() * available)
+  for (const id of list) {
+    if (exclude.has(id)) {
+      continue
+    }
+    if (target === 0) {
+      return id
+    }
+    target -= 1
+  }
+  return null
 }
 
 export function cloneWithMyPick(
@@ -634,7 +653,12 @@ export function cloneWithMyPick(
 
 function buildUnavailableFromSnap(snap: DraftSnapshot, bans: number[]): Set<number> {
   const u = new Set(bans)
-  for (const p of [...snap.ally, ...snap.enemy]) {
+  for (const p of snap.ally) {
+    if (p.championId != null && p.championId > 0) {
+      u.add(p.championId)
+    }
+  }
+  for (const p of snap.enemy) {
     if (p.championId != null && p.championId > 0) {
       u.add(p.championId)
     }
@@ -645,7 +669,8 @@ function buildUnavailableFromSnap(snap: DraftSnapshot, bans: number[]): Set<numb
 export function completeDraftRandomly(
   snap: DraftSnapshot,
   bans: number[],
-  rand: () => number
+  rand: () => number,
+  rolePools?: RolePoolCache
 ): DraftSnapshot {
   const exclude = buildUnavailableFromSnap(snap, bans)
   const fillSide = (side: 'ally' | 'enemy'): SlotPick[] => {
@@ -656,7 +681,7 @@ export function completeDraftRandomly(
       if (p.role === 'unknown') {
         return p
       }
-      const id = pickFromPoolExcluding(p.role, exclude, rand)
+      const id = pickFromPoolExcluding(p.role, exclude, rand, rolePools)
       if (id == null) {
         return p
       }
@@ -665,6 +690,16 @@ export function completeDraftRandomly(
     })
   }
   return { ...snap, ally: fillSide('ally'), enemy: fillSide('enemy') }
+}
+
+function buildRolePoolCache(): RolePoolCache {
+  return {
+    top: Array.from(new Set([...(ROLE_CHAMPION_POOL.top ?? []), ...publicMetaCandidateIdsForRole('top')])),
+    jungle: Array.from(new Set([...(ROLE_CHAMPION_POOL.jungle ?? []), ...publicMetaCandidateIdsForRole('jungle')])),
+    middle: Array.from(new Set([...(ROLE_CHAMPION_POOL.middle ?? []), ...publicMetaCandidateIdsForRole('middle')])),
+    bottom: Array.from(new Set([...(ROLE_CHAMPION_POOL.bottom ?? []), ...publicMetaCandidateIdsForRole('bottom')])),
+    support: Array.from(new Set([...(ROLE_CHAMPION_POOL.support ?? []), ...publicMetaCandidateIdsForRole('support')]))
+  }
 }
 
 function snapshotValueV1(
@@ -759,6 +794,7 @@ export function recommend(args: RecommendArgs): {
   const nMc = Math.max(0, Math.min(200, monteCarloSamples | 0))
   const useMc = nMc > 0
   const rand = useMc ? mulberry32(rngSeed) : () => 0.5
+  const rolePools = useMc ? buildRolePoolCache() : undefined
   const localCell = state.snapshot.localPlayerCellId
   const comfortM = mergedComfort ?? null
   const contextReady = hasBoardContext(state.snapshot, myRole, localCell)
@@ -777,10 +813,11 @@ export function recommend(args: RecommendArgs): {
       rows.push({ c, comp })
       continue
     }
-    const samples: number[] = []
+    const s0 = cloneWithMyPick(state.snapshot, myRole, localCell, c)
+    let sampleMean = 0
+    let sampleM2 = 0
     for (let i = 0; i < nMc; i++) {
-      const s0 = cloneWithMyPick(state.snapshot, myRole, localCell, c)
-      const done = completeDraftRandomly(s0, state.bans, rand)
+      const done = completeDraftRandomly(s0, state.bans, rand, rolePools)
       const u2 = buildUnavailableFromSnap(done, state.bans)
       const st: DraftEngineState = {
         ...state,
@@ -788,11 +825,13 @@ export function recommend(args: RecommendArgs): {
         lockedChampionPicks: 10,
         unavailable: u2
       }
-      samples.push(snapshotValueV1(c, poolKey, st, idToName, comfortM, trainedEffects, championMetaById))
+      const x = snapshotValueV1(c, poolKey, st, idToName, comfortM, trainedEffects, championMetaById)
+      const n = i + 1
+      const delta = x - sampleMean
+      sampleMean += delta / n
+      sampleM2 += delta * (x - sampleMean)
     }
-    const sampleMean = samples.reduce((a, b) => a + b, 0) / samples.length
-    const v = samples.map((x) => (x - sampleMean) * (x - sampleMean))
-    const stdev = Math.sqrt(v.reduce((a, b) => a + b, 0) / Math.max(1, samples.length))
+    const stdev = Math.sqrt(sampleM2 / Math.max(1, nMc))
     const comfC = comfortGet(c, comfortM)
     const futureWeight = monteCarloFutureWeight(state.snapshot, myRole, localCell)
     const projectedMean = clamp01(comp.combined + (sampleMean - comp.combined) * futureWeight)

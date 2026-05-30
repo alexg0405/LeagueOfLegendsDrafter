@@ -76,6 +76,12 @@ const GITHUB_REPO_URL = 'https://github.com/alexg0405/NexusDraftFeedback'
 const GITHUB_ISSUE_URL = `${GITHUB_REPO_URL}/issues/new`
 const VISITOR_COUNTER_URL = '/api/visit'
 const LIVE_META_REFRESH_MS = 30 * 60 * 1000
+const WEB_PLAYER_POOL_IMPORT_ENABLED = false
+const WEB_VISION_SCREENSHOT_ENABLED = false
+const WEB_PLAYER_POOL_IMPORT_WIP_MESSAGE =
+  'Riot mastery import is temporarily WIP. Manual My Champs weights still work below.'
+const WEB_VISION_SCREENSHOT_WIP_MESSAGE =
+  'Screenshot autofill is temporarily WIP. Type champions manually for now.'
 
 /** Solid dark fill + [color-scheme:dark] so native selects/inputs do not render as light system panels. */
 const webFieldClass =
@@ -987,7 +993,11 @@ export function WebDraftApp() {
   const [role, setRole] = useState<Exclude<DraftRole, 'unknown'>>(() => initialPersistedDraft?.role ?? 'middle')
   const [rollouts, setRollouts] = useState(() => initialPersistedDraft?.rollouts ?? DEFAULT_WEB_ROLLOUTS)
   const [deltaMode, setDeltaMode] = useState<DraftDeltaListMode>(() => initialPersistedDraft?.deltaMode ?? 'best')
-  const [visionStatus, setVisionStatus] = useState<string>('Upload a champion select screenshot to autofill the board.')
+  const [visionStatus, setVisionStatus] = useState<string>(
+    WEB_VISION_SCREENSHOT_ENABLED
+      ? 'Upload a champion select screenshot to autofill the board.'
+      : WEB_VISION_SCREENSHOT_WIP_MESSAGE
+  )
   const [visionBusy, setVisionBusy] = useState(false)
   const [activeChampionInput, setActiveChampionInput] = useState<ActiveChampionInput>(null)
   const [listCursor, setListCursor] = useState(0)
@@ -999,7 +1009,9 @@ export function WebDraftApp() {
   )
   const [riotIdInput, setRiotIdInput] = useState(() => initialPlayerPoolProfile?.riotId ?? '')
   const [riotPlatform, setRiotPlatform] = useState<RiotPlatform>(() => initialPlayerPoolProfile?.platform ?? 'na1')
-  const [playerPoolStatus, setPlayerPoolStatus] = useState<string | null>(null)
+  const [playerPoolStatus, setPlayerPoolStatus] = useState<string | null>(
+    WEB_PLAYER_POOL_IMPORT_ENABLED ? null : WEB_PLAYER_POOL_IMPORT_WIP_MESSAGE
+  )
   const [playerPoolBusy, setPlayerPoolBusy] = useState(false)
   const [poolChampionId, setPoolChampionId] = useState<number | null>(null)
   const [poolPreference, setPoolPreference] = useState<ChampionPoolPreference>('comfortable')
@@ -1020,6 +1032,10 @@ export function WebDraftApp() {
   }, [])
 
   const handleScreenshotPaste = (event: ClipboardEvent | ReactClipboardEvent<HTMLElement>) => {
+    if (!WEB_VISION_SCREENSHOT_ENABLED) {
+      setVisionStatus(WEB_VISION_SCREENSHOT_WIP_MESSAGE)
+      return
+    }
     const items = Array.from(event.clipboardData?.items ?? [])
     const imageItem = items.find((item) => item.type.startsWith('image/'))
     const file = imageItem?.getAsFile() ?? null
@@ -1155,6 +1171,9 @@ export function WebDraftApp() {
   }, [recommendationPoolMode])
 
   useEffect(() => {
+    if (!WEB_VISION_SCREENSHOT_ENABLED) {
+      return
+    }
     const onPaste = (event: ClipboardEvent) => {
       if (visionBusy) {
         return
@@ -1448,6 +1467,10 @@ export function WebDraftApp() {
   }
 
   const importPlayerChampionPool = useCallback(async () => {
+    if (!WEB_PLAYER_POOL_IMPORT_ENABLED) {
+      setPlayerPoolStatus(WEB_PLAYER_POOL_IMPORT_WIP_MESSAGE)
+      return
+    }
     const riotId = riotIdInput.trim()
     if (!riotId) {
       setPlayerPoolStatus('Enter a Riot ID like GameName#TagLine.')
@@ -1565,6 +1588,10 @@ export function WebDraftApp() {
   }
 
   const parseDraftScreenshot = async (file: File | null) => {
+    if (!WEB_VISION_SCREENSHOT_ENABLED) {
+      setVisionStatus(WEB_VISION_SCREENSHOT_WIP_MESSAGE)
+      return
+    }
     if (!file) {
       return
     }
@@ -1731,20 +1758,30 @@ export function WebDraftApp() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="m-0 font-display text-base tracking-[0.14em] uppercase text-nexus-lime/90">
-                      Screenshot autofill
+                      Screenshot autofill {!WEB_VISION_SCREENSHOT_ENABLED ? 'WIP' : ''}
                     </p>
                     <p className="m-0 mt-1 font-mono text-xs leading-relaxed text-nexus-muted">
-                      Upload or paste a League champion select screenshot. Vision reads visible ally/enemy champions and fills the board.
+                      {WEB_VISION_SCREENSHOT_ENABLED
+                        ? 'Upload or paste a League champion select screenshot. Vision reads visible ally/enemy champions and fills the board.'
+                        : 'This web OCR path is paused while it is being stabilized. Manual champion entry is available below.'}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <label className="nexus-focus inline-flex cursor-pointer items-center justify-center border border-nexus-line px-4 py-2 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10">
-                      {visionBusy ? 'Reading...' : 'Upload Screenshot'}
+                    <label
+                      className={
+                        'nexus-focus inline-flex items-center justify-center border border-nexus-line px-4 py-2 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 ' +
+                        (WEB_VISION_SCREENSHOT_ENABLED
+                          ? 'cursor-pointer hover:border-nexus-lime/60 hover:bg-nexus-lime/10'
+                          : 'cursor-not-allowed opacity-45')
+                      }
+                      aria-disabled={!WEB_VISION_SCREENSHOT_ENABLED}
+                    >
+                      {!WEB_VISION_SCREENSHOT_ENABLED ? 'Upload WIP' : visionBusy ? 'Reading...' : 'Upload Screenshot'}
                       <input
                         className="sr-only"
                         type="file"
                         accept="image/png,image/jpeg,image/webp"
-                        disabled={visionBusy}
+                        disabled={visionBusy || !WEB_VISION_SCREENSHOT_ENABLED}
                         onChange={(event) => {
                           const file = event.target.files?.[0] ?? null
                           void parseDraftScreenshot(file)
@@ -1754,23 +1791,32 @@ export function WebDraftApp() {
                     </label>
                     <button
                       type="button"
-                      className="nexus-focus inline-flex items-center justify-center border border-nexus-line px-4 py-2 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10"
-                      onClick={() => setVisionStatus('Paste target')}
+                      className="nexus-focus inline-flex items-center justify-center border border-nexus-line px-4 py-2 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10 disabled:cursor-not-allowed disabled:opacity-45"
+                      disabled={!WEB_VISION_SCREENSHOT_ENABLED}
+                      onClick={() => setVisionStatus(WEB_VISION_SCREENSHOT_ENABLED ? 'Paste target' : WEB_VISION_SCREENSHOT_WIP_MESSAGE)}
                     >
-                      Paste Screenshot
+                      {WEB_VISION_SCREENSHOT_ENABLED ? 'Paste Screenshot' : 'Paste WIP'}
                     </button>
                   </div>
                 </div>
                 <div
-                  className="mt-3 border border-dashed border-nexus-lime/40 bg-nexus-bg/30 px-3 py-2 font-mono text-xs text-nexus-muted transition-colors hover:border-nexus-lime/70 hover:text-nexus-text"
+                  className={
+                    'mt-3 border border-dashed border-nexus-lime/40 bg-nexus-bg/30 px-3 py-2 font-mono text-xs text-nexus-muted transition-colors ' +
+                    (WEB_VISION_SCREENSHOT_ENABLED ? 'hover:border-nexus-lime/70 hover:text-nexus-text' : 'opacity-60')
+                  }
                   tabIndex={0}
                   role="button"
+                  aria-disabled={!WEB_VISION_SCREENSHOT_ENABLED}
                   onPaste={handleScreenshotPaste}
-                  onClick={() => setVisionStatus('Paste target')}
+                  onClick={() => setVisionStatus(WEB_VISION_SCREENSHOT_ENABLED ? 'Paste target' : WEB_VISION_SCREENSHOT_WIP_MESSAGE)}
                 >
-                  Paste target
+                  {WEB_VISION_SCREENSHOT_ENABLED ? 'Paste target' : 'Paste target paused'}
                 </div>
-                {visionStatus.toLowerCase().includes('failed') ||
+                {!WEB_VISION_SCREENSHOT_ENABLED ? (
+                  <p className="m-0 mt-2 font-mono text-xs text-nexus-muted" aria-live="polite" aria-atomic="true">
+                    {visionStatus}
+                  </p>
+                ) : visionStatus.toLowerCase().includes('failed') ||
                 visionStatus.toLowerCase().includes('key') ||
                 visionStatus.toLowerCase().includes('error') ? (
                   <p className="m-0 mt-2 font-mono text-xs text-nexus-red/80" aria-live="polite" aria-atomic="true">
@@ -1945,7 +1991,9 @@ export function WebDraftApp() {
               </p>
               <div className="mb-3 rounded-md border border-white/[0.08] bg-nexus-bg/35 px-2 py-2 font-mono text-xs">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <p className="m-0 uppercase tracking-[0.12em] text-nexus-lime/75">Personal pool</p>
+                  <p className="m-0 uppercase tracking-[0.12em] text-nexus-lime/75">
+                    Personal pool {!WEB_PLAYER_POOL_IMPORT_ENABLED ? 'import WIP' : ''}
+                  </p>
                   <div className="inline-flex overflow-hidden rounded-md border border-nexus-line/70">
                     {(['my-champs', 'all-champs'] as const).map((mode) => (
                       <button
@@ -1969,13 +2017,15 @@ export function WebDraftApp() {
                     className={webFieldClassCompact}
                     value={riotIdInput}
                     onChange={(event) => setRiotIdInput(event.target.value)}
-                    placeholder="GameName#TagLine"
+                    placeholder={WEB_PLAYER_POOL_IMPORT_ENABLED ? 'GameName#TagLine' : 'Riot ID import paused'}
                     autoComplete="off"
+                    disabled={!WEB_PLAYER_POOL_IMPORT_ENABLED}
                   />
                   <select
                     className={webFieldClassCompact}
                     value={riotPlatform}
                     onChange={(event) => setRiotPlatform(event.target.value as RiotPlatform)}
+                    disabled={!WEB_PLAYER_POOL_IMPORT_ENABLED}
                   >
                     {RIOT_PLATFORMS.map((platform) => (
                       <option key={`web-riot-platform-${platform}`} value={platform}>
@@ -1986,10 +2036,10 @@ export function WebDraftApp() {
                   <button
                     type="button"
                     className="nexus-focus border border-nexus-line/70 px-2 py-1.5 text-[10px] uppercase tracking-wide text-nexus-lime/90 hover:border-nexus-lime/50 disabled:opacity-45"
-                    disabled={playerPoolBusy}
+                    disabled={playerPoolBusy || !WEB_PLAYER_POOL_IMPORT_ENABLED}
                     onClick={importPlayerChampionPool}
                   >
-                    {playerPoolBusy ? 'Importing' : 'Import'}
+                    {!WEB_PLAYER_POOL_IMPORT_ENABLED ? 'WIP' : playerPoolBusy ? 'Importing' : 'Import'}
                   </button>
                 </div>
                 {playerPoolStatus ? <p className="m-0 mt-2 text-nexus-muted" role="status">{playerPoolStatus}</p> : null}

@@ -41,7 +41,7 @@ import {
   type RiotPlatform,
   type SuggestionContextSlot
 } from '@shared/draft'
-import { MicroLabel, NexusPanel, NexusPlus } from './nexus-ui'
+import { DraftItemPlanBlock as ItemPlanBlock, MicroLabel, NexusPanel, NexusPlus } from './nexus-ui'
 import { idbGetChampions, idbSetChampions } from './web/ddragonIndexedDbCache'
 import {
   clearPersistedWebDraft,
@@ -682,6 +682,7 @@ function SuggestionRow({
                 <span className="text-nexus-lime/80">Plan:</span> {matchupPlan.summonerSpells}; {matchupPlan.startingItem}
               </p>
             )}
+            <ItemPlanBlock itemPlan={matchupPlan?.itemPlan} limit={2} />
             {suggestion.buildProfile && suggestion.buildProfile.tagsLine !== '—' && (
               <p className="m-0 mt-1.5 text-nexus-muted/85">{suggestion.buildProfile.tagsLine}</p>
             )}
@@ -2098,6 +2099,7 @@ export function WebDraftApp() {
                       </p>
                       <p className="m-0 mt-1">Start: {topMatchupPlan.startingItem}</p>
                       <p className="m-0">Recall: {topMatchupPlan.firstRecall}</p>
+                      <ItemPlanBlock itemPlan={topMatchupPlan.itemPlan} limit={2} />
                     </div>
                   )}
                   <details className="rounded-md border border-white/[0.08] bg-nexus-bg/35 px-2 py-2 text-nexus-muted">

@@ -15,6 +15,7 @@ import {
   type RiotPlatform
 } from '@shared/draft'
 import { copyDraftSource } from './nexusCopy'
+import { DraftItemPlanBlock as ItemPlanBlock } from './DraftItemPlanBlock'
 import { MicroLabel } from './NexusTick'
 import { EASING, useNexusMotion } from './nexusMotion'
 
@@ -459,6 +460,7 @@ export function NexusOperationsView({
                   <p className="m-0 mt-1">Start: {topPlan.startingItem}</p>
                   <p className="m-0">Recall: {topPlan.firstRecall}</p>
                   <p className="m-0">Plan: {topPlan.gamePlan}</p>
+                  <ItemPlanBlock itemPlan={topPlan.itemPlan} limit={2} />
                 </div>
               ) : (
                 <p className="m-0 text-nexus-muted">No pick plan yet.</p>
@@ -706,6 +708,7 @@ export function NexusOperationsView({
           {suggestions.map((s) => {
             const championKey = championKeyById.get(s.championId)
             const imageUrl = ddragonVersion && championKey ? ddragonChampionImageUrl(ddragonVersion, championKey) : null
+            const plan = draftIntel?.matchupPlans.find((row) => row.championId === s.championId) ?? null
             return (
             <li key={s.championId} className="border-b border-nexus-line/40 pb-3 last:border-0 last:pb-0">
               <div className="flex gap-2">
@@ -762,6 +765,7 @@ export function NexusOperationsView({
                       <span className="text-nexus-lime/75 uppercase">Items</span> · {s.buildProfile.itemHint}
                     </div>
                   )}
+                  <ItemPlanBlock itemPlan={plan?.itemPlan} limit={2} />
                 </div>
               )}
                 </div>

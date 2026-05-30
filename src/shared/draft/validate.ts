@@ -1,5 +1,6 @@
 import type {
   DraftRole,
+  DraftItemPlan,
   DraftIntel,
   DraftSnapshot,
   DraftSource,
@@ -185,6 +186,20 @@ function isStringArray(x: unknown, max = 8): x is string[] {
   return Array.isArray(x) && x.length <= max && x.every((row) => typeof row === 'string')
 }
 
+function isDraftItemPlan(x: unknown): x is DraftItemPlan {
+  if (x == null || typeof x !== 'object') {
+    return false
+  }
+  const o = x as Record<string, unknown>
+  return (
+    typeof o.core === 'string' &&
+    typeof o.boots === 'string' &&
+    typeof o.defensive === 'string' &&
+    isStringArray(o.situational, 6) &&
+    isStringArray(o.notes, 6)
+  )
+}
+
 function isDraftIntel(x: unknown): x is DraftIntel {
   if (x == null || typeof x !== 'object') {
     return false
@@ -243,6 +258,9 @@ function isDraftIntel(x: unknown): x is DraftIntel {
       typeof r.runeExport !== 'string' ||
       typeof r.gamePlan !== 'string'
     ) {
+      return false
+    }
+    if (r.itemPlan != null && !isDraftItemPlan(r.itemPlan)) {
       return false
     }
   }

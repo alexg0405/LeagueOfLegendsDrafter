@@ -10,7 +10,12 @@ const names = new Map<number, string>([
   [157, 'Yasuo'],
   [64, 'Lee Sin'],
   [22, 'Ashe'],
-  [412, 'Thresh']
+  [412, 'Thresh'],
+  [32, 'Amumu'],
+  [54, 'Malphite'],
+  [99, 'Lux'],
+  [115, 'Ziggs'],
+  [267, 'Nami']
 ])
 
 function slot(role: DraftSnapshot['ally'][number]['role'], championId: number | null): DraftSnapshot['ally'][number] {
@@ -102,6 +107,33 @@ describe('buildDraftIntel', () => {
 
     expect(intel?.compIdentity.missing).toContain('magic damage')
     expect(intel?.compIdentity.missing).toContain('frontline')
+  })
+
+  it('builds item plans around enemy comp and ally damage needs', () => {
+    const s = snapshot()
+    s.ally = [slot('top', 51), slot('jungle', 119), slot('middle', 238), slot('bottom', 81), slot('support', null)]
+    s.enemy = [slot('top', 54), slot('jungle', 32), slot('middle', 99), slot('bottom', 115), slot('support', 267)]
+    const ezreal = suggestion(81, 'Ezreal')
+    ezreal.buildProfile = {
+      ...ezreal.buildProfile!,
+      damage: 'flex',
+      itemHint: 'Manamune core can pivot toward physical DPS or AP poke depending on team damage.'
+    }
+
+    const intel = buildDraftIntel({
+      snapshot: s,
+      myRole: 'bottom',
+      suggestions: [ezreal],
+      idToName: names
+    })
+
+    const plan = intel?.matchupPlans[0]?.itemPlan
+    expect(plan?.core).toMatch(/Manamune/)
+    expect(plan?.boots).toMatch(/Mercury/)
+    expect(plan?.situational.join(' ')).toMatch(/Anti-tank/)
+    expect(plan?.situational.join(' ')).toMatch(/Anti-heal/)
+    expect(plan?.situational.join(' ')).toMatch(/Team damage/)
+    expect(plan?.notes.join(' ')).toMatch(/Ziggs/)
   })
 
   it('maps champion pool preferences to comfort weights', () => {

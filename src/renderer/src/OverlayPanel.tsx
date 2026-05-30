@@ -27,6 +27,7 @@ import {
   type OverlayEnginePrefsPatch,
   type RiotPlatform
 } from '@shared/draft'
+import { DraftItemPlanBlock as OverlayItemPlan } from './nexus-ui/DraftItemPlanBlock'
 import {
   livePublicDataStatusLine,
   refreshLivePublicData,
@@ -891,6 +892,7 @@ export function OverlayPanel() {
                       {d.draftIntel.matchupPlans[0].championName} - {d.draftIntel.matchupPlans[0].summonerSpells}
                     </p>
                     <p className="m-0 text-nexus-muted">Start: {d.draftIntel.matchupPlans[0].startingItem}</p>
+                    <OverlayItemPlan itemPlan={d.draftIntel.matchupPlans[0].itemPlan} limit={2} />
                   </div>
                 )}
               </div>
@@ -1141,6 +1143,7 @@ export function OverlayPanel() {
                 p.runes?.note,
                 p.buildProfile?.buildHint ?? 'Matchup notes locked until board has more context.'
               )
+              const matchupPlan = d.draftIntel?.matchupPlans.find((plan) => plan.championId === p.championId) ?? null
               return (
                 <li
                   key={`${d.boardSignature ?? d.updatedAt}-${i}-${p.championId}`}
@@ -1255,6 +1258,7 @@ export function OverlayPanel() {
                           <span className="text-nexus-lime/80">Items:</span> {p.buildProfile.itemHint}
                         </div>
                       )}
+                      <OverlayItemPlan itemPlan={matchupPlan?.itemPlan} limit={2} />
                       {p.buildProfile && (
                         <div className="mt-1 text-nexus-muted">
                           {p.buildProfile.archetype}

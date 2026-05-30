@@ -79,7 +79,14 @@ describe('DraftUpdate enemy role inference payload', () => {
             startingItem: "Doran's Bow",
             firstRecall: 'Pickaxe plus boots.',
             runeExport: 'Sorcery: Arcane Comet / Secondary: Inspiration',
-            gamePlan: 'Play short trades around cooldowns.'
+            gamePlan: 'Play short trades around cooldowns.',
+            itemPlan: {
+              core: 'Manamune into poke DPS.',
+              boots: "Mercury's Treads into heavy CC.",
+              defensive: 'Buy MR if mid/jungle burst is fed.',
+              situational: ['Anti-heal into sustain.', 'Anti-tank into frontline.'],
+              notes: ['Team damage is mostly physical.']
+            }
           }
         ],
         pickComparison: [

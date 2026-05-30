@@ -75,6 +75,14 @@ export type RuneLoadoutHint = {
 
 export type ChampionPoolPreference = 'main' | 'comfortable' | 'learning' | 'never'
 
+export type DraftItemPlan = {
+  core: string
+  boots: string
+  defensive: string
+  situational: string[]
+  notes: string[]
+}
+
 export type DraftIntel = {
   banRecommendations: {
     championId: number
@@ -100,6 +108,7 @@ export type DraftIntel = {
     firstRecall: string
     runeExport: string
     gamePlan: string
+    itemPlan?: DraftItemPlan
   }[]
   pickComparison: {
     championId: number

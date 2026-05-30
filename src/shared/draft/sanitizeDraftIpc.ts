@@ -1,4 +1,4 @@
-import type { ChampionBuildProfile, DraftIntel, DraftUpdate, EnemyRoleInference, PickSuggestion } from './types'
+import type { ChampionBuildProfile, DraftIntel, DraftItemPlan, DraftUpdate, EnemyRoleInference, PickSuggestion } from './types'
 import { isOverlayEngineEcho } from './validate'
 
 /**
@@ -139,6 +139,27 @@ function nullableText(v: unknown): string | null {
   return typeof v === 'string' ? v : null
 }
 
+function sanitizeStringArray(rows: unknown, max: number): string[] {
+  return Array.isArray(rows) ? rows.filter((x): x is string => typeof x === 'string').slice(0, max) : []
+}
+
+function sanitizeDraftItemPlan(plan: unknown): DraftItemPlan | undefined {
+  if (plan == null || typeof plan !== 'object') {
+    return undefined
+  }
+  const p = plan as Record<string, unknown>
+  if (typeof p.core !== 'string' || typeof p.boots !== 'string' || typeof p.defensive !== 'string') {
+    return undefined
+  }
+  return {
+    core: p.core,
+    boots: p.boots,
+    defensive: p.defensive,
+    situational: sanitizeStringArray(p.situational, 6),
+    notes: sanitizeStringArray(p.notes, 6)
+  }
+}
+
 function sanitizeDraftIntel(intel: DraftUpdate['draftIntel']): DraftIntel | null {
   if (intel == null || typeof intel !== 'object') {
     return null
@@ -177,7 +198,8 @@ function sanitizeDraftIntel(intel: DraftUpdate['draftIntel']): DraftIntel | null
             startingItem: text(row.startingItem),
             firstRecall: text(row.firstRecall),
             runeExport: text(row.runeExport),
-            gamePlan: text(row.gamePlan)
+            gamePlan: text(row.gamePlan),
+            itemPlan: sanitizeDraftItemPlan(row.itemPlan)
           }))
           .filter((row) => row.championId > 0)
           .slice(0, 8)

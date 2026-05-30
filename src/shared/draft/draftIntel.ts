@@ -11,6 +11,7 @@ import { resolveChampionName } from './championNameFallback'
 import type {
   ChampionPoolPreference,
   DraftIntel,
+  DraftItemPlan,
   DraftRole,
   DraftSnapshot,
   EnemyRoleInference,
@@ -393,6 +394,185 @@ function firstRecall(s: PickSuggestion, myRole: DraftRole, enemy: TeamRead): str
   return 'Boots plus core component; buy resist shards if the inferred lane opponent is the real threat.'
 }
 
+function teamDamageCounts(team: TeamRead): { magic: number; physical: number } {
+  return {
+    magic: team.ap + team.hybrid * 0.5,
+    physical: team.ad + team.hybrid * 0.5
+  }
+}
+
+function canAddMagicDamage(s: PickSuggestion): boolean {
+  const dmg = s.buildProfile?.damage
+  return dmg === 'ap' || dmg === 'mixed' || dmg === 'flex' || hasSuggestionClass(s, 'mage')
+}
+
+function canAddPhysicalDamage(s: PickSuggestion): boolean {
+  const dmg = s.buildProfile?.damage
+  return dmg === 'ad' || dmg === 'mixed' || dmg === 'flex' || hasSuggestionClass(s, 'marksman') || hasSuggestionClass(s, 'fighter')
+}
+
+function addUnique(lines: string[], line: string): void {
+  if (!lines.includes(line)) {
+    lines.push(line)
+  }
+}
+
+function coreItemPlan(s: PickSuggestion, myRole: DraftRole, enemy: TeamRead): string {
+  const championHint = s.buildProfile?.itemHint ?? s.buildProfile?.buildHint
+  if (championHint) {
+    return championHint
+  }
+  if (myRole === 'support') {
+    return hasSuggestionClass(s, 'tank')
+      ? 'Support quest into engage durability; buy the aura or peel item that answers their fed carry.'
+      : 'Support quest into haste and vision control; add peel or anti-heal when fights group early.'
+  }
+  if (hasSuggestionClass(s, 'marksman')) {
+    return enemy.frontline >= 2
+      ? 'Sustained DPS core first, then an anti-tank slot before the third major fight.'
+      : 'Standard DPS curve first; keep one slot open for burst defense if enemy dive gets ahead.'
+  }
+  if (hasSuggestionClass(s, 'mage')) {
+    return enemy.frontline >= 2
+      ? 'Mana/AP core into burn or magic penetration so tanks cannot ignore you.'
+      : 'AP haste or burst core; protect your first two-item spike with vision before objectives.'
+  }
+  if (hasSuggestionClass(s, 'assassin')) {
+    return 'First lethality or burst spike matters most; delay greed if the enemy has point-and-click lockdown.'
+  }
+  if (hasSuggestionClass(s, 'fighter')) {
+    return 'Bruiser damage plus durability is the default; choose sustain for long fights and penetration into tanks.'
+  }
+  if (hasSuggestionClass(s, 'tank')) {
+    return 'First full tank item should match the enemy carry damage, then pivot into teamfight utility.'
+  }
+  return 'Follow the champion standard core, then adapt second item to the strongest enemy damage source.'
+}
+
+function bootsItemPlan(s: PickSuggestion, myRole: DraftRole, enemy: TeamRead): string {
+  const enemyDamage = teamDamageCounts(enemy)
+  const heavyCc = enemy.tanks + enemy.supports + enemy.pick >= 3
+  if (enemyDamage.magic >= 4 || (enemyDamage.magic > enemyDamage.physical + 1 && heavyCc)) {
+    return "Mercury's Treads when AP/CC is the main threat; keep damage boots only if lane is controlled."
+  }
+  if (enemyDamage.physical >= 4 || enemy.marksmen >= 2) {
+    return 'Plated Steelcaps into AD/auto attackers; greed damage boots only when your team can peel.'
+  }
+  if (myRole === 'support' || myRole === 'jungle') {
+    return 'Early movement boots for tempo, then upgrade toward the enemy damage split.'
+  }
+  if (hasSuggestionClass(s, 'mage')) {
+    return "Sorcerer's or haste boots for tempo; swap to Mercs if CC prevents spell rotations."
+  }
+  if (hasSuggestionClass(s, 'marksman')) {
+    return 'Attack-speed or Swifties-style boots unless burst forces Steelcaps or Mercs.'
+  }
+  return 'Use champion-standard boots, then pivot to Mercs or Steelcaps when one damage type is stacked.'
+}
+
+function defensiveItemPlan(
+  s: PickSuggestion,
+  enemy: TeamRead,
+  laneOpponent: SlotPick | null
+): string {
+  const enemyDamage = teamDamageCounts(enemy)
+  const laneThreat = laneOpponent?.championName ? getChampionThreatOverride(laneOpponent.championName)?.threat : null
+  if (enemy.assassins >= 2 || enemy.dive >= 3) {
+    return hasSuggestionClass(s, 'marksman') || hasSuggestionClass(s, 'mage')
+      ? 'Reserve an early defensive slot against dive; stopwatch, shield, or lifesteal value beats pure greed.'
+      : 'Add health/resists before side-laning deep; survive the first burst rotation, then re-engage.'
+  }
+  if (enemyDamage.magic >= 4 || laneThreat === 'ap') {
+    return 'Buy an early MR component if the AP lane or jungle can burst your first reset.'
+  }
+  if (enemyDamage.physical >= 4 || laneThreat === 'ad') {
+    return 'Buy armor before the second big fight if AD damage is stacked or lane trades are unavoidable.'
+  }
+  if (enemy.poke >= 3) {
+    return 'Sustain and safer recalls matter into poke; do not delay defense just to finish a greedy component.'
+  }
+  return 'Default defense can wait, but keep gold flexible for the enemy carry who gets ahead first.'
+}
+
+function situationalItemPlans(s: PickSuggestion, myRole: DraftRole, ally: TeamRead, enemy: TeamRead): string[] {
+  const lines: string[] = []
+  const allyDamage = teamDamageCounts(ally)
+  if (enemy.frontline >= 3 || enemy.tanks >= 2) {
+    if (hasSuggestionClass(s, 'mage') || s.buildProfile?.damage === 'ap') {
+      addUnique(lines, 'Anti-tank: add burn or magic penetration before enemy frontline reaches full resist stacks.')
+    } else if (hasSuggestionClass(s, 'marksman') || hasSuggestionClass(s, 'fighter') || s.buildProfile?.damage === 'ad') {
+      addUnique(lines, 'Anti-tank: plan armor penetration, Black Cleaver-style shred, or on-hit DPS before late objectives.')
+    } else {
+      addUnique(lines, 'Anti-tank: help your carry access frontline with peel, slows, or resistance shred.')
+    }
+  }
+  if (enemy.sustain >= 2 || enemy.supports >= 2) {
+    addUnique(lines, 'Anti-heal: buy it early when enchanters, drain tanks, or bruiser sustain decide extended fights.')
+  }
+  if (enemy.supports >= 2 && (hasSuggestionClass(s, 'assassin') || s.buildProfile?.damage === 'ad')) {
+    addUnique(lines, 'Shield pressure: consider shield-break or target the enchanter first if shields block burst windows.')
+  }
+  if (enemy.poke >= 3) {
+    addUnique(lines, 'Poke answer: choose sustain, engage speed, or waveclear before grouping for neutral objectives.')
+  }
+  if (enemy.assassins >= 2 && (myRole === 'bottom' || myRole === 'middle' || hasSuggestionClass(s, 'marksman') || hasSuggestionClass(s, 'mage'))) {
+    addUnique(lines, 'Anti-burst: a defensive second or third item is usually better than one more damage component.')
+  }
+  if (ally.slots.length >= 3 && allyDamage.magic < 1 && canAddMagicDamage(s)) {
+    addUnique(lines, 'Team damage: lean into the AP or magic-damage path so armor stacking is punishable.')
+  }
+  if (ally.slots.length >= 3 && allyDamage.physical < 1 && canAddPhysicalDamage(s)) {
+    addUnique(lines, 'Team damage: preserve physical DPS instead of over-indexing on utility or tank stats.')
+  }
+  if (ally.slots.length >= 3 && ally.frontline < 1 && (hasSuggestionClass(s, 'tank') || hasSuggestionClass(s, 'fighter'))) {
+    addUnique(lines, 'Team shape: a bulkier frontline build may be worth more than maximum personal damage.')
+  }
+  if (ally.engage < 1 && myRole === 'support') {
+    addUnique(lines, 'Team shape: prioritize an engage or pick tool if your team has no reliable fight starter.')
+  }
+  return lines.slice(0, 5)
+}
+
+function itemNotes(s: PickSuggestion, myRole: DraftRole, ally: TeamRead, enemy: TeamRead, laneOpponent: SlotPick | null): string[] {
+  const notes: string[] = []
+  const allyDamage = teamDamageCounts(ally)
+  if (laneOpponent?.championName) {
+    const threat = getChampionThreatOverride(laneOpponent.championName)?.threat
+    if (threat === 'ap') addUnique(notes, `Lane check: ${laneOpponent.championName} is AP-leaning; do not ignore early MR.`)
+    if (threat === 'ad') addUnique(notes, `Lane check: ${laneOpponent.championName} is AD-leaning; armor boots/components are live options.`)
+    if (threat === 'utility') addUnique(notes, `Lane check: ${laneOpponent.championName} brings setup; value tenacity, spacing, and vision.`)
+  }
+  if (ally.slots.length >= 3 && allyDamage.magic < 1 && !canAddMagicDamage(s)) {
+    addUnique(notes, 'Team warning: allies are light on magic damage, so avoid low-value physical damage when behind.')
+  }
+  if (ally.slots.length >= 3 && allyDamage.physical < 1 && !canAddPhysicalDamage(s)) {
+    addUnique(notes, 'Team warning: allies are light on physical DPS; protect whoever can hit objectives.')
+  }
+  if (enemy.frontline >= 3 && ally.scaling >= 2) {
+    addUnique(notes, 'Fight length: expect front-to-back fights, so second/third items should scale into long objectives.')
+  }
+  if (myRole === 'jungle' && enemy.dive >= 2) {
+    addUnique(notes, 'Jungle tempo: defensive boots can be the difference between covering dives and arriving late.')
+  }
+  return notes.slice(0, 4)
+}
+
+function itemPlan(
+  s: PickSuggestion,
+  myRole: DraftRole,
+  ally: TeamRead,
+  enemy: TeamRead,
+  laneOpponent: SlotPick | null
+): DraftItemPlan {
+  return {
+    core: coreItemPlan(s, myRole, enemy),
+    boots: bootsItemPlan(s, myRole, enemy),
+    defensive: defensiveItemPlan(s, enemy, laneOpponent),
+    situational: situationalItemPlans(s, myRole, ally, enemy),
+    notes: itemNotes(s, myRole, ally, enemy, laneOpponent)
+  }
+}
+
 function runeExport(runes: RuneLoadoutHint | null | undefined): string {
   if (!runes) {
     return 'No rune page hint available for this pick yet.'
@@ -439,7 +619,8 @@ function matchupPlans(
     startingItem: startingItem(s, myRole, enemy, laneOpponent),
     firstRecall: firstRecall(s, myRole, enemy),
     runeExport: runeExport(s.runes),
-    gamePlan: planLine(s, myRole, ally, enemy, laneOpponent)
+    gamePlan: planLine(s, myRole, ally, enemy, laneOpponent),
+    itemPlan: itemPlan(s, myRole, ally, enemy, laneOpponent)
   }))
 }
 
@@ -490,6 +671,10 @@ function loadingBrief(
   const plan = intel.matchupPlans[0]
   if (plan) {
     lines.push(`Top pick plan: ${plan.championName} ${plan.laneOpponentName ? `vs ${plan.laneOpponentName}` : ''} - ${plan.summonerSpells}; ${plan.startingItem}`)
+    const itemAngle = plan.itemPlan?.situational[0] ?? plan.itemPlan?.boots
+    if (itemAngle) {
+      lines.push(`Item angle: ${itemAngle}`)
+    }
   }
   const warn = intel.compIdentity.warnings[0]
   if (warn) {

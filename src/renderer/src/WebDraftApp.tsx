@@ -61,7 +61,7 @@ const MAX_WEB_ROLLOUTS = 200
 const LS_WEB_CHAMPION_POOL_PREFS = 'nexusdraft.web.v1.championPoolPrefs'
 const LS_WEB_PLAYER_POOL_PROFILE = 'nexusdraft.web.v1.playerChampionPoolProfile'
 const LS_WEB_RECOMMENDATION_POOL_MODE = 'nexusdraft.web.v1.recommendationPoolMode'
-const EXE_DOWNLOAD_URL = 'https://drive.google.com/file/d/1IJnut-zjcBNAMwe5-slYjRHpefYOR7Q-/view?usp=sharing'
+const EXE_DOWNLOAD_URL = 'https://nexusdraft.lol/downloads/Nexus-Draft-Setup-3.11.0.exe'
 const VIRUSTOTAL_SCAN_URL =
   'https://www.virustotal.com/gui/file-analysis/OWQyYjU0YWQwNzU0NmE5ZTgzY2QwN2QxMWQyZWZjYzc6MTc4MDE2NTI4Mg=='
 const GITHUB_PROFILE_URL = 'https://github.com/alexg0405'

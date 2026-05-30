@@ -7,9 +7,9 @@ Nexus Draft ships as two separate applications:
 
 The web app cannot read the local League Client API or create a true in-game overlay from a browser. Use the desktop app for live champ select.
 
-Download: [Nexus Draft portable EXE](https://drive.google.com/file/d/18GEeVNACW8BYMhElANbsVbFWLC4dsp-3/view?usp=drive_link).
+Download: [Nexus Draft portable EXE](https://drive.google.com/file/d/1f-smHsI2RecsqNDEL68jHiXaLLGwPOML/view?usp=sharing).
 
-Download safety scan: [VirusTotal report](https://www.virustotal.com/gui/file/29e021c773e315e67bfdcbcf753dff204227de7d7c4f257bfd4274686a976afa/detection).
+Download safety scan: [VirusTotal report](https://www.virustotal.com/gui/file-analysis/Yzk1YTE5OTMwNGNhYjQwOWUxNjZiZjk4YmVhNjlhOGE6MTc3ODI5MzIxNw==).
 
 Creator: [GitHub](https://github.com/alexg0405).
 
@@ -53,7 +53,7 @@ The Windows build emits installer/portable `.exe` files into `release/`.
 1. Run `npm run build` and `npm run build:web`.
 2. Run `npm run dist:win` to produce the desktop `.exe` artifacts.
 3. Upload the desktop artifacts to a GitHub Release.
-4. Include the [VirusTotal safety scan](https://www.virustotal.com/gui/file/29e021c773e315e67bfdcbcf753dff204227de7d7c4f257bfd4274686a976afa/detection) in the release notes.
+4. Include the [VirusTotal safety scan](https://www.virustotal.com/gui/file-analysis/Yzk1YTE5OTMwNGNhYjQwOWUxNjZiZjk4YmVhNjlhOGE6MTc3ODI5MzIxNw==) in the release notes.
 5. Push `main`; Vercel builds the web app from `vercel.json` using `npm run build:web`.
 
 ## Feature Split
@@ -75,3 +75,6 @@ The web app includes a small public visitor counter powered by [Visitor Counter 
 - Output directory: `dist/web`
 - Install command: `npm ci`
 - Optional screenshot autofill env var: `GEMINI_API_KEY`
+- Optional Riot mastery import env var: `RIOT_API_KEY`
+
+For the desktop app, put `RIOT_API_KEY=...` in the project `.env` during development or next to the packaged `.exe` for local Riot mastery imports.

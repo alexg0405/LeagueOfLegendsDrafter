@@ -1,12 +1,32 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type DragEvent as ReactDragEvent, type ReactNode } from 'react'
 import { ddragonChampionImageUrl, type ChampionLite } from '@shared/dataDragon'
-import { formatRuneTipNote, type DraftDeltaListMode, type DraftRole, type DraftSource, type PickSuggestion } from '@shared/draft'
+import {
+  RIOT_PLATFORMS,
+  formatRuneTipNote,
+  type DraftDeltaListMode,
+  type DraftIntel,
+  type DraftRole,
+  type DraftSource,
+  type EnemyRoleInference,
+  type ChampionPoolPreference,
+  type PickSuggestion,
+  type PlayerChampionPoolProfile,
+  type RecommendationPoolMode,
+  type RiotPlatform
+} from '@shared/draft'
 import { copyDraftSource } from './nexusCopy'
 import { MicroLabel } from './NexusTick'
 import { EASING, useNexusMotion } from './nexusMotion'
 
 const ROLES: DraftRole[] = ['top', 'jungle', 'middle', 'bottom', 'support']
+const CHAMPION_POOL_PREFERENCES: { value: ChampionPoolPreference; label: string }[] = [
+  { value: 'main', label: 'Main' },
+  { value: 'comfortable', label: 'Comfort' },
+  { value: 'learning', label: 'Learning' },
+  { value: 'never', label: 'Avoid' }
+]
+const POOL_DRAG_MIME = 'application/x-nexus-pool-champion-id'
 
 const inField =
   'nexus-focus w-full min-w-0 max-w-md bg-nexus-bg border border-nexus-line text-nexus-text font-mono text-sm py-2 px-3 focus:border-nexus-lime/50 focus:outline-none disabled:opacity-45'
@@ -22,6 +42,40 @@ function parseChampionSelectValue(value: string): number | null {
   }
   const n = Number(value)
   return Number.isFinite(n) && n > 0 ? n : null
+}
+
+function enemyInferenceLabel(row: EnemyRoleInference | null | undefined): string | null {
+  void row
+  return null
+}
+
+function parsePoolDragChampionId(event: ReactDragEvent<HTMLElement>): number | null {
+  const raw = event.dataTransfer.getData(POOL_DRAG_MIME) || event.dataTransfer.getData('text/plain')
+  const n = Number(raw)
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null
+}
+
+function PoolTrashIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M9 6V4h6v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M5 7h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path
+        d="M8 10v9h8v-9"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M10.5 11.5v5M13.5 11.5v5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+type PoolUndoState = {
+  championId: number
+  championName: string
+  previousManualPreference: ChampionPoolPreference | null
 }
 
 type OpsSectionProps = {
@@ -108,6 +162,23 @@ export type NexusOperationsViewProps = {
   onSuggestDeltaListMode: (v: DraftDeltaListMode) => void
   suggestions: PickSuggestion[]
   ddragonVersion: string | null
+  enemyRoleInference?: EnemyRoleInference[] | null
+  draftIntel?: DraftIntel | null
+  appUpdateStatusLine: string
+  appUpdateBusy: boolean
+  appUpdateAvailable: boolean
+  appUpdateReady: boolean
+  onCheckAppUpdate: () => void
+  onDownloadAppUpdate: () => void
+  onInstallAppUpdate: () => void
+  playerPoolProfile: PlayerChampionPoolProfile | null
+  playerPoolStatus: string | null
+  playerPoolBusy: boolean
+  recommendationPoolMode: RecommendationPoolMode
+  onRecommendationPoolMode: (mode: RecommendationPoolMode) => void
+  onImportPlayerChampionPool: (riotId: string, platform: RiotPlatform) => void
+  championPoolPreferences: Record<string, ChampionPoolPreference>
+  onChampionPoolPreference: (championId: number, pref: ChampionPoolPreference | null) => void
   onToggleOverlay: () => void
 }
 
@@ -131,11 +202,43 @@ export function NexusOperationsView({
   onSuggestDeltaListMode,
   suggestions,
   ddragonVersion,
+  enemyRoleInference,
+  draftIntel,
+  appUpdateStatusLine,
+  appUpdateBusy,
+  appUpdateAvailable,
+  appUpdateReady,
+  onCheckAppUpdate,
+  onDownloadAppUpdate,
+  onInstallAppUpdate,
+  playerPoolProfile,
+  playerPoolStatus,
+  playerPoolBusy,
+  recommendationPoolMode,
+  onRecommendationPoolMode,
+  onImportPlayerChampionPool,
+  championPoolPreferences,
+  onChampionPoolPreference,
   onToggleOverlay
 }: NexusOperationsViewProps) {
   const sorted = champions.slice().sort((a, b) => a.name.localeCompare(b.name))
   const championKeyById = new Map(champions.map((c) => [c.id, c.key] as const))
+  const championNameById = new Map(champions.map((c) => [c.id, c.name] as const))
   const [openSectionIds, setOpenSectionIds] = useState<ReadonlySet<string>>(() => new Set())
+  const [poolChampionId, setPoolChampionId] = useState<number | null>(null)
+  const [poolPreference, setPoolPreference] = useState<ChampionPoolPreference>('comfortable')
+  const [riotIdInput, setRiotIdInput] = useState(() => playerPoolProfile?.riotId ?? '')
+  const [riotPlatform, setRiotPlatform] = useState<RiotPlatform>(() => playerPoolProfile?.platform ?? 'na1')
+  const [poolUndoStack, setPoolUndoStack] = useState<PoolUndoState[]>([])
+  const [poolTrashActive, setPoolTrashActive] = useState(false)
+  const [poolActionStatus, setPoolActionStatus] = useState<string | null>(null)
+  useEffect(() => {
+    if (!playerPoolProfile) {
+      return
+    }
+    setRiotIdInput(playerPoolProfile.riotId)
+    setRiotPlatform(playerPoolProfile.platform)
+  }, [playerPoolProfile])
   const toggleSection = (id: string) => {
     setOpenSectionIds((prev) => {
       const next = new Set(prev)
@@ -146,6 +249,52 @@ export function NexusOperationsView({
       }
       return next
     })
+  }
+  const topPlan = draftIntel?.matchupPlans[0] ?? null
+  const importedPreferenceById = new Map(
+    (playerPoolProfile?.entries ?? []).map((entry) => [String(entry.championId), entry.preference] as const)
+  )
+  const visibleImportedPoolEntries = (playerPoolProfile?.entries ?? []).filter((entry) => {
+    return (championPoolPreferences[String(entry.championId)] ?? entry.preference) !== 'never'
+  })
+  const visibleManualPoolEntries = Object.entries(championPoolPreferences).filter(([id, pref]) => {
+    return pref !== 'never' && !importedPreferenceById.has(id)
+  })
+  const poolStatusLine = poolActionStatus ?? playerPoolStatus
+  const poolUndo = poolUndoStack[poolUndoStack.length - 1] ?? null
+
+  const removeChampionFromPool = (championId: number) => {
+    const id = String(championId)
+    const importedPreference = importedPreferenceById.get(id) ?? null
+    const previousManualPreference = championPoolPreferences[id] ?? null
+    const championName = championNameById.get(championId) ?? `Champion ${championId}`
+    onChampionPoolPreference(championId, importedPreference ? 'never' : null)
+    setPoolUndoStack((prev) => [...prev, { championId, championName, previousManualPreference }].slice(-20))
+    setPoolActionStatus(`Removed ${championName} from personal pool.`)
+  }
+
+  const undoChampionPoolRemoval = () => {
+    if (!poolUndo) {
+      return
+    }
+    onChampionPoolPreference(poolUndo.championId, poolUndo.previousManualPreference)
+    setPoolActionStatus(`Restored ${poolUndo.championName}.`)
+    setPoolUndoStack((prev) => prev.slice(0, -1))
+  }
+
+  const handlePoolChipDragStart = (event: ReactDragEvent<HTMLElement>, championId: number) => {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData(POOL_DRAG_MIME, String(championId))
+    event.dataTransfer.setData('text/plain', String(championId))
+  }
+
+  const handlePoolTrashDrop = (event: ReactDragEvent<HTMLElement>) => {
+    event.preventDefault()
+    setPoolTrashActive(false)
+    const championId = parsePoolDragChampionId(event)
+    if (championId != null) {
+      removeChampionFromPool(championId)
+    }
   }
 
   return (
@@ -182,6 +331,32 @@ export function NexusOperationsView({
         </div>
       </CollapsibleOpsSection>
 
+      <CollapsibleOpsSection
+        id="UP_01"
+        kicker="release"
+        title="App updates"
+        open={openSectionIds.has('UP_01')}
+        onToggle={() => toggleSection('UP_01')}
+      >
+        <p className={`${textBody} mb-4`} role="status">{appUpdateStatusLine}</p>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={btnPrimary} disabled={appUpdateBusy} onClick={onCheckAppUpdate}>
+            {appUpdateBusy ? 'Checking' : 'Check'}
+          </button>
+          <button
+            type="button"
+            className={btnPrimary}
+            disabled={appUpdateBusy || !appUpdateAvailable}
+            onClick={onDownloadAppUpdate}
+          >
+            Download
+          </button>
+          <button type="button" className={btnPrimary} disabled={!appUpdateReady} onClick={onInstallAppUpdate}>
+            Install
+          </button>
+        </div>
+      </CollapsibleOpsSection>
+
       {useManual && (
         <CollapsibleOpsSection
           id="BD_01"
@@ -211,6 +386,7 @@ export function NexusOperationsView({
                     </option>
                   ))}
                 </select>
+                <div className="min-w-0">
                 <select
                   className={inField + ' max-w-none w-full text-xs'}
                   value={manual.enemy[role] ?? ''}
@@ -225,11 +401,265 @@ export function NexusOperationsView({
                     </option>
                   ))}
                 </select>
+                  {(() => {
+                    const idx = ROLES.indexOf(role)
+                    const row = enemyRoleInference?.find((x) => x.enemyIndex === idx && x.championId === manual.enemy[role])
+                    const label = enemyInferenceLabel(row)
+                    return label ? (
+                      <p className="m-0 mt-1 font-mono text-[10px] uppercase tracking-wide text-nexus-red/75">{label}</p>
+                    ) : null
+                  })()}
+                </div>
               </div>
             ))}
           </div>
         </CollapsibleOpsSection>
       )}
+
+      <CollapsibleOpsSection
+        id="DI_01"
+        kicker="coach"
+        title="Draft intel"
+        accent
+        open={openSectionIds.has('DI_01')}
+        onToggle={() => toggleSection('DI_01')}
+      >
+        {!draftIntel ? (
+          <p className={`${textMuted} font-mono text-sm`}>Lock picks or use manual board to generate matchup plans, bans, and warnings.</p>
+        ) : (
+          <div className="space-y-4 font-mono text-sm">
+            <div className="border-l-2 border-nexus-lime/70 bg-nexus-bg/25 px-3 py-2">
+              <p className="m-0 text-nexus-lime/90 uppercase tracking-[0.12em] text-xs">Win condition</p>
+              <p className="m-0 mt-1 text-nexus-text/90 leading-relaxed">{draftIntel.compIdentity.winCondition}</p>
+            </div>
+            <div className="grid gap-3">
+              <div>
+                <p className="m-0 mb-1 text-nexus-lime/85 uppercase tracking-[0.12em] text-xs">Loading brief</p>
+                <ul className="m-0 list-disc pl-4 space-y-1 text-nexus-muted">
+                  {draftIntel.loadingBrief.map((line, idx) => (
+                    <li key={`brief-${idx}`}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="text-nexus-muted">
+                <p className="m-0 mb-1 text-nexus-lime/85 uppercase tracking-[0.12em] text-xs">Identity</p>
+                <p className="m-0">Ally: {draftIntel.compIdentity.ally.join(', ') || 'pending'}</p>
+                <p className="m-0">Enemy: {draftIntel.compIdentity.enemy.join(', ') || 'pending'}</p>
+                {draftIntel.compIdentity.missing.length > 0 && (
+                  <p className="m-0 text-nexus-yellow/90">Missing: {draftIntel.compIdentity.missing.join(', ')}</p>
+                )}
+              </div>
+              <div className="text-nexus-muted">
+                <p className="m-0 mb-1 text-nexus-lime/85 uppercase tracking-[0.12em] text-xs">Warnings</p>
+                <ul className="m-0 list-disc pl-4 space-y-1">
+                  {draftIntel.compIdentity.warnings.slice(0, 4).map((line, idx) => (
+                    <li key={`warn-${idx}`}>{line}</li>
+                  ))}
+                  {draftIntel.compIdentity.warnings.length === 0 && <li className="list-none -ml-4">No major warning yet.</li>}
+                </ul>
+              </div>
+            </div>
+            <div>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <p className="m-0 text-nexus-lime/85 uppercase tracking-[0.12em] text-xs">Top matchup plan</p>
+              </div>
+              {topPlan ? (
+                <div className="border border-nexus-line/60 bg-nexus-bg/25 px-3 py-2 text-nexus-muted leading-relaxed">
+                  <p className="m-0 text-nexus-text/90">
+                    {topPlan.championName}{topPlan.laneOpponentName ? ` vs ${topPlan.laneOpponentName}` : ''} - {topPlan.summonerSpells}
+                  </p>
+                  <p className="m-0 mt-1">Start: {topPlan.startingItem}</p>
+                  <p className="m-0">Recall: {topPlan.firstRecall}</p>
+                  <p className="m-0">Plan: {topPlan.gamePlan}</p>
+                </div>
+              ) : (
+                <p className="m-0 text-nexus-muted">No pick plan yet.</p>
+              )}
+            </div>
+            <details className="border border-nexus-line/60 bg-nexus-bg/25 px-3 py-2">
+              <summary className="nexus-focus cursor-pointer text-nexus-muted uppercase tracking-[0.12em] text-xs">Confidence</summary>
+              <div className="mt-2 grid gap-3">
+                <ul className="m-0 list-disc pl-4 space-y-1 text-nexus-muted">
+                  {draftIntel.confidenceNotes.map((line, idx) => (
+                    <li key={`conf-${idx}`}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            </details>
+          </div>
+        )}
+      </CollapsibleOpsSection>
+
+      <CollapsibleOpsSection
+        id="CP_01"
+        kicker="personal"
+        title="Champion pool"
+        open={openSectionIds.has('CP_01')}
+        onToggle={() => toggleSection('CP_01')}
+      >
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="inline-flex overflow-hidden border border-nexus-line/70">
+            {(['my-champs', 'all-champs'] as const).map((mode) => (
+              <button
+                key={`pool-mode-${mode}`}
+                type="button"
+                className={
+                  'nexus-focus px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] ' +
+                  (recommendationPoolMode === mode
+                    ? 'bg-nexus-lime text-nexus-bg'
+                    : 'bg-transparent text-nexus-muted hover:text-nexus-text')
+                }
+                onClick={() => onRecommendationPoolMode(mode)}
+              >
+                {mode === 'my-champs' ? 'My Champs' : 'All Champs'}
+              </button>
+            ))}
+          </div>
+          {playerPoolProfile ? (
+            <span className="font-mono text-xs text-nexus-muted">
+              {playerPoolProfile.riotId} / {playerPoolProfile.platform.toUpperCase()} / {playerPoolProfile.entries.length} champs
+            </span>
+          ) : null}
+        </div>
+        <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem_auto] sm:items-end">
+          <label className="flex flex-col gap-1.5">
+            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Riot ID</span>
+            <input
+              className={inField}
+              value={riotIdInput}
+              onChange={(e) => setRiotIdInput(e.target.value)}
+              placeholder="GameName#TagLine"
+              autoComplete="off"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Platform</span>
+            <select className={inField} value={riotPlatform} onChange={(e) => setRiotPlatform(e.target.value as RiotPlatform)}>
+              {RIOT_PLATFORMS.map((platform) => (
+                <option key={`riot-platform-${platform}`} value={platform}>
+                  {platform.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className={btnPrimary}
+            disabled={playerPoolBusy}
+            onClick={() => {
+              setPoolActionStatus(null)
+              setPoolUndoStack([])
+              onImportPlayerChampionPool(riotIdInput, riotPlatform)
+            }}
+          >
+            {playerPoolBusy ? 'Importing' : 'Import'}
+          </button>
+        </div>
+        {poolStatusLine ? <p className={`${textMuted} mb-4 font-mono text-sm`} role="status">{poolStatusLine}</p> : null}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div
+            className={
+              'nexus-focus inline-flex h-10 w-10 items-center justify-center border text-nexus-muted transition-colors ' +
+              (poolTrashActive
+                ? 'border-nexus-red/80 bg-nexus-red/15 text-nexus-red'
+                : 'border-nexus-line bg-nexus-bg/40 hover:border-nexus-red/60 hover:text-nexus-red/85')
+            }
+            role="button"
+            tabIndex={0}
+            title="Drop a champion chip here to remove it from My Champs"
+            aria-label="Drop a champion chip here to remove it from My Champs"
+            onDragOver={(event) => {
+              event.preventDefault()
+              event.dataTransfer.dropEffect = 'move'
+              setPoolTrashActive(true)
+            }}
+            onDragLeave={() => setPoolTrashActive(false)}
+            onDrop={handlePoolTrashDrop}
+          >
+            <PoolTrashIcon className="h-4 w-4" />
+          </div>
+          {poolUndo ? (
+            <button
+              type="button"
+              className="nexus-focus border border-nexus-line bg-nexus-bg/40 px-3 py-2 font-mono text-xs uppercase tracking-[0.12em] text-nexus-lime/90 hover:border-nexus-lime/50"
+              onClick={undoChampionPoolRemoval}
+            >
+              Undo{poolUndoStack.length > 1 ? ` (${poolUndoStack.length})` : ''}
+            </button>
+          ) : null}
+        </div>
+        {playerPoolProfile && playerPoolProfile.entries.length > 0 ? (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {visibleImportedPoolEntries.slice(0, 20).map((entry) => (
+              <button
+                key={`imported-pool-${entry.championId}`}
+                type="button"
+                draggable
+                className="nexus-focus cursor-grab border border-nexus-line bg-nexus-bg/40 px-2 py-1 font-mono text-xs text-nexus-muted hover:border-nexus-red/50 hover:text-nexus-text active:cursor-grabbing"
+                title="Click or drag to trash to remove"
+                onClick={() => removeChampionFromPool(entry.championId)}
+                onDragStart={(event) => handlePoolChipDragStart(event, entry.championId)}
+              >
+                <span className="text-nexus-text/90">{championNameById.get(entry.championId) ?? `Champion ${entry.championId}`}</span> /{' '}
+                {championPoolPreferences[String(entry.championId)] ?? entry.preference}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem_auto] sm:items-end">
+          <label className="flex flex-col gap-1.5">
+            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Champion</span>
+            <select className={inField} value={poolChampionId ?? ''} onChange={(e) => setPoolChampionId(parseChampionSelectValue(e.target.value))}>
+              <option value="">Choose champion</option>
+              {sorted.map((c) => (
+                <option key={`pool-${c.id}`} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Preference</span>
+            <select className={inField} value={poolPreference} onChange={(e) => setPoolPreference(e.target.value as ChampionPoolPreference)}>
+              {CHAMPION_POOL_PREFERENCES.map((pref) => (
+                <option key={pref.value} value={pref.value}>{pref.label}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className={btnPrimary}
+            disabled={poolChampionId == null}
+            onClick={() => {
+              if (poolChampionId != null) {
+                onChampionPoolPreference(poolChampionId, poolPreference)
+                setPoolUndoStack([])
+                setPoolActionStatus(null)
+              }
+            }}
+          >
+            Save
+          </button>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {visibleManualPoolEntries.length === 0 && visibleImportedPoolEntries.length === 0 && (
+            <span className="font-mono text-sm text-nexus-muted">No personal pool weights yet. Mark mains to lift them in draft scoring.</span>
+          )}
+          {visibleManualPoolEntries.map(([id, pref]) => (
+            <button
+              key={id}
+              type="button"
+              draggable
+              className="nexus-focus cursor-grab border border-nexus-line bg-nexus-bg/40 px-2 py-1 font-mono text-xs text-nexus-muted hover:border-nexus-red/50 hover:text-nexus-text active:cursor-grabbing"
+              title="Click or drag to trash to remove"
+              onClick={() => removeChampionFromPool(Number(id))}
+              onDragStart={(event) => handlePoolChipDragStart(event, Number(id))}
+            >
+              <span className="text-nexus-text/90">{championNameById.get(Number(id)) ?? `Champion ${id}`}</span> / {pref}
+            </button>
+          ))}
+        </div>
+      </CollapsibleOpsSection>
 
       <CollapsibleOpsSection
         id="MD_01"
@@ -341,6 +771,11 @@ export function NexusOperationsView({
                     <span className="text-nexus-line/80"> — {s.buildProfile.tagsLine}</span>
                   )}
                   <div className="text-nexus-text/80 mt-0.5">{s.buildProfile.buildHint}</div>
+                  {s.buildProfile.itemHint && (
+                    <div className="text-nexus-muted mt-0.5">
+                      <span className="text-nexus-lime/75 uppercase">Items</span> · {s.buildProfile.itemHint}
+                    </div>
+                  )}
                 </div>
               )}
                 </div>

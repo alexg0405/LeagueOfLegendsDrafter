@@ -1,6 +1,6 @@
 import { ROLE_CHAMPION_POOL } from './matchupData'
-import { publicMetaCandidateIdsForRole } from './metaStats'
-import type { DraftRole, DraftSnapshot } from './types'
+import { publicMetaCandidateIdsForRole, publicMetaRoleDistributionForChampion } from './metaStats'
+import type { DraftRole, DraftSnapshot, EnemyRoleInference, RoleProbabilityMap } from './types'
 
 const ROLE_KEYS = ['top', 'jungle', 'middle', 'bottom', 'support'] as const
 type RoleKey = (typeof ROLE_KEYS)[number]
@@ -13,18 +13,32 @@ type LockedEnemy = {
 
 type RolePosterior = Record<RoleKey, number>
 
-const rolePoolSets: Record<RoleKey, Set<number>> = {
-  top: new Set([...(ROLE_CHAMPION_POOL.top ?? []), ...publicMetaCandidateIdsForRole('top')]),
-  jungle: new Set([...(ROLE_CHAMPION_POOL.jungle ?? []), ...publicMetaCandidateIdsForRole('jungle')]),
-  middle: new Set([...(ROLE_CHAMPION_POOL.middle ?? []), ...publicMetaCandidateIdsForRole('middle')]),
-  bottom: new Set([...(ROLE_CHAMPION_POOL.bottom ?? []), ...publicMetaCandidateIdsForRole('bottom')]),
-  support: new Set([...(ROLE_CHAMPION_POOL.support ?? []), ...publicMetaCandidateIdsForRole('support')])
+let roleInferenceCache = new WeakMap<DraftSnapshot, Map<number, RolePosterior>>()
+let roleAssignmentCache = new WeakMap<DraftSnapshot, EnemyRoleInference[]>()
+
+export function rolePoolHas(role: RoleKey, championId: number): boolean {
+  return (ROLE_CHAMPION_POOL[role] ?? []).includes(championId) || publicMetaCandidateIdsForRole(role).includes(championId)
 }
 
-const roleInferenceCache = new WeakMap<DraftSnapshot, Map<number, RolePosterior>>()
+export function clearEnemyRoleInferenceCaches(): void {
+  roleInferenceCache = new WeakMap<DraftSnapshot, Map<number, RolePosterior>>()
+  roleAssignmentCache = new WeakMap<DraftSnapshot, EnemyRoleInference[]>()
+}
 
 function roleLikelihood(championId: number, role: RoleKey): number {
-  return rolePoolSets[role].has(championId) ? 1 : 0.02
+  const metaP = publicMetaRoleDistributionForChampion(championId)[role] ?? 0
+  if (metaP > 0) {
+    return 0.04 + metaP
+  }
+  return rolePoolHas(role, championId) ? 0.22 : 0.015
+}
+
+function assignmentScore(enemy: LockedEnemy, role: RoleKey): number {
+  let likelihood = roleLikelihood(enemy.championId, role)
+  if (enemy.slotRole === role) {
+    likelihood = Math.max(likelihood, 0.08)
+  }
+  return likelihood * slotRolePrior(enemy.slotRole, role)
 }
 
 function slotRolePrior(slotRole: DraftRole, role: RoleKey): number {
@@ -32,13 +46,27 @@ function slotRolePrior(slotRole: DraftRole, role: RoleKey): number {
     return 1
   }
   if (slotRole === role) {
-    return 10
+    return 20
   }
-  return 0.05
+  return 0.3
 }
 
 function emptyPosterior(): RolePosterior {
   return { top: 0, jungle: 0, middle: 0, bottom: 0, support: 0 }
+}
+
+function normalizePosterior(p: RolePosterior): RolePosterior {
+  const total = p.top + p.jungle + p.middle + p.bottom + p.support
+  if (!Number.isFinite(total) || total <= 0) {
+    return { top: 0.2, jungle: 0.2, middle: 0.2, bottom: 0.2, support: 0.2 }
+  }
+  return {
+    top: p.top / total,
+    jungle: p.jungle / total,
+    middle: p.middle / total,
+    bottom: p.bottom / total,
+    support: p.support / total
+  }
 }
 
 function lockedEnemies(snapshot: DraftSnapshot): LockedEnemy[] {
@@ -81,7 +109,7 @@ export function inferEnemyRolePosteriors(snapshot: DraftSnapshot): Map<number, R
       if (used.has(role)) {
         continue
       }
-      const s = score * roleLikelihood(e.championId, role) * slotRolePrior(e.slotRole, role)
+      const s = score * assignmentScore(e, role)
       if (!Number.isFinite(s) || s <= 0) {
         continue
       }
@@ -100,7 +128,7 @@ export function inferEnemyRolePosteriors(snapshot: DraftSnapshot): Map<number, R
       const p = emptyPosterior()
       let z = 0
       for (const r of ROLE_KEYS) {
-        const s = roleLikelihood(e.championId, r) * slotRolePrior(e.slotRole, r)
+        const s = assignmentScore(e, r)
         p[r] = s
         z += s
       }
@@ -127,15 +155,66 @@ export function inferEnemyRolePosteriors(snapshot: DraftSnapshot): Map<number, R
     })
   }
 
-  total = 0
-  out.forEach((p) => {
-    total += p.top + p.jungle + p.middle + p.bottom + p.support
+  out.forEach((p, idx) => {
+    out.set(idx, normalizePosterior(p))
   })
-  if (!Number.isFinite(total) || total <= 0) {
-    out.clear()
-  }
 
   roleInferenceCache.set(snapshot, out)
+  return out
+}
+
+function confidenceLabel(confidence: number): EnemyRoleInference['confidenceLabel'] {
+  if (confidence >= 0.75) {
+    return 'likely'
+  }
+  if (confidence >= 0.45) {
+    return 'flex'
+  }
+  return 'uncertain'
+}
+
+function bestRole(p: RolePosterior): { role: RoleKey; confidence: number } {
+  return ROLE_KEYS.map((role) => ({ role, confidence: p[role] }))
+    .sort((a, b) => b.confidence - a.confidence)[0]!
+}
+
+function roundedProbabilities(p: RolePosterior): RoleProbabilityMap {
+  return {
+    top: Math.round(p.top * 1000) / 1000,
+    jungle: Math.round(p.jungle * 1000) / 1000,
+    middle: Math.round(p.middle * 1000) / 1000,
+    bottom: Math.round(p.bottom * 1000) / 1000,
+    support: Math.round(p.support * 1000) / 1000
+  }
+}
+
+export function inferEnemyRoleAssignments(snapshot: DraftSnapshot): EnemyRoleInference[] {
+  const cached = roleAssignmentCache.get(snapshot)
+  if (cached) {
+    return cached
+  }
+  const posteriors = inferEnemyRolePosteriors(snapshot)
+  const out = lockedEnemies(snapshot).flatMap((enemy): EnemyRoleInference[] => {
+    const posterior = posteriors.get(enemy.idx)
+    if (!posterior) {
+      return []
+    }
+    const best = bestRole(posterior)
+    const confidence = Math.round(best.confidence * 1000) / 1000
+    return [
+      {
+        enemyIndex: enemy.idx,
+        cellId: snapshot.enemy[enemy.idx]?.cellId ?? null,
+        championId: enemy.championId,
+        assignedRole: enemy.slotRole,
+        inferredRole: best.role,
+        confidence,
+        confidenceLabel: confidenceLabel(confidence),
+        roleProbabilities: roundedProbabilities(posterior)
+      }
+    ]
+  })
+  roleAssignmentCache.set(snapshot, out)
   return out
 }
 

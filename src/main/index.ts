@@ -32,7 +32,10 @@ import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { loadLocalEnv, loadLocalEnvWhenReady } from './loadLocalEnv'
+import { setupAppUpdater } from './appUpdater'
 import { fetchChampSelectSession } from './lcuClient'
+import { fetchLivePublicDataPayload } from './livePublicDataFetcher'
+import { getPlayerChampionPool } from './riotPlayerChampionPool'
 import { getCaptureSourceId, setCaptureSourceId } from './settingsStore'
 import { isDraftUpdate, isOverlayEnginePrefsPatch, type DraftUpdate } from '../shared/draft'
 import {
@@ -373,6 +376,7 @@ app.whenReady().then(() => {
     // eslint-disable-next-line no-console
     console.log('[drafter] preload path:', preloadFile)
   }
+  setupAppUpdater(isDev)
 
   ipcMain.handle('capture:listSources', async () => {
     const src = await desktopCapturer.getSources({
@@ -460,6 +464,19 @@ app.whenReady().then(() => {
 
   ipcMain.handle('lcu:fetch', async () => {
     return fetchChampSelectSession()
+  })
+  ipcMain.handle('publicMeta:getLive', async () => {
+    return fetchLivePublicDataPayload()
+  })
+  ipcMain.handle('riot:playerChampionPool', async (_event, raw: unknown) => {
+    return getPlayerChampionPool(raw)
+  })
+  ipcMain.handle('overlay:importPlayerChampionPool', async (_event, raw: unknown) => {
+    const result = await getPlayerChampionPool(raw)
+    if (result.ok && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('overlay:playerChampionPoolImported', result)
+    }
+    return result
   })
 
   ipcMain.handle('overlay:toggle', () => {

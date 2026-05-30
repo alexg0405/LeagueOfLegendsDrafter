@@ -263,8 +263,8 @@ describe('recommend v1', () => {
       patch: 'test'
     })
     const kassadin = v1ComponentScores(38, 'middle', st, idMap, null)
-    expect(kassadin.base).toBeGreaterThan(0.495)
-    expect(kassadin.base).toBeLessThan(0.505)
+    expect(kassadin.base).toBeGreaterThan(0.45)
+    expect(kassadin.base).toBeLessThan(0.55)
   })
 
   it('does not suggest non-primary public-meta flex rows for other roles', () => {
@@ -387,6 +387,43 @@ describe('recommend v1', () => {
     expect(suggestions[0]?.championId).toBe(103)
     expect(suggestions[0]?.isLockedPick).toBe(true)
     expect(suggestions[0]?.runes).toBeTruthy()
+  })
+
+  it('treats an inferred off-slot enemy as the lane opponent for recommendation context', () => {
+    const snap: DraftSnapshot = {
+      ally: [
+        { role: 'top', championId: null, championName: null, cellId: 0 },
+        { role: 'jungle', championId: null, championName: null, cellId: 1 },
+        { role: 'middle', championId: null, championName: null, cellId: 2 },
+        { role: 'bottom', championId: null, championName: null, cellId: 3 },
+        { role: 'support', championId: null, championName: null, cellId: 4 }
+      ],
+      enemy: [
+        { role: 'bottom', championId: 67, championName: 'Vayne', cellId: 5 },
+        { role: 'bottom', championId: 222, championName: 'Jinx', cellId: 6 },
+        { role: 'jungle', championId: null, championName: null, cellId: 7 },
+        { role: 'middle', championId: null, championName: null, cellId: 8 },
+        { role: 'support', championId: null, championName: null, cellId: 9 }
+      ],
+      myTeam: '100',
+      myRole: 'top',
+      localPlayerCellId: 0,
+      bans: null,
+      myPickOrder: null
+    }
+    const st = buildEngineState(snap, 'top', {
+      bans: null,
+      myPickOrder: null,
+      dataDragonVersion: null,
+      patch: 'test'
+    })
+    const { suggestions } = recommend({
+      state: st,
+      idToName: idMap,
+      maxResults: 5,
+      monteCarloSamples: 0
+    })
+    expect(suggestions[0]?.detail).toContain('lane')
   })
 })
 

@@ -1,17 +1,8 @@
-import { ROLE_CHAMPION_POOL } from './matchupData'
-import { publicMetaCandidateIdsForRole } from './metaStats'
+import { rolePoolHas } from './roleInference'
 import type { DraftRole, DraftSnapshot, SlotPick, TeamId } from './types'
 
 const ROLE_KEYS = ['top', 'jungle', 'middle', 'bottom', 'support'] as const
 type RoleKey = (typeof ROLE_KEYS)[number]
-
-const rolePoolSets: Record<RoleKey, Set<number>> = {
-  top: new Set([...(ROLE_CHAMPION_POOL.top ?? []), ...publicMetaCandidateIdsForRole('top')]),
-  jungle: new Set([...(ROLE_CHAMPION_POOL.jungle ?? []), ...publicMetaCandidateIdsForRole('jungle')]),
-  middle: new Set([...(ROLE_CHAMPION_POOL.middle ?? []), ...publicMetaCandidateIdsForRole('middle')]),
-  bottom: new Set([...(ROLE_CHAMPION_POOL.bottom ?? []), ...publicMetaCandidateIdsForRole('bottom')]),
-  support: new Set([...(ROLE_CHAMPION_POOL.support ?? []), ...publicMetaCandidateIdsForRole('support')])
-}
 
 function isRoleKey(role: DraftRole | null | undefined): role is RoleKey {
   return role === 'top' || role === 'jungle' || role === 'middle' || role === 'bottom' || role === 'support'
@@ -47,7 +38,7 @@ function roleCandidatesForChampion(championId: number | null): RoleKey[] {
   if (championId == null || championId <= 0) {
     return []
   }
-  return ROLE_KEYS.filter((role) => rolePoolSets[role].has(championId))
+  return ROLE_KEYS.filter((role) => rolePoolHas(role, championId))
 }
 
 function inferLocalRoleFromTeam(ally: SlotPick[], localCell: number | null): DraftRole | null {

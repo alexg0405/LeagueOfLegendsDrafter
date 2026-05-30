@@ -205,7 +205,7 @@ export function NexusHomeDashboard({
               })}
             </motion.div>
             <div className="border-t border-nexus-line p-2.5 font-mono text-xs text-nexus-muted space-y-0.5">
-              <p>APP_0.5.0</p>
+              <p>APP_1.1.0</p>
             </div>
           </div>
         </div>

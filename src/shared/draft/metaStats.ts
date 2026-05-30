@@ -45,6 +45,24 @@ type RawCounterRow = {
   source?: unknown
 }
 
+type PublicMetaStatsSeed = {
+  schema?: unknown
+  patch?: unknown
+  rankFilter?: unknown
+  updatedAt?: unknown
+  roleBase?: unknown
+  counters?: unknown
+}
+
+export type PublicMetaStatsInfo = {
+  patch: string
+  rankFilter: string | null
+  updatedAt: string | null
+  source: string
+  roleBaseCount: number
+  counterCount: number
+}
+
 const ROLE_KEYS = ['top', 'jungle', 'middle', 'bottom', 'support'] as const
 const roleSet = new Set<string>(ROLE_KEYS)
 
@@ -102,6 +120,34 @@ function confidence(games: number, prior: number): number {
   return Math.sqrt(games / (games + prior))
 }
 
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === 'object' && x !== null && !Array.isArray(x)
+}
+
+function stringField(raw: unknown): string | null {
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : null
+}
+
+function comparePatchLabels(a: string, b: string): number {
+  const pa = a.split('.').map((x) => parseFloat(x))
+  const pb = b.split('.').map((x) => parseFloat(x))
+  const n = Math.max(pa.length, pb.length)
+  for (let i = 0; i < n; i++) {
+    const ai = pa[i]
+    const bi = pb[i]
+    const av = ai != null && Number.isFinite(ai) ? ai : Number.POSITIVE_INFINITY
+    const bv = bi != null && Number.isFinite(bi) ? bi : Number.POSITIVE_INFINITY
+    if (av !== bv) {
+      return av - bv
+    }
+  }
+  return String(a).localeCompare(String(b))
+}
+
+export function comparePublicMetaPatchLabels(a: string, b: string): number {
+  return comparePatchLabels(a, b)
+}
+
 function parseBaseRow(raw: RawBaseRow): PublicMetaBaseStat | null {
   const role = normalizeRole(raw.role)
   const championId = positiveInt(raw.championId)
@@ -140,44 +186,122 @@ function parseCounterRow(raw: RawCounterRow): PublicMetaCounterStat | null {
   }
 }
 
-const baseByRole = emptyRoleMap<PublicMetaBaseStat>()
-for (const raw of publicMetaStatsSeed.roleBase as RawBaseRow[]) {
-  const row = parseBaseRow(raw)
-  if (row) {
-    baseByRole[row.role].set(row.championId, row)
-  }
+type MetaTables = {
+  info: PublicMetaStatsInfo
+  baseByRole: Record<RoleKey, Map<number, PublicMetaBaseStat>>
+  baseByChampion: Map<number, PublicMetaBaseStat[]>
+  countersByRole: Record<RoleKey, Map<number, Map<number, PublicMetaCounterStat>>>
+  candidateIdsByRole: Record<RoleKey, Set<number>>
 }
 
-const countersByRole: Record<RoleKey, Map<number, Map<number, PublicMetaCounterStat>>> = Object.fromEntries(
-  ROLE_KEYS.map((r) => [r, new Map<number, Map<number, PublicMetaCounterStat>>()])
-) as Record<RoleKey, Map<number, Map<number, PublicMetaCounterStat>>>
-
-for (const raw of publicMetaStatsSeed.counters as RawCounterRow[]) {
-  const row = parseCounterRow(raw)
-  if (!row) {
-    continue
-  }
-  let byEnemy = countersByRole[row.role].get(row.candidateId)
-  if (!byEnemy) {
-    byEnemy = new Map<number, PublicMetaCounterStat>()
-    countersByRole[row.role].set(row.candidateId, byEnemy)
-  }
-  byEnemy.set(row.enemyId, row)
+function emptyCounterMap(): Record<RoleKey, Map<number, Map<number, PublicMetaCounterStat>>> {
+  return Object.fromEntries(ROLE_KEYS.map((r) => [r, new Map<number, Map<number, PublicMetaCounterStat>>()])) as Record<
+    RoleKey,
+    Map<number, Map<number, PublicMetaCounterStat>>
+  >
 }
 
-const candidateIdsByRole: Record<RoleKey, Set<number>> = Object.fromEntries(
-  ROLE_KEYS.map((r) => [r, new Set<number>()])
-) as Record<RoleKey, Set<number>>
+function emptyCandidateMap(): Record<RoleKey, Set<number>> {
+  return Object.fromEntries(ROLE_KEYS.map((r) => [r, new Set<number>()])) as Record<RoleKey, Set<number>>
+}
 
-for (const role of ROLE_KEYS) {
-  for (const row of Array.from(baseByRole[role].values())) {
-    if (row.candidate) {
-      candidateIdsByRole[role].add(row.championId)
+function buildTables(seed: PublicMetaStatsSeed, source: string): MetaTables | null {
+  if (!isRecord(seed)) {
+    return null
+  }
+  const roleBaseRaw = Array.isArray(seed.roleBase) ? seed.roleBase : null
+  const countersRaw = Array.isArray(seed.counters) ? seed.counters : null
+  const patch = stringField(seed.patch)
+  if (!roleBaseRaw || !countersRaw || !patch) {
+    return null
+  }
+
+  const baseByRole = emptyRoleMap<PublicMetaBaseStat>()
+  const baseByChampion = new Map<number, PublicMetaBaseStat[]>()
+  for (const raw of roleBaseRaw as RawBaseRow[]) {
+    const row = parseBaseRow(raw)
+    if (row) {
+      baseByRole[row.role].set(row.championId, row)
+      const rows = baseByChampion.get(row.championId) ?? []
+      rows.push(row)
+      baseByChampion.set(row.championId, rows)
     }
   }
-  for (const id of Array.from(countersByRole[role].keys())) {
-    candidateIdsByRole[role].add(id)
+
+  const countersByRole = emptyCounterMap()
+  for (const raw of countersRaw as RawCounterRow[]) {
+    const row = parseCounterRow(raw)
+    if (!row) {
+      continue
+    }
+    let byEnemy = countersByRole[row.role].get(row.candidateId)
+    if (!byEnemy) {
+      byEnemy = new Map<number, PublicMetaCounterStat>()
+      countersByRole[row.role].set(row.candidateId, byEnemy)
+    }
+    byEnemy.set(row.enemyId, row)
   }
+
+  const candidateIdsByRole = emptyCandidateMap()
+  for (const role of ROLE_KEYS) {
+    for (const row of Array.from(baseByRole[role].values())) {
+      if (row.candidate) {
+        candidateIdsByRole[role].add(row.championId)
+      }
+    }
+    for (const id of Array.from(countersByRole[role].keys())) {
+      if (baseByRole[role].get(id)?.candidate !== false) {
+        candidateIdsByRole[role].add(id)
+      }
+    }
+  }
+
+  const roleBaseCount = ROLE_KEYS.reduce((total, role) => total + baseByRole[role].size, 0)
+  const counterCount = ROLE_KEYS.reduce(
+    (total, role) => total + Array.from(countersByRole[role].values()).reduce((inner, row) => inner + row.size, 0),
+    0
+  )
+  if (roleBaseCount === 0) {
+    return null
+  }
+
+  return {
+    info: {
+      patch,
+      rankFilter: stringField(seed.rankFilter),
+      updatedAt: stringField(seed.updatedAt),
+      source,
+      roleBaseCount,
+      counterCount
+    },
+    baseByRole,
+    baseByChampion,
+    countersByRole,
+    candidateIdsByRole
+  }
+}
+
+let tables = buildTables(publicMetaStatsSeed as PublicMetaStatsSeed, 'bundled')!
+
+export function getPublicMetaStatsInfo(): PublicMetaStatsInfo {
+  return { ...tables.info }
+}
+
+export function getPublicMetaStatsPatch(): string {
+  return tables.info.patch
+}
+
+export function getPublicMetaStatsLabel(): string {
+  return `public-meta-${tables.info.patch}${tables.info.source === 'bundled' ? '' : '-live'}`
+}
+
+export function applyPublicMetaStatsSeed(raw: unknown, source = 'live'): PublicMetaStatsInfo | null {
+  const next = buildTables(raw as PublicMetaStatsSeed, source)
+  if (!next) {
+    return null
+  }
+  tables = next
+  return getPublicMetaStatsInfo()
 }
 
 export function publicMetaBaseStat(role: DraftRole, championId: number): PublicMetaBaseStat | null {
@@ -185,7 +309,39 @@ export function publicMetaBaseStat(role: DraftRole, championId: number): PublicM
   if (!r) {
     return null
   }
-  return baseByRole[r].get(championId) ?? null
+  return tables.baseByRole[r].get(championId) ?? null
+}
+
+export function publicMetaBaseStatsForChampion(championId: number): PublicMetaBaseStat[] {
+  return [...(tables.baseByChampion.get(championId) ?? [])]
+}
+
+export function publicMetaBaseStatsForRole(role: DraftRole): PublicMetaBaseStat[] {
+  const r = normalizeRole(role)
+  if (!r) {
+    return []
+  }
+  return Array.from(tables.baseByRole[r].values())
+}
+
+export function publicMetaRoleDistributionForChampion(championId: number): Record<RoleKey, number> {
+  const dist = Object.fromEntries(ROLE_KEYS.map((r) => [r, 0])) as Record<RoleKey, number>
+  const rows = tables.baseByChampion.get(championId) ?? []
+  if (rows.length === 0) {
+    return dist
+  }
+  const totalGames = rows.reduce((acc, row) => acc + Math.max(0, row.games), 0)
+  if (totalGames <= 0) {
+    const uniform = 1 / rows.length
+    for (const row of rows) {
+      dist[row.role] = uniform
+    }
+    return dist
+  }
+  for (const row of rows) {
+    dist[row.role] = Math.max(0, row.games) / totalGames
+  }
+  return dist
 }
 
 export function publicMetaBaseRate(role: DraftRole, championId: number): number | null {
@@ -207,7 +363,7 @@ export function publicMetaCounterStat(
   if (!r) {
     return null
   }
-  return countersByRole[r].get(candidateId)?.get(enemyId) ?? null
+  return tables.countersByRole[r].get(candidateId)?.get(enemyId) ?? null
 }
 
 export function publicMetaLaneRate(role: DraftRole, candidateId: number, enemyId: number): number | null {
@@ -224,5 +380,5 @@ export function publicMetaCandidateIdsForRole(role: DraftRole): number[] {
   if (!r) {
     return []
   }
-  return Array.from(candidateIdsByRole[r])
+  return Array.from(tables.candidateIdsByRole[r])
 }

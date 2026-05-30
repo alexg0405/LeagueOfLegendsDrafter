@@ -11,7 +11,11 @@ export function nexusWebTrack(
     | 'draft_persist'
     | 'keyboard_shortcut'
     | 'open_request'
-    | 'copy_request',
+    | 'copy_request'
+    | 'champion_pool_pref'
+    | 'champion_pool_remove'
+    | 'champion_pool_remove_undo'
+    | 'riot_pool_import',
   data?: Record<string, string | number | boolean>
 ): void {
   if (import.meta.env.VITE_NEXUS_WEB !== '1') {

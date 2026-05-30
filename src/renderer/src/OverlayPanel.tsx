@@ -14,6 +14,7 @@ import {
   nameMatchesChampionQuery,
   publicMetaLaneRate,
   publicMetaCandidateIdsForRole,
+  RIOT_PLATFORMS,
   ROLE_CHAMPION_POOL,
   resolveChampionName,
   shrunkLaneRate,
@@ -22,8 +23,17 @@ import {
   type CompiledTrainedEffects,
   type DraftUpdate,
   type DraftRole,
-  type OverlayEnginePrefsPatch
+  type RoleProbabilityMap,
+  type OverlayEnginePrefsPatch,
+  type RiotPlatform
 } from '@shared/draft'
+import {
+  livePublicDataStatusLine,
+  refreshLivePublicData,
+  type LivePublicDataRefreshStatus
+} from './livePublicDataClient'
+
+const LIVE_META_REFRESH_MS = 30 * 60 * 1000
 
 const empty: DraftUpdate = {
   source: 'none',
@@ -60,11 +70,12 @@ function SlotPortrait({
   imageUrl,
   isMySlot = false
 }: {
-  slot: { championName: string | null; championId: number | null }
+  slot: { championName: string | null; championId: number | null; inferenceLabel?: string | null }
   imageUrl: string | null
   isMySlot?: boolean
 }) {
   const name = slotName(slot)
+  const title = `${isMySlot ? `Your role: ${name}` : name}${slot.inferenceLabel ? ` · ${slot.inferenceLabel}` : ''}`
   return (
     <span
       className={[
@@ -73,7 +84,7 @@ function SlotPortrait({
           ? 'border-sky-300 bg-sky-400/18 text-sky-100 shadow-[0_0_14px_rgba(56,189,248,0.28)]'
           : 'border-nexus-line/70 bg-nexus-bg/30'
       ].join(' ')}
-      title={isMySlot ? `Your role: ${name}` : name}
+      title={title}
     >
       {imageUrl ? (
         <img
@@ -162,6 +173,18 @@ function fitClass(v: number): string {
 }
 
 type OverlaySlot = { role: DraftRole; championName: string | null; championId: number | null }
+type InferredOverlaySlot = OverlaySlot & {
+  cellId?: number | null
+  assignedRole?: DraftRole
+  inferredRole?: DraftRole | null
+  roleProbabilities?: RoleProbabilityMap | null
+  inferenceLabel?: string | null
+}
+
+function enemyInferenceLabel(row: NonNullable<DraftUpdate['enemyRoleInference']>[number] | null | undefined): string | null {
+  void row
+  return null
+}
 
 const ROLE_FOCUS: Record<Exclude<DraftRole, 'unknown'>, { ally: DraftRole[]; enemy: DraftRole[] }> = {
   top: {
@@ -186,27 +209,34 @@ const ROLE_FOCUS: Record<Exclude<DraftRole, 'unknown'>, { ally: DraftRole[]; ene
   }
 }
 
-function filledSlots(slots: OverlaySlot[], limit = 2): OverlaySlot[] {
+function filledSlots<T extends OverlaySlot>(slots: T[], limit = 2): T[] {
   return slots
     .filter((p) => p.championId != null && p.championId > 0)
     .slice(0, limit)
 }
 
 function focusedSlots(
-  slots: OverlaySlot[],
+  slots: InferredOverlaySlot[],
   role: DraftRole | null,
   side: 'ally' | 'enemy',
   limit = 2
-): OverlaySlot[] {
+): InferredOverlaySlot[] {
   if (!role || role === 'unknown') {
     return filledSlots(slots, limit)
   }
   const preferredRoles = ROLE_FOCUS[role]?.[side] ?? []
   const filled = slots.filter((p) => p.championId != null && p.championId > 0)
-  const ordered = [
-    ...preferredRoles.flatMap((r) => filled.filter((slot) => slot.role === r)),
-    ...filled.filter((slot) => !preferredRoles.includes(slot.role as DraftRole))
-  ]
+  const ordered =
+    side === 'enemy'
+      ? [...filled].sort((a, b) => {
+          const aP = a.roleProbabilities?.[role as Exclude<DraftRole, 'unknown'>] ?? (a.role === role ? 1 : 0)
+          const bP = b.roleProbabilities?.[role as Exclude<DraftRole, 'unknown'>] ?? (b.role === role ? 1 : 0)
+          return bP - aP
+        })
+      : [
+          ...preferredRoles.flatMap((r) => filled.filter((slot) => slot.role === r)),
+          ...filled.filter((slot) => !preferredRoles.includes(slot.role as DraftRole))
+        ]
   return ordered.slice(0, limit)
 }
 
@@ -217,7 +247,7 @@ function legacyEnemyPFromBonus(bonus: number | null): number {
   return Math.max(0.35, Math.min(0.68, 0.5 + 0.03 * Math.max(-6, Math.min(6, bonus))))
 }
 
-function bestEnemySlotsForCandidate(candidateId: number, role: DraftRole | null, enemySlots: OverlaySlot[], limit = 2): OverlaySlot[] {
+function bestEnemySlotsForCandidate(candidateId: number, role: DraftRole | null, enemySlots: InferredOverlaySlot[], limit = 2): InferredOverlaySlot[] {
   const lockedEnemies = enemySlots.filter((slot) => slot.championId != null && slot.championId > 0)
   if (lockedEnemies.length === 0) {
     return []
@@ -229,7 +259,11 @@ function bestEnemySlotsForCandidate(candidateId: number, role: DraftRole | null,
       const laneRate = shrunkLaneRate(candidateId, enemyId)
       const bonus = MATCHUP_BONUS[String(candidateId)]?.[String(enemyId)] ?? null
       const fallbackRate = laneRate ?? legacyEnemyPFromBonus(bonus)
-      const score = (metaRate ?? fallbackRate) - 0.5
+      const laneP =
+        role && role !== 'unknown'
+          ? slot.roleProbabilities?.[role as Exclude<DraftRole, 'unknown'>] ?? (slot.role === role ? 1 : 0.2)
+          : 0.2
+      const score = ((metaRate ?? fallbackRate) - 0.5) * (0.35 + laneP * 0.65) + laneP * 0.03
       return { slot, score }
     })
     .sort((a, b) => b.score - a.score)
@@ -291,6 +325,12 @@ export function OverlayPanel() {
   const [lookupQuery, setLookupQuery] = useState('')
   const [trainedEffects, setTrainedEffects] = useState<CompiledTrainedEffects | null>(null)
   const [pickMatrixOpen, setPickMatrixOpen] = useState(false)
+  const [riotIdInput, setRiotIdInput] = useState('')
+  const [riotPlatform, setRiotPlatform] = useState<RiotPlatform>('na1')
+  const [playerPoolBusy, setPlayerPoolBusy] = useState(false)
+  const [playerPoolStatus, setPlayerPoolStatus] = useState<string | null>(null)
+  const [, setLiveDataRevision] = useState(0)
+  const [liveDataStatus, setLiveDataStatus] = useState<LivePublicDataRefreshStatus | null>(null)
 
   useEffect(() => {
     const un = window.drafter.onDraftUpdate((p) => {
@@ -335,6 +375,28 @@ export function OverlayPanel() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+    const refresh = async () => {
+      const status = await refreshLivePublicData()
+      if (cancelled) {
+        return
+      }
+      setLiveDataStatus(status)
+      if (status.ok && status.applied) {
+        setLiveDataRevision((revision) => revision + 1)
+      }
+    }
+    void refresh()
+    const timer = window.setInterval(() => {
+      void refresh()
+    }, LIVE_META_REFRESH_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!pickMatrixOpen) {
       return
     }
@@ -361,6 +423,34 @@ export function OverlayPanel() {
     }
   }, [])
 
+  const importPlayerChampionPool = async () => {
+    const riotId = riotIdInput.trim()
+    if (!riotId) {
+      setPlayerPoolStatus('Enter Riot ID: GameName#TagLine.')
+      return
+    }
+    setPlayerPoolBusy(true)
+    setPlayerPoolStatus('Importing mastery...')
+    try {
+      const result = await window.drafter.importPlayerChampionPoolFromOverlay({
+        riotId,
+        platform: riotPlatform,
+        count: 20
+      })
+      if (!result.ok) {
+        setPlayerPoolStatus(result.error)
+        return
+      }
+      setRiotIdInput(result.profile.riotId)
+      setRiotPlatform(result.profile.platform)
+      setPlayerPoolStatus(`Imported ${result.profile.entries.length} champs. My Champs is active.`)
+    } catch (error) {
+      setPlayerPoolStatus(error instanceof Error ? error.message : 'Riot import failed.')
+    } finally {
+      setPlayerPoolBusy(false)
+    }
+  }
+
   const s = d.snapshot
   const topPicks = d.suggestions.slice(0, 6)
   const echo = d.overlayEngineEcho
@@ -378,6 +468,21 @@ export function OverlayPanel() {
       : s?.myRole && s.myRole !== 'unknown'
         ? s.myRole
         : null
+
+  const enemySlotsWithInference = useMemo((): InferredOverlaySlot[] => {
+    const rows = d.enemyRoleInference ?? []
+    return (s?.enemy ?? []).map((slot, index) => {
+      const inferred = rows.find((row) => row.enemyIndex === index && row.championId === slot.championId)
+      return {
+        ...slot,
+        assignedRole: slot.role,
+        inferredRole: inferred?.inferredRole ?? null,
+        role: inferred?.inferredRole ?? slot.role,
+        roleProbabilities: inferred?.roleProbabilities ?? null,
+        inferenceLabel: enemyInferenceLabel(inferred)
+      }
+    })
+  }, [s?.enemy, d.enemyRoleInference])
 
   const searchPool = useMemo(
     () => buildOverlayChampionSearchPool(d.championsSearch),
@@ -505,6 +610,9 @@ export function OverlayPanel() {
         {d.dataDragonVersion && d.dataDragonVersion[0] !== '(' && (
           <span className="font-mono font-bold text-sm text-nexus-muted tabular-nums">DGV {d.dataDragonVersion}</span>
         )}
+        <span className="font-mono font-bold text-[10px] uppercase tracking-[0.12em] text-nexus-muted">
+          {livePublicDataStatusLine(liveDataStatus)}
+        </span>
       </div>
 
       <div className="nexus-overlay-nodrag border-b border-nexus-line/80 bg-nexus-surface-2/95 px-3 py-2 flex flex-col gap-2 text-[11px] sm:text-xs font-mono">
@@ -713,6 +821,11 @@ export function OverlayPanel() {
                         {p.buildProfile && (
                           <span>
                             <span className="text-nexus-lime/80 uppercase">{p.buildProfile.damage}</span> {p.buildProfile.archetype}
+                            {p.buildProfile.itemHint && (
+                              <span className="block text-[10px] leading-snug text-nexus-muted/80 mt-0.5">
+                                Items: {p.buildProfile.itemHint}
+                              </span>
+                            )}
                           </span>
                         )}
                       </td>
@@ -749,9 +862,24 @@ export function OverlayPanel() {
               </div>
               <div className="flex flex-wrap gap-1.5">
                 <span className="w-full text-nexus-muted uppercase tracking-[0.12em]">Enemies</span>
-                {s.enemy.map((slot) => (
+                {enemySlotsWithInference.map((slot) => (
                   <SlotPortrait key={`e-${slot.role}-${slot.cellId ?? slot.championId ?? 'empty'}`} slot={slot} imageUrl={championIconUrl(slot.championId)} />
                 ))}
+                {enemySlotsWithInference.some((slot) => slot.inferenceLabel) && (
+                  <div className="w-full flex flex-wrap gap-1 pt-1">
+                    {enemySlotsWithInference
+                      .filter((slot) => slot.championId != null && slot.inferenceLabel)
+                      .map((slot) => (
+                        <span
+                          key={`inf-${slot.cellId ?? slot.championId}`}
+                          className="border border-nexus-red/35 bg-nexus-red/10 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.1em] text-nexus-red/80"
+                          title={slotName(slot)}
+                        >
+                          {slot.inferenceLabel}
+                        </span>
+                      ))}
+                  </div>
+                )}
               </div>
             </div>
             {poolRole && (
@@ -759,6 +887,88 @@ export function OverlayPanel() {
             )}
           </section>
         )}
+
+        {d.draftIntel && (
+          <section className="mb-5">
+            <details className="group font-mono">
+              <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-3 border-b border-nexus-line pb-1.5 font-bold text-sm uppercase tracking-[0.12em] text-nexus-lime/95 marker:hidden">
+                <span>Draft intel</span>
+                <span className="text-nexus-lime/80 transition-transform group-open:rotate-45" aria-hidden>
+                  +
+                </span>
+              </summary>
+              <div className="mt-2 space-y-2 text-xs text-nexus-text/85">
+                <div className="border border-nexus-lime/30 bg-nexus-lime/[0.06] px-2 py-1.5">
+                  <p className="m-0 text-nexus-lime/90 uppercase tracking-[0.12em]">Brief</p>
+                  <ul className="m-0 mt-1 list-disc pl-3.5 space-y-1 text-nexus-muted">
+                    {d.draftIntel.loadingBrief.slice(0, 4).map((line, idx) => (
+                      <li key={`overlay-brief-${idx}`}>{line}</li>
+                    ))}
+                  </ul>
+                </div>
+              {d.draftIntel.matchupPlans[0] && (
+                <div className="border border-nexus-line/70 bg-nexus-bg/25 px-2 py-1.5">
+                    <p className="m-0 text-nexus-lime/80 uppercase tracking-[0.12em]">Plan</p>
+                    <p className="m-0 mt-1 text-nexus-muted">
+                      {d.draftIntel.matchupPlans[0].championName} - {d.draftIntel.matchupPlans[0].summonerSpells}
+                    </p>
+                    <p className="m-0 text-nexus-muted">Start: {d.draftIntel.matchupPlans[0].startingItem}</p>
+                  </div>
+                )}
+              </div>
+            </details>
+          </section>
+        )}
+
+        <section className="mb-5">
+          <SectionLabel>Personal pool</SectionLabel>
+          <div className="grid grid-cols-[minmax(0,1fr)_5rem] gap-2">
+            <input
+              type="text"
+              className="nexus-focus min-w-0 font-mono text-xs py-1.5 px-2.5 border border-nexus-line bg-nexus-bg text-nexus-text placeholder:text-nexus-muted/70"
+              placeholder="GameName#TagLine"
+              value={riotIdInput}
+              onChange={(event) => setRiotIdInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  void importPlayerChampionPool()
+                }
+              }}
+              aria-label="Riot ID"
+            />
+            <select
+              className="nexus-focus min-w-0 font-mono text-xs py-1.5 px-2 border border-nexus-line bg-nexus-bg text-nexus-text"
+              value={riotPlatform}
+              onChange={(event) => setRiotPlatform(event.target.value as RiotPlatform)}
+              aria-label="Riot platform"
+            >
+              {RIOT_PLATFORMS.map((platform) => (
+                <option key={`overlay-riot-platform-${platform}`} value={platform}>
+                  {platform.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              className="nexus-focus border border-nexus-lime/70 bg-nexus-lime/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime hover:bg-nexus-lime/18 disabled:opacity-45"
+              disabled={playerPoolBusy}
+              onClick={() => void importPlayerChampionPool()}
+            >
+              {playerPoolBusy ? 'Importing' : 'Import'}
+            </button>
+            <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-nexus-muted">
+              My Champs
+            </span>
+          </div>
+          {playerPoolStatus ? (
+            <p className="m-0 mt-2 font-mono text-xs text-nexus-muted" role="status">
+              {playerPoolStatus}
+            </p>
+          ) : null}
+        </section>
 
         <section className="mb-5">
           <SectionLabel>Champion lookup</SectionLabel>
@@ -896,6 +1106,11 @@ export function OverlayPanel() {
                   </summary>
                   <div className="border-t border-nexus-line/55 px-2 py-1.5">
                     {lookupBuild.buildHint}
+                    {lookupBuild.itemHint && (
+                      <div className="mt-1 text-nexus-muted">
+                        <span className="text-nexus-lime/80">Items:</span> {lookupBuild.itemHint}
+                      </div>
+                    )}
                     {lookupBuild.tagsLine !== '—' && <div className="mt-1 text-nexus-muted">Riot: {lookupBuild.tagsLine}</div>}
                   </div>
                 </details>
@@ -939,9 +1154,9 @@ export function OverlayPanel() {
                 p.winRateDelta != null &&
                 Math.abs(p.winRateDelta) >= MEANINGFUL_TEAM_SYNERGY_DELTA
               const allies = bestAllySlotsForCandidate(p.championId, poolRole, s?.ally ?? [], trainedEffects)
-              const enemies = bestEnemySlotsForCandidate(p.championId, poolRole, s?.enemy ?? [])
+              const enemies = bestEnemySlotsForCandidate(p.championId, poolRole, enemySlotsWithInference)
               const allyFallback = focusedSlots(s?.ally ?? [], poolRole, 'ally')
-              const enemyFallback = focusedSlots(s?.enemy ?? [], poolRole, 'enemy')
+              const enemyFallback = focusedSlots(enemySlotsWithInference, poolRole, 'enemy')
               const synergySlots = showTeamSynergy ? (allies.length ? allies : allyFallback) : []
               const goodVsSlots = enemies.length ? enemies : enemyFallback
               const intel = formatRuneTipNote(
@@ -1057,6 +1272,11 @@ export function OverlayPanel() {
                     </summary>
                     <div className="border-t border-nexus-line/55 px-2 py-1.5">
                       <span>{intel}</span>
+                      {p.buildProfile?.itemHint && (
+                        <div className="mt-1 text-nexus-muted">
+                          <span className="text-nexus-lime/80">Items:</span> {p.buildProfile.itemHint}
+                        </div>
+                      )}
                       {p.buildProfile && (
                         <div className="mt-1 text-nexus-muted">
                           {p.buildProfile.archetype}

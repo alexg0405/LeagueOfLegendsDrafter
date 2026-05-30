@@ -1,4 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { AppUpdateCheckResult, AppUpdateStatus } from '../shared/appUpdate'
+import type { PlayerChampionPoolRequest, PlayerChampionPoolResponse } from '../shared/draft'
 import type { OverlayEnginePrefsPatch } from '../shared/draft/types'
 import type { LcuChampSelectResult } from '../shared/draft/lcuTypes'
 
@@ -45,6 +47,24 @@ const api = {
   },
 
   lcuFetch: () => ipcRenderer.invoke('lcu:fetch') as Promise<LcuChampSelectResult>,
+  getLivePublicData: () =>
+    ipcRenderer.invoke('publicMeta:getLive') as Promise<
+      | { ok: true; manifest: unknown; metaSeed: unknown; synergySeed: unknown }
+      | { ok: false; error: string }
+    >,
+  getPlayerChampionPool: (request: PlayerChampionPoolRequest) =>
+    ipcRenderer.invoke('riot:playerChampionPool', request) as Promise<PlayerChampionPoolResponse>,
+  importPlayerChampionPoolFromOverlay: (request: PlayerChampionPoolRequest) =>
+    ipcRenderer.invoke('overlay:importPlayerChampionPool', request) as Promise<PlayerChampionPoolResponse>,
+  onOverlayPlayerChampionPoolImported: (cb: (response: PlayerChampionPoolResponse) => void) => {
+    const handler = (_: unknown, response: PlayerChampionPoolResponse) => {
+      cb(response)
+    }
+    ipcRenderer.on('overlay:playerChampionPoolImported', handler)
+    return () => {
+      ipcRenderer.removeListener('overlay:playerChampionPoolImported', handler)
+    }
+  },
 
   onLcuChampSelect: (cb: (p: LcuChampSelectResult) => void) => {
     const handler = (_: unknown, p: LcuChampSelectResult) => {
@@ -61,6 +81,18 @@ const api = {
     ipcRenderer.invoke('overlay:setProjectionMode', open) as Promise<{ ok: boolean; open: boolean }>,
   closeApp: () => ipcRenderer.invoke('app:close') as Promise<{ ok: true }>,
   minimizeApp: () => ipcRenderer.invoke('app:minimize') as Promise<{ ok: true }>,
+  checkForAppUpdate: () => ipcRenderer.invoke('appUpdate:check') as Promise<AppUpdateCheckResult>,
+  downloadAppUpdate: () => ipcRenderer.invoke('appUpdate:download') as Promise<AppUpdateCheckResult>,
+  quitAndInstallAppUpdate: () => ipcRenderer.invoke('appUpdate:quitAndInstall') as Promise<AppUpdateCheckResult>,
+  onAppUpdateStatus: (cb: (status: AppUpdateStatus) => void) => {
+    const handler = (_: unknown, status: AppUpdateStatus) => {
+      cb(status)
+    }
+    ipcRenderer.on('appUpdate:status', handler)
+    return () => {
+      ipcRenderer.removeListener('appUpdate:status', handler)
+    }
+  },
 
   /** Trained-effects JSON from `npm run train:export`; returns the raw bundle or a load error. */
   getTrainedEffects: () =>

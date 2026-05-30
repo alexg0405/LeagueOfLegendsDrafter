@@ -12,6 +12,7 @@
  * The engine falls back to bundled heuristics whenever a key is missing (sparse early data).
  */
 
+import { getPublicMetaStatsPatch } from './metaStats'
 import type { DraftRole } from './types'
 
 export type TrainedEffectsStatus = {
@@ -136,6 +137,29 @@ function emptyCompiled(): CompiledTrainedEffects {
     comfort: new Map<number, number>(),
     idToName: new Map<number, string>()
   }
+}
+
+function latestPatchLabel(patches: readonly string[]): string | null {
+  return patches.length > 0 ? patches[patches.length - 1]! : null
+}
+
+function bundledPublicMetaPatch(): string | null {
+  const patch = getPublicMetaStatsPatch()
+  return patch.trim() ? patch : null
+}
+
+function clearEffectMaps(out: CompiledTrainedEffects): void {
+  for (const role of ROLE_KEYS) {
+    out.base[role].clear()
+    out.matchup[role].clear()
+    for (const partner of ROLE_KEYS) {
+      out.synergy[role][partner].clear()
+    }
+  }
+  out.status.basePairs = 0
+  out.status.matchupPairs = 0
+  out.status.synergyPairs = 0
+  out.status.hasAnyData = false
 }
 
 function parseChampionIdKey(k: string): number | null {
@@ -354,6 +378,16 @@ export function compileTrainedEffects(raw: unknown): CompiledTrainedEffects | nu
   out.status.synergyPairs = synergyPairs
 
   out.status.hasAnyData = basePairs + matchupPairs + synergyPairs > 0
+
+  const publicPatch = bundledPublicMetaPatch()
+  const latestTrainedPatch = latestPatchLabel(out.status.patchesSeen)
+  if (
+    publicPatch &&
+    latestTrainedPatch &&
+    comparePatchLabels(latestTrainedPatch, publicPatch) < 0
+  ) {
+    clearEffectMaps(out)
+  }
 
   return out
 }

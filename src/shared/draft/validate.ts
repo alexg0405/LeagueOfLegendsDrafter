@@ -1,8 +1,10 @@
 import type {
   DraftRole,
+  DraftIntel,
   DraftSnapshot,
   DraftSource,
   DraftUpdate,
+  EnemyRoleInference,
   OverlayEngineEcho,
   OverlayEnginePrefsPatch,
   PickSuggestion,
@@ -88,6 +90,40 @@ function isRuneLoadoutHint(x: unknown): boolean {
   )
 }
 
+function isEnemyRoleInference(x: unknown): x is EnemyRoleInference {
+  if (x == null || typeof x !== 'object') {
+    return false
+  }
+  const o = x as Record<string, unknown>
+  if (typeof o.enemyIndex !== 'number' || !Number.isFinite(o.enemyIndex) || o.enemyIndex < 0 || o.enemyIndex > 4) {
+    return false
+  }
+  if (o.cellId != null && typeof o.cellId !== 'number') {
+    return false
+  }
+  if (typeof o.championId !== 'number' || !Number.isFinite(o.championId) || o.championId <= 0) {
+    return false
+  }
+  if (typeof o.assignedRole !== 'string' || !ROLES.includes(o.assignedRole as DraftRole)) {
+    return false
+  }
+  if (typeof o.inferredRole !== 'string' || !SUGGEST_ROLES.includes(o.inferredRole as DraftRole)) {
+    return false
+  }
+  if (typeof o.confidence !== 'number' || !Number.isFinite(o.confidence) || o.confidence < 0 || o.confidence > 1) {
+    return false
+  }
+  if (o.confidenceLabel !== 'likely' && o.confidenceLabel !== 'flex' && o.confidenceLabel !== 'uncertain') {
+    return false
+  }
+  const probs = o.roleProbabilities
+  if (probs == null || typeof probs !== 'object') {
+    return false
+  }
+  const p = probs as Record<string, unknown>
+  return SUGGEST_ROLES.every((role) => typeof p[role] === 'number' && Number.isFinite(p[role]) && (p[role] as number) >= 0 && (p[role] as number) <= 1)
+}
+
 function isPickSuggestion(x: unknown): x is PickSuggestion {
   if (x == null || typeof x !== 'object') {
     return false
@@ -135,11 +171,103 @@ function isPickSuggestion(x: unknown): x is PickSuggestion {
     if (typeof b.archetype !== 'string' || typeof b.buildHint !== 'string' || typeof b.tagsLine !== 'string' || typeof b.partype !== 'string') {
       return false
     }
+    if (b.itemHint != null && typeof b.itemHint !== 'string') {
+      return false
+    }
   }
   if (!Array.isArray(o.reasons) || o.reasons.some((r) => typeof r !== 'string' || !REASONS.includes(r as SuggestionReason))) {
     return false
   }
   return true
+}
+
+function isStringArray(x: unknown, max = 8): x is string[] {
+  return Array.isArray(x) && x.length <= max && x.every((row) => typeof row === 'string')
+}
+
+function isDraftIntel(x: unknown): x is DraftIntel {
+  if (x == null || typeof x !== 'object') {
+    return false
+  }
+  const o = x as Record<string, unknown>
+  if (!Array.isArray(o.banRecommendations) || o.banRecommendations.length > 8) {
+    return false
+  }
+  for (const row of o.banRecommendations) {
+    if (row == null || typeof row !== 'object') {
+      return false
+    }
+    const r = row as Record<string, unknown>
+    if (typeof r.championId !== 'number' || typeof r.championName !== 'string') {
+      return false
+    }
+    if (typeof r.role !== 'string' || !SUGGEST_ROLES.includes(r.role as DraftRole)) {
+      return false
+    }
+    if (typeof r.score !== 'number' || !Number.isFinite(r.score) || typeof r.reason !== 'string') {
+      return false
+    }
+  }
+  const comp = o.compIdentity
+  if (comp == null || typeof comp !== 'object') {
+    return false
+  }
+  const c = comp as Record<string, unknown>
+  if (!isStringArray(c.ally) || !isStringArray(c.enemy) || !isStringArray(c.missing) || !isStringArray(c.warnings)) {
+    return false
+  }
+  if (typeof c.winCondition !== 'string') {
+    return false
+  }
+  if (!Array.isArray(o.matchupPlans) || o.matchupPlans.length > 8) {
+    return false
+  }
+  for (const row of o.matchupPlans) {
+    if (row == null || typeof row !== 'object') {
+      return false
+    }
+    const r = row as Record<string, unknown>
+    if (typeof r.championId !== 'number' || typeof r.championName !== 'string') {
+      return false
+    }
+    if (r.laneOpponentId != null && typeof r.laneOpponentId !== 'number') {
+      return false
+    }
+    if (r.laneOpponentName != null && typeof r.laneOpponentName !== 'string') {
+      return false
+    }
+    if (
+      typeof r.summonerSpells !== 'string' ||
+      typeof r.startingItem !== 'string' ||
+      typeof r.firstRecall !== 'string' ||
+      typeof r.runeExport !== 'string' ||
+      typeof r.gamePlan !== 'string'
+    ) {
+      return false
+    }
+  }
+  if (!Array.isArray(o.pickComparison) || o.pickComparison.length > 8) {
+    return false
+  }
+  for (const row of o.pickComparison) {
+    if (row == null || typeof row !== 'object') {
+      return false
+    }
+    const r = row as Record<string, unknown>
+    if (typeof r.championId !== 'number' || typeof r.championName !== 'string' || typeof r.score !== 'number') {
+      return false
+    }
+    if (r.estWin != null && typeof r.estWin !== 'number') {
+      return false
+    }
+    if (r.delta != null && typeof r.delta !== 'number') {
+      return false
+    }
+    if (typeof r.summary !== 'string') {
+      return false
+    }
+  }
+  return isStringArray(o.loadingBrief) && isStringArray(o.confidenceNotes)
 }
 
 export function isOverlayEnginePrefsPatch(x: unknown): x is OverlayEnginePrefsPatch {
@@ -267,6 +395,18 @@ export function isDraftUpdate(x: unknown): x is DraftUpdate {
     }
   }
   if (o.boardSignature != null && typeof o.boardSignature !== 'string') {
+    return false
+  }
+  if (o.enemyRoleInference != null) {
+    if (
+      !Array.isArray(o.enemyRoleInference) ||
+      o.enemyRoleInference.length > 5 ||
+      o.enemyRoleInference.some((row) => !isEnemyRoleInference(row))
+    ) {
+      return false
+    }
+  }
+  if (o.draftIntel != null && !isDraftIntel(o.draftIntel)) {
     return false
   }
   if (o.championsSearch != null) {

@@ -138,4 +138,85 @@ describe('suggestPicks', () => {
     expect(suggestions.length).toBeGreaterThan(0)
     expect(suggestions.every((s) => s.championId !== 64)).toBe(true)
   })
+
+  it('filters to explicit candidate champions for My Champs mode', () => {
+    const open = (role: 'top' | 'jungle' | 'middle' | 'bottom' | 'support') => ({
+      role,
+      championId: null as number | null,
+      championName: null as string | null,
+      cellId: null as number | null
+    })
+    const snapshot: DraftSnapshot = {
+      ally: [open('top'), open('jungle'), open('middle'), open('bottom'), open('support')],
+      enemy: [open('top'), open('jungle'), open('middle'), open('bottom'), open('support')],
+      myTeam: null,
+      myRole: 'middle',
+      localPlayerCellId: null,
+      bans: null,
+      myPickOrder: null
+    }
+    const { suggestions } = suggestPicks({
+      myRole: 'middle',
+      snapshot,
+      idToName,
+      candidateChampionIds: [103],
+      monteCarloSamples: 0
+    })
+    expect(suggestions.length).toBe(1)
+    expect(suggestions[0]!.championId).toBe(103)
+  })
+
+  it('keeps All Champs mode unfiltered while using comfort boosts', () => {
+    const open = (role: 'top' | 'jungle' | 'middle' | 'bottom' | 'support') => ({
+      role,
+      championId: null as number | null,
+      championName: null as string | null,
+      cellId: null as number | null
+    })
+    const snapshot: DraftSnapshot = {
+      ally: [open('top'), open('jungle'), open('middle'), open('bottom'), open('support')],
+      enemy: [open('top'), open('jungle'), open('middle'), open('bottom'), open('support')],
+      myTeam: null,
+      myRole: 'middle',
+      localPlayerCellId: null,
+      bans: null,
+      myPickOrder: null
+    }
+    const { suggestions } = suggestPicks({
+      myRole: 'middle',
+      snapshot,
+      idToName,
+      comfortByChampionId: new Map([[103, 0.66]]),
+      monteCarloSamples: 0,
+      maxResults: 5
+    })
+    expect(suggestions.length).toBeGreaterThan(1)
+    expect(suggestions.some((s) => s.championId !== 103)).toBe(true)
+  })
+
+  it('still excludes banned candidates in My Champs mode', () => {
+    const open = (role: 'top' | 'jungle' | 'middle' | 'bottom' | 'support') => ({
+      role,
+      championId: null as number | null,
+      championName: null as string | null,
+      cellId: null as number | null
+    })
+    const snapshot: DraftSnapshot = {
+      ally: [open('top'), open('jungle'), open('middle'), open('bottom'), open('support')],
+      enemy: [open('top'), open('jungle'), open('middle'), open('bottom'), open('support')],
+      myTeam: null,
+      myRole: 'middle',
+      localPlayerCellId: null,
+      bans: [103],
+      myPickOrder: null
+    }
+    const { suggestions } = suggestPicks({
+      myRole: 'middle',
+      snapshot,
+      idToName,
+      candidateChampionIds: [103],
+      monteCarloSamples: 0
+    })
+    expect(suggestions).toEqual([])
+  })
 })

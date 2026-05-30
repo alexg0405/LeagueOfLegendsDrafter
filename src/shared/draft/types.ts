@@ -13,6 +13,21 @@ export type DraftRole =
   | 'support'
   | 'unknown'
 
+export type RoleProbabilityMap = Record<Exclude<DraftRole, 'unknown'>, number>
+
+export type EnemyRoleInferenceConfidenceLabel = 'likely' | 'flex' | 'uncertain'
+
+export type EnemyRoleInference = {
+  enemyIndex: number
+  cellId: number | null
+  championId: number
+  assignedRole: DraftRole
+  inferredRole: Exclude<DraftRole, 'unknown'>
+  confidence: number
+  confidenceLabel: EnemyRoleInferenceConfidenceLabel
+  roleProbabilities: RoleProbabilityMap
+}
+
 export type TeamId = '100' | '200'
 
 export type SlotPick = {
@@ -58,6 +73,46 @@ export type RuneLoadoutHint = {
   note?: string
 }
 
+export type ChampionPoolPreference = 'main' | 'comfortable' | 'learning' | 'never'
+
+export type DraftIntel = {
+  banRecommendations: {
+    championId: number
+    championName: string
+    role: Exclude<DraftRole, 'unknown'>
+    score: number
+    reason: string
+  }[]
+  compIdentity: {
+    ally: string[]
+    enemy: string[]
+    missing: string[]
+    warnings: string[]
+    winCondition: string
+  }
+  matchupPlans: {
+    championId: number
+    championName: string
+    laneOpponentId: number | null
+    laneOpponentName: string | null
+    summonerSpells: string
+    startingItem: string
+    firstRecall: string
+    runeExport: string
+    gamePlan: string
+  }[]
+  pickComparison: {
+    championId: number
+    championName: string
+    score: number
+    estWin?: number
+    delta?: number
+    summary: string
+  }[]
+  loadingBrief: string[]
+  confidenceNotes: string[]
+}
+
 /**
  * Riot DDragon `tags` + partype, turned into build direction (not perfect meta — see hint).
  * AD = physical itemization, AP = magic, mixed = resists+mixed scaling, flex = can go either.
@@ -66,6 +121,8 @@ export type ChampionBuildProfile = {
   damage: 'ad' | 'ap' | 'mixed' | 'flex'
   archetype: string
   buildHint: string
+  /** Patch-aware item direction; display only, not a full item optimizer. */
+  itemHint?: string
   /** e.g. Fighter · Assassin (from DDragon) */
   tagsLine: string
   /** Mana, Energy, None, BloodWell, etc. */
@@ -145,6 +202,10 @@ export type DraftUpdate = {
   suggestionMyRole: DraftRole | null
   /** Display names for `snapshot.bans` ids (same length when set), for overlay / HUD */
   banChampionNames?: (string | null)[] | null
+  /** Enemy role posterior summary used for advisory role labels and off-meta-aware scoring. */
+  enemyRoleInference?: EnemyRoleInference[] | null
+  /** High-level draft coach output: bans, comp identity, plans, compare rows, and brief. */
+  draftIntel?: DraftIntel | null
   /**
    * Fingerprint of board + model inputs (bans, slots, pick order, role, MC). Overlay can use as a
    * React `key` so UI refreshes when the published snapshot changes.

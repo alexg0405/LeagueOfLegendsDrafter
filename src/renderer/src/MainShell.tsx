@@ -1,25 +1,37 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
+import type { AppUpdateStatus } from '@shared/appUpdate'
 import { getLatestDDragonVersion, loadChampionMaps, type ChampionLite } from '@shared/dataDragon'
 import {
   applyChampionNames,
+  buildDraftIntel,
+  championIdsForMyPool,
+  championPoolPreferenceToComfort,
   compileTrainedEffects,
   draftBoardSignature,
   ENGINE_V1_LABEL,
+  importedProfileToPreferences,
+  inferEnemyRoleAssignments,
   isOverlayEnginePrefsPatch,
+  mergeChampionPoolPreferences,
   resolveChampionName,
   sanitizeDraftUpdateForIpc,
   suggestPicks,
+  validatePlayerChampionPoolProfile,
   type CompiledTrainedEffects,
   type DraftDeltaListMode,
   type DraftRole,
   type DraftSnapshot,
   type DraftSource,
   type DraftUpdate,
+  type ChampionPoolPreference,
   type LcuChampSelectResult,
   type OverlayEngineEcho,
   type OverlayEnginePrefs,
-  type OverlayEnginePrefsPatch
+  type OverlayEnginePrefsPatch,
+  type PlayerChampionPoolProfile,
+  type RecommendationPoolMode,
+  type RiotPlatform
 } from '@shared/draft'
 import {
   NexusClientLayout,
@@ -30,15 +42,35 @@ import {
   NAV_ORDER,
   type NexusNavId
 } from './nexus-ui'
+import {
+  livePublicDataStatusLine,
+  refreshLivePublicData,
+  type LivePublicDataRefreshStatus
+} from './livePublicDataClient'
 import { copyBottomStatusStrip, copyDraftSource } from './nexus-ui/nexusCopy'
 
 const ROLES: DraftRole[] = ['top', 'jungle', 'middle', 'bottom', 'support']
 const LS_MY_ROLE = 'nexusdraft.v1.myRole'
 const LS_SUGGEST_MC = 'nexusdraft.v1.suggestMcRollouts'
 const LS_SUGGEST_DELTA_LIST = 'nexusdraft.v1.suggestDeltaListMode'
+const LS_CHAMPION_POOL_PREFS = 'nexusdraft.v1.championPoolPrefs'
+const LS_PLAYER_POOL_PROFILE = 'nexusdraft.v1.playerChampionPoolProfile'
+const LS_RECOMMENDATION_POOL_MODE = 'nexusdraft.v1.recommendationPoolMode'
 const DEFAULT_SUGGEST_MC = 40
 const MAX_SUGGEST_MC = 200
 const SUGGESTION_RESULT_LIMIT = 40
+const LIVE_META_REFRESH_MS = 30 * 60 * 1000
+
+type ChampionPoolPrefs = Record<string, ChampionPoolPreference>
+const LEGACY_AATROX_PLACEHOLDER_PREFS: ChampionPoolPrefs = { '266': 'main' }
+
+function stripLegacyChampionPoolPlaceholder(prefs: ChampionPoolPrefs): ChampionPoolPrefs {
+  const keys = Object.keys(prefs)
+  if (keys.length === 1 && prefs['266'] === LEGACY_AATROX_PLACEHOLDER_PREFS['266']) {
+    return {}
+  }
+  return prefs
+}
 
 /** Deterministic per board so MC rankings don’t flicker between identical LCU polls. */
 function fnv1a32(s: string): number {
@@ -92,6 +124,52 @@ function readStoredSuggestDeltaListMode(): DraftDeltaListMode {
     /* ignore */
   }
   return 'best'
+}
+
+function readStoredChampionPoolPrefs(): ChampionPoolPrefs {
+  try {
+    const raw = localStorage.getItem(LS_CHAMPION_POOL_PREFS)
+    if (!raw) {
+      return {}
+    }
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const out: ChampionPoolPrefs = {}
+    for (const [id, pref] of Object.entries(parsed)) {
+      if (!/^\d+$/.test(id)) {
+        continue
+      }
+      if (pref === 'main' || pref === 'comfortable' || pref === 'learning' || pref === 'never') {
+        out[id] = pref
+      }
+    }
+    return stripLegacyChampionPoolPlaceholder(out)
+  } catch {
+    return {}
+  }
+}
+
+function readStoredPlayerChampionPoolProfile(): PlayerChampionPoolProfile | null {
+  try {
+    const raw = localStorage.getItem(LS_PLAYER_POOL_PROFILE)
+    if (!raw) {
+      return null
+    }
+    return validatePlayerChampionPoolProfile(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+function readStoredRecommendationPoolMode(): RecommendationPoolMode {
+  try {
+    const raw = localStorage.getItem(LS_RECOMMENDATION_POOL_MODE)
+    if (raw === 'my-champs' || raw === 'all-champs') {
+      return raw
+    }
+  } catch {
+    /* ignore */
+  }
+  return 'all-champs'
 }
 
 type ManualPicks = {
@@ -190,6 +268,16 @@ function displayLcuError(lcu: LcuChampSelectResult | null): string | null {
   return lcu.error
 }
 
+function appUpdateStatusLine(status: AppUpdateStatus | null): string {
+  if (!status) {
+    return 'Update checker ready.'
+  }
+  if (status.state === 'downloading') {
+    return `${status.message} ${status.percent.toFixed(0)}%`
+  }
+  return status.message
+}
+
 export function MainShell() {
   const [ddVersion, setDdVersion] = useState<string | null>(null)
   const [champions, setChampions] = useState<ChampionLite[]>([])
@@ -202,11 +290,24 @@ export function MainShell() {
   const [myRole] = useState<DraftRole>(readStoredMyRole)
   const [suggestMcRollouts, setSuggestMcRollouts] = useState(readStoredMcRollouts)
   const [suggestDeltaListMode, setSuggestDeltaListMode] = useState<DraftDeltaListMode>(readStoredSuggestDeltaListMode)
+  const [championPoolPrefs, setChampionPoolPrefs] = useState<ChampionPoolPrefs>(readStoredChampionPoolPrefs)
+  const [playerPoolProfile, setPlayerPoolProfile] = useState<PlayerChampionPoolProfile | null>(
+    readStoredPlayerChampionPoolProfile
+  )
+  const [recommendationPoolMode, setRecommendationPoolMode] = useState<RecommendationPoolMode>(
+    readStoredRecommendationPoolMode
+  )
+  const [playerPoolStatus, setPlayerPoolStatus] = useState<string | null>(null)
+  const [playerPoolBusy, setPlayerPoolBusy] = useState(false)
   const [overlayEnginePrefs, setOverlayEnginePrefs] = useState<OverlayEnginePrefs>(() => ({
     ...defaultOverlayEnginePrefs
   }))
 
   const [trainedEffects, setTrainedEffects] = useState<CompiledTrainedEffects | null>(null)
+  const [liveDataRevision, setLiveDataRevision] = useState(0)
+  const [liveDataStatus, setLiveDataStatus] = useState<LivePublicDataRefreshStatus | null>(null)
+  const [appUpdateStatus, setAppUpdateStatus] = useState<AppUpdateStatus | null>(null)
+  const [appUpdateBusy, setAppUpdateBusy] = useState(false)
 
   const effectiveMyRole: DraftRole = useMemo(() => {
     if (lcu?.snapshot?.myRole && lcu.snapshot.myRole !== 'unknown') {
@@ -239,6 +340,17 @@ export function MainShell() {
   }, [])
 
   useEffect(() => {
+    return window.drafter.onOverlayPlayerChampionPoolImported((result) => {
+      if (!result.ok) {
+        return
+      }
+      setPlayerPoolProfile(result.profile)
+      setRecommendationPoolMode('my-champs')
+      setPlayerPoolStatus(`Imported ${result.profile.entries.length} mastery champs from overlay.`)
+    })
+  }, [])
+
+  useEffect(() => {
     try {
       localStorage.setItem(LS_MY_ROLE, myRole)
     } catch {
@@ -261,6 +373,34 @@ export function MainShell() {
       /* ignore */
     }
   }, [suggestDeltaListMode])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_CHAMPION_POOL_PREFS, JSON.stringify(championPoolPrefs))
+    } catch {
+      /* ignore */
+    }
+  }, [championPoolPrefs])
+
+  useEffect(() => {
+    try {
+      if (playerPoolProfile) {
+        localStorage.setItem(LS_PLAYER_POOL_PROFILE, JSON.stringify(playerPoolProfile))
+      } else {
+        localStorage.removeItem(LS_PLAYER_POOL_PROFILE)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [playerPoolProfile])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_RECOMMENDATION_POOL_MODE, recommendationPoolMode)
+    } catch {
+      /* ignore */
+    }
+  }, [recommendationPoolMode])
 
   const lcuSnapshotNamed = useMemo(() => {
     if (!lcu?.snapshot) {
@@ -348,6 +488,29 @@ export function MainShell() {
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
   }, [champions])
 
+  const importedChampionPoolPrefs = useMemo(() => importedProfileToPreferences(playerPoolProfile), [playerPoolProfile])
+  const effectiveChampionPoolPrefs = useMemo(
+    () => mergeChampionPoolPreferences(importedChampionPoolPrefs, championPoolPrefs),
+    [importedChampionPoolPrefs, championPoolPrefs]
+  )
+
+  const championPoolPreferenceMap = useMemo((): ReadonlyMap<number, ChampionPoolPreference> => {
+    return new Map(
+      Object.entries(effectiveChampionPoolPrefs).map(([id, pref]) => [Number(id), pref] as const)
+    )
+  }, [effectiveChampionPoolPrefs])
+
+  const comfortByChampionId = useMemo((): ReadonlyMap<number, number> => {
+    return new Map(
+      Object.entries(effectiveChampionPoolPrefs).map(([id, pref]) => [Number(id), championPoolPreferenceToComfort(pref)] as const)
+    )
+  }, [effectiveChampionPoolPrefs])
+
+  const candidateChampionIds = useMemo(
+    () => (recommendationPoolMode === 'my-champs' ? championIdsForMyPool(effectiveChampionPoolPrefs) : null),
+    [recommendationPoolMode, effectiveChampionPoolPrefs]
+  )
+
   const { suggestions, patchLabel } = useMemo(() => {
     if (!activeSnapshot) {
       return { suggestions: [], patchLabel: ENGINE_V1_LABEL }
@@ -363,6 +526,8 @@ export function MainShell() {
       rngSeed,
       championMetaById,
       trainedEffects,
+      comfortByChampionId,
+      candidateChampionIds,
       sortBy: sortForSuggestions,
       deltaListMode: deltaListForSuggestions
     })
@@ -376,8 +541,64 @@ export function MainShell() {
     deltaListForSuggestions,
     boardSignature,
     championMetaById,
-    trainedEffects
+    trainedEffects,
+    comfortByChampionId,
+    candidateChampionIds,
+    liveDataRevision
   ])
+
+  const enemyRoleInference = useMemo(() => {
+    return activeSnapshot ? inferEnemyRoleAssignments(activeSnapshot) : null
+  }, [activeSnapshot, liveDataRevision])
+
+  const draftIntel = useMemo(() => {
+    return buildDraftIntel({
+      snapshot: activeSnapshot,
+      myRole: roleForSuggestions,
+      suggestions,
+      idToName: nameById,
+      championMetaById,
+      enemyRoleInference,
+      patchLabel,
+      dataDragonVersion: ddVersion,
+      championPoolPreferences: championPoolPreferenceMap
+    })
+  }, [
+    activeSnapshot,
+    roleForSuggestions,
+    suggestions,
+    nameById,
+    championMetaById,
+    enemyRoleInference,
+    patchLabel,
+    ddVersion,
+    championPoolPreferenceMap,
+    liveDataRevision
+  ])
+
+  const importPlayerChampionPool = useCallback(async (riotId: string, platform: RiotPlatform) => {
+    const trimmed = riotId.trim()
+    if (!trimmed) {
+      setPlayerPoolStatus('Enter a Riot ID like GameName#TagLine.')
+      return
+    }
+    setPlayerPoolBusy(true)
+    setPlayerPoolStatus('Importing Riot mastery...')
+    try {
+      const result = await window.drafter.getPlayerChampionPool({ riotId: trimmed, platform, count: 20 })
+      if (!result.ok) {
+        setPlayerPoolStatus(result.error)
+        return
+      }
+      setPlayerPoolProfile(result.profile)
+      setRecommendationPoolMode('my-champs')
+      setPlayerPoolStatus(`Imported ${result.profile.entries.length} mastery champs.`)
+    } catch (error) {
+      setPlayerPoolStatus(error instanceof Error ? error.message : 'Riot import failed. Try again shortly.')
+    } finally {
+      setPlayerPoolBusy(false)
+    }
+  }, [])
 
   const banChampionNames = useMemo((): (string | null)[] | null => {
     const ids = activeSnapshot?.bans
@@ -405,6 +626,8 @@ export function MainShell() {
       updatedAt: new Date().toISOString(),
       suggestionMyRole: roleForSuggestions,
       banChampionNames,
+      enemyRoleInference,
+      draftIntel,
       boardSignature: boardSignature || null,
       championsSearch,
       trainedEffectsStatus: trainedEffects ? trainedEffects.status : null,
@@ -422,6 +645,8 @@ export function MainShell() {
     patchLabel,
     roleForSuggestions,
     banChampionNames,
+    enemyRoleInference,
+    draftIntel,
     boardSignature,
     championsSearch,
     trainedEffects,
@@ -472,6 +697,59 @@ export function MainShell() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+    const refresh = async () => {
+      const status = await refreshLivePublicData()
+      if (cancelled) {
+        return
+      }
+      setLiveDataStatus(status)
+      if (status.ok && status.applied) {
+        setLiveDataRevision((revision) => revision + 1)
+      }
+    }
+    void refresh()
+    const timer = window.setInterval(() => {
+      void refresh()
+    }, LIVE_META_REFRESH_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  useEffect(() => {
+    return window.drafter.onAppUpdateStatus((status) => {
+      setAppUpdateStatus(status)
+      setAppUpdateBusy(status.state === 'checking' || status.state === 'downloading')
+    })
+  }, [])
+
+  const checkForAppUpdate = useCallback(async () => {
+    setAppUpdateBusy(true)
+    try {
+      const result = await window.drafter.checkForAppUpdate()
+      setAppUpdateStatus(result.status)
+    } finally {
+      setAppUpdateBusy(false)
+    }
+  }, [])
+
+  const downloadAppUpdate = useCallback(async () => {
+    setAppUpdateBusy(true)
+    try {
+      const result = await window.drafter.downloadAppUpdate()
+      setAppUpdateStatus(result.status)
+    } finally {
+      setAppUpdateBusy(false)
+    }
+  }, [])
+
+  const installAppUpdate = useCallback(async () => {
+    await window.drafter.quitAndInstallAppUpdate()
+  }, [])
+
+  useEffect(() => {
     void (async () => {
       try {
         const v = await getLatestDDragonVersion()
@@ -504,10 +782,10 @@ export function MainShell() {
     runnerId: 'NEXUS//LOCAL',
     region: 'AMERICAS',
     dataVersion: ddVersion && ddVersion[0] !== '(' ? ddVersion : '—',
-    build: '0.5.0',
+    build: '3.11.0',
     networkStatus: lcuStatus === 'ready' ? 'On' : 'Wait',
     link: lcuStatus === 'ready' ? 'League: ready' : 'League: waiting',
-    resourceLine: `Picks from: ${copyDraftSource(draftSource)} · Suggestions: ${patchLabel ?? ENGINE_V1_LABEL}`,
+    resourceLine: `Picks from: ${copyDraftSource(draftSource)} · Suggestions: ${patchLabel ?? ENGINE_V1_LABEL} · ${livePublicDataStatusLine(liveDataStatus)}`,
     onMinimizeApp: () => {
       void window.drafter.minimizeApp()
     },
@@ -520,12 +798,13 @@ export function MainShell() {
     const model = patchLabel ?? ENGINE_V1_LABEL
     const trainedOn = model.includes('+trained') || Boolean(trainedEffects?.status.hasAnyData)
     const dataLine = trainedOn ? 'trained + bundled fallback' : 'bundled heuristics'
+    const liveLine = livePublicDataStatusLine(liveDataStatus)
     const sortLine = `delta: ${suggestDeltaListMode === 'worst' ? 'worst first' : 'best first'}`
     if (suggestMcRollouts <= 0) {
-      return `${model} - V1 only. Sort: ${sortLine}. Data: ${dataLine}.`
+      return `${model} - V1 only. Sort: ${sortLine}. Data: ${dataLine}. ${liveLine}.`
     }
-    return `${model} - V1 + ${suggestMcRollouts} rollout(s). Sort: ${sortLine}. Data: ${dataLine}.`
-  }, [patchLabel, suggestMcRollouts, suggestDeltaListMode, trainedEffects])
+    return `${model} - V1 + ${suggestMcRollouts} rollout(s). Sort: ${sortLine}. Data: ${dataLine}. ${liveLine}.`
+  }, [patchLabel, suggestMcRollouts, suggestDeltaListMode, trainedEffects, liveDataStatus])
 
   const rightCol = {
     lcuState: lcuStatusLine,
@@ -609,6 +888,33 @@ export function MainShell() {
               onSuggestDeltaListMode={setSuggestDeltaListMode}
               suggestions={suggestions}
               ddragonVersion={ddVersion && ddVersion[0] !== '(' ? ddVersion : null}
+              enemyRoleInference={enemyRoleInference}
+              draftIntel={draftIntel}
+              appUpdateStatusLine={appUpdateStatusLine(appUpdateStatus)}
+              appUpdateBusy={appUpdateBusy}
+              appUpdateAvailable={appUpdateStatus?.state === 'available'}
+              appUpdateReady={appUpdateStatus?.state === 'downloaded'}
+              onCheckAppUpdate={checkForAppUpdate}
+              onDownloadAppUpdate={downloadAppUpdate}
+              onInstallAppUpdate={installAppUpdate}
+              playerPoolProfile={playerPoolProfile}
+              playerPoolStatus={playerPoolStatus}
+              playerPoolBusy={playerPoolBusy}
+              recommendationPoolMode={recommendationPoolMode}
+              onRecommendationPoolMode={setRecommendationPoolMode}
+              onImportPlayerChampionPool={importPlayerChampionPool}
+              championPoolPreferences={championPoolPrefs}
+              onChampionPoolPreference={(championId, pref) => {
+                setChampionPoolPrefs((prev) => {
+                  const next = { ...prev }
+                  if (pref == null) {
+                    delete next[String(championId)]
+                  } else {
+                    next[String(championId)] = pref
+                  }
+                  return next
+                })
+              }}
               onToggleOverlay={async () => {
                 await window.drafter.toggleOverlay()
               }}

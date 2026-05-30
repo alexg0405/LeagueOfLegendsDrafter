@@ -19,10 +19,14 @@ export type SuggestPicksArgs = {
   championMetaById?: ReadonlyMap<number, { tags: string[]; partype: string }> | null
   /** Exported Riot logit bundle; when present the engine prefers it over bundled heuristics. */
   trainedEffects?: CompiledTrainedEffects | null
+  /** Player pool preference, 0..1 comfort, blended as a recommendation prior. */
+  comfortByChampionId?: ReadonlyMap<number, number> | null
   /** Candidate ordering mode. */
   sortBy?: 'score' | 'delta'
   /** Used when `sortBy` is `delta` and the board has context (see engine). */
   deltaListMode?: DraftDeltaListMode
+  /** Optional hard filter used by "My Champs" mode. */
+  candidateChampionIds?: Iterable<number> | null
 }
 
 /**
@@ -39,8 +43,10 @@ export function suggestPicks({
   rngSeed,
   championMetaById = null,
   trainedEffects = null,
+  comfortByChampionId = null,
   sortBy = 'score',
-  deltaListMode = 'best'
+  deltaListMode = 'best',
+  candidateChampionIds = null
 }: SuggestPicksArgs): { suggestions: PickSuggestion[]; patchLabel: string } {
   if (!snapshot) {
     return { suggestions: [], patchLabel: 'engine-v1' }
@@ -59,7 +65,9 @@ export function suggestPicks({
     rngSeed: rngSeed ?? 0x9e37_79b1,
     championMetaById,
     trainedEffects,
+    comfortByChampionId,
     sortBy,
-    deltaListMode
+    deltaListMode,
+    candidateChampionIds
   })
 }

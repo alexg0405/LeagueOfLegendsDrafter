@@ -2,6 +2,7 @@ import { getChampionThreatOverride, type ClassLabel, type ThreatLabel } from './
 import { resolveChampionName } from './championNameFallback'
 import { MATCHUP_BONUS } from './matchupData'
 import { publicMetaLaneRate } from './metaStats'
+import { inferEnemyRoleAssignments } from './roleInference'
 import { shrunkLaneRate } from './statsModel'
 import type { DraftRole, DraftSnapshot, RuneLoadoutHint, SlotPick } from './types'
 
@@ -20,7 +21,10 @@ type ChampionDescriptor = {
   role: DraftRole
   threat: ThreatLabel | null
   classes: Set<ClassLabel>
+  roleProbability?: number
 }
+
+type InferredSlotPick = SlotPick & { enemyIndex: number; laneProbability?: number }
 
 const ROLE_DEFAULT: Record<RoleKey, RuneLoadoutHint> = {
   top: {
@@ -33,7 +37,7 @@ const ROLE_DEFAULT: Record<RoleKey, RuneLoadoutHint> = {
     primaryTree: 'Domination',
     keystone: 'Electrocute or Dark Harvest',
     secondary: 'Inspiration (Cosmic Insight) or Sorcery (Nimbus Cloak)',
-    note: 'Tank and bruiser jungles usually move toward Aftershock, Phase Rush, or Conqueror.'
+    note: "Tank and bruiser jungles usually move toward Aftershock, Stormraider's Surge, or Conqueror."
   },
   middle: {
     primaryTree: 'Sorcery',
@@ -72,9 +76,9 @@ const BY_CHAMPION_ID: Record<number, RuneLoadoutHint> = {
   },
   61: {
     primaryTree: 'Sorcery',
-    keystone: 'Phase Rush',
+    keystone: 'Summon Aery or Arcane Comet',
     secondary: 'Inspiration',
-    note: 'Summon Aery into ranged lanes is fine.'
+    note: 'Control mage page; Comet is better when you can land long-range poke.'
   },
   134: {
     primaryTree: 'Sorcery',
@@ -122,7 +126,31 @@ const BY_CHAMPION_ID: Record<number, RuneLoadoutHint> = {
     primaryTree: 'Domination',
     keystone: 'Electrocute',
     secondary: 'Sorcery',
-    note: 'Phase Rush can be useful into hard-to-stick artillery lanes.'
+    note: "Stormraider's Surge can be useful when you can burst through hard-to-stick artillery lanes."
+  },
+  142: {
+    primaryTree: 'Sorcery',
+    keystone: 'Arcane Comet',
+    secondary: 'Inspiration',
+    note: 'Recent Zoe changes reward long-range poke and Bubble hits; Comet fits when you can land spells from outside retaliation range.'
+  },
+  163: {
+    primaryTree: 'Sorcery',
+    keystone: 'Arcane Comet or Summon Aery',
+    secondary: 'Inspiration',
+    note: 'Recent Q trade buffs make Comet the long-range poke page, while Aery gives steadier lane pressure.'
+  },
+  69: {
+    primaryTree: 'Sorcery',
+    keystone: 'Deathfire Touch',
+    secondary: 'Precision or Resolve',
+    note: 'Patch 26.11 makes Deathfire Touch deal magic damage only; it remains the sustained caster page for long DoT fights.'
+  },
+  90: {
+    primaryTree: 'Sorcery',
+    keystone: 'Deathfire Touch',
+    secondary: 'Inspiration or Resolve',
+    note: 'Malzahar keeps burns ticking long enough for Deathfire Touch; take Comet only when long-range poke matters more than sustained DoT.'
   },
   246: {
     primaryTree: 'Domination',
@@ -145,16 +173,16 @@ const BY_CHAMPION_ID: Record<number, RuneLoadoutHint> = {
     note: 'Grasp if you need short trades only.'
   },
   420: {
-    primaryTree: 'Sorcery',
-    keystone: 'Phase Rush',
-    secondary: 'Inspiration',
-    note: 'Grasp Illaoi is also common; pick by lane length.'
+    primaryTree: 'Resolve',
+    keystone: 'Grasp of the Undying',
+    secondary: 'Precision',
+    note: 'Conqueror into long fights; Grasp remains the stable short-trade default after the mobility-rune swap.'
   },
   122: {
     primaryTree: 'Precision',
     keystone: 'Conqueror',
     secondary: 'Resolve',
-    note: 'Phase Rush is a kite-resistant option into slippery ranged lanes.'
+    note: "Stormraider's Surge is the kite-resistant option into slippery ranged lanes if you can trigger it."
   },
   24: {
     primaryTree: 'Precision',
@@ -172,7 +200,7 @@ const BY_CHAMPION_ID: Record<number, RuneLoadoutHint> = {
     primaryTree: 'Precision',
     keystone: 'Conqueror',
     secondary: 'Resolve',
-    note: 'Phase Rush into kite-heavy lanes.'
+    note: "Stormraider's Surge into kite-heavy lanes; Conqueror for normal extended fights."
   },
   54: {
     primaryTree: 'Sorcery',
@@ -192,19 +220,37 @@ const BY_CHAMPION_ID: Record<number, RuneLoadoutHint> = {
     secondary: 'Resolve',
     note: 'Press the Attack is playable for short burst trades.'
   },
+  17: {
+    primaryTree: 'Sorcery',
+    keystone: 'Deathfire Touch',
+    secondary: 'Precision or Resolve',
+    note: "Patch 26.11 trims Teemo's AD Toxic Shot scaling; Deathfire Touch remains the AP DoT page, while Press the Attack fits on-hit lanes."
+  },
+  79: {
+    primaryTree: 'Resolve',
+    keystone: 'Grasp of the Undying or Arcane Comet',
+    secondary: 'Inspiration',
+    note: 'Recent W damage reduction buffs support frontline top Gragas; Grasp for tanks, Comet for poke lanes.'
+  },
+  85: {
+    primaryTree: 'Sorcery',
+    keystone: 'Summon Aery or Arcane Comet',
+    secondary: 'Resolve',
+    note: 'Recent AD crit hooks on W/E keep Press the Attack as the off-meta AD/crit page; Aery/Comet remain AP defaults.'
+  },
 
   // Jungle
   64: {
     primaryTree: 'Precision',
     keystone: 'Conqueror',
     secondary: 'Inspiration',
-    note: 'Electrocute if snowballing as an assassin; Phase Rush vs kite comps.'
+    note: "Electrocute if snowballing as an assassin; Stormraider's Surge vs kite comps."
   },
   121: {
     primaryTree: 'Precision',
     keystone: 'Conqueror',
     secondary: 'Domination (Sudden Impact)',
-    note: 'Phase Rush vs kite comps.'
+    note: "Stormraider's Surge vs kite comps."
   },
   234: {
     primaryTree: 'Domination',
@@ -228,7 +274,7 @@ const BY_CHAMPION_ID: Record<number, RuneLoadoutHint> = {
     primaryTree: 'Resolve',
     keystone: 'Aftershock',
     secondary: 'Precision',
-    note: 'Phase Rush helps if the lobby can kite your engage.'
+    note: "Stormraider's Surge helps if the lobby can kite your engage after your burst window."
   },
   104: {
     primaryTree: 'Precision',
@@ -266,13 +312,31 @@ const BY_CHAMPION_ID: Record<number, RuneLoadoutHint> = {
     secondary: 'Precision',
     note: 'Dark Harvest for AP/poke traps.'
   },
+  5: {
+    primaryTree: 'Precision',
+    keystone: 'Conqueror or Press the Attack',
+    secondary: 'Inspiration or Domination',
+    note: 'Patch 26.11 keeps AP/hybrid Xin Zhao viable but trims AP healing; Conqueror or Press the Attack are safer defaults.'
+  },
+  77: {
+    primaryTree: 'Precision',
+    keystone: 'Conqueror',
+    secondary: 'Resolve or Inspiration',
+    note: 'Recent AD Q-to-W/E shifts make bruiser pages with durability and extended fights higher value.'
+  },
+  102: {
+    primaryTree: 'Precision',
+    keystone: 'Conqueror',
+    secondary: 'Resolve or Inspiration',
+    note: 'AD Shyvana wants sustained autos and Q hits; AP Shyvana can pivot Sorcery with Deathfire Touch or Comet around R/E.'
+  },
 
   // Bot
   81: {
     primaryTree: 'Precision',
-    keystone: 'Press the Attack',
+    keystone: 'Press the Attack or Fleet Footwork',
     secondary: 'Inspiration',
-    note: 'First Strike poke optional; Fleet when lane sustain matters.'
+    note: 'Recent AP-ratio buffs keep AP Ezreal viable with Sorcery/Comet; Fleet when lane sustain matters.'
   },
   22: {
     primaryTree: 'Precision',
@@ -324,9 +388,9 @@ const BY_CHAMPION_ID: Record<number, RuneLoadoutHint> = {
   },
   221: {
     primaryTree: 'Precision',
-    keystone: 'Lethal Tempo',
+    keystone: 'Lethal Tempo or Fleet Footwork',
     secondary: 'Resolve',
-    note: 'Fleet Footwork into poke lanes.'
+    note: 'Recent Zeri changes push her toward mobility and lane stability; Fleet into poke, Lethal Tempo for sustained DPS.'
   },
   236: {
     primaryTree: 'Precision',
@@ -398,9 +462,9 @@ const BY_CHAMPION_ID: Record<number, RuneLoadoutHint> = {
   },
   143: {
     primaryTree: 'Sorcery',
-    keystone: 'Arcane Comet',
+    keystone: 'Deathfire Touch or Arcane Comet',
     secondary: 'Domination',
-    note: 'Resolve second if enemy engage can force all-ins.'
+    note: 'Deathfire Touch fits sustained plant/DoT damage after its 26.11 magic-damage change; Comet is still the long-range poke page.'
   },
   25: {
     primaryTree: 'Sorcery',
@@ -460,6 +524,20 @@ const REPEATED_POKE = championSet([
   'Xerath',
   'Ziggs',
   'Zoe',
+  'Zyra'
+])
+
+const SUSTAINED_DAMAGE_CASTERS = championSet([
+  'Brand',
+  'Cassiopeia',
+  'Karthus',
+  'Lillia',
+  'Malzahar',
+  'Morgana',
+  'Rumble',
+  'Singed',
+  'Swain',
+  'Teemo',
   'Zyra'
 ])
 
@@ -599,6 +677,10 @@ function classesFromMeta(meta: ChampionMeta | null | undefined): Set<ClassLabel>
   return classes
 }
 
+function wantsDeathfireTouch(champion: ChampionDescriptor): boolean {
+  return SUSTAINED_DAMAGE_CASTERS.has(compactName(champion.name))
+}
+
 function inferThreat(classes: Set<ClassLabel>, meta: ChampionMeta | null | undefined, role: DraftRole): ThreatLabel | null {
   const partype = meta?.partype?.toLowerCase() ?? ''
   if (classes.has('mage')) {
@@ -648,33 +730,62 @@ function resolvedSlotName(slot: SlotPick, idToName: RuneMatchupContext['idToName
   return resolveChampionName(slot.championId, idToName ?? null)
 }
 
-function relevantEnemySlots(snapshot: DraftSnapshot | null | undefined, role: DraftRole): SlotPick[] {
-  const enemies = (snapshot?.enemy ?? []).filter((slot) => slot.championId != null)
+function relevantEnemySlots(snapshot: DraftSnapshot | null | undefined, role: DraftRole): InferredSlotPick[] {
+  if (!snapshot) {
+    return []
+  }
+  const inferred = new Map(inferEnemyRoleAssignments(snapshot).map((row) => [row.enemyIndex, row]))
+  const enemies = snapshot.enemy
+    .map((slot, idx): InferredSlotPick | null => {
+      if (slot.championId == null) {
+        return null
+      }
+      const row = inferred.get(idx)
+      const roleP =
+        role !== 'unknown'
+          ? row?.roleProbabilities[role as RoleKey] ?? (slot.role === role ? 1 : 0.2)
+          : undefined
+      return {
+        ...slot,
+        enemyIndex: idx,
+        role: row?.inferredRole ?? slot.role,
+        laneProbability: roleP
+      }
+    })
+    .filter((slot): slot is InferredSlotPick => slot != null)
   if (enemies.length === 0) {
     return []
   }
   if (role === 'bottom' || role === 'support') {
-    const duoLane = enemies.filter((slot) => slot.role === 'bottom' || slot.role === 'support')
+    const duoLane = enemies.filter((slot) => {
+      const row = inferred.get(slot.enemyIndex)
+      const duoP =
+        (row?.roleProbabilities.bottom ?? (slot.role === 'bottom' ? 1 : 0)) +
+        (row?.roleProbabilities.support ?? (slot.role === 'support' ? 1 : 0))
+      return duoP >= 0.45
+    })
     return duoLane.length > 0 ? duoLane : enemies
   }
   if (role === 'jungle' || role === 'unknown') {
     return enemies
   }
-  const laneEnemy = enemies.filter((slot) => slot.role === role)
+  const laneEnemy = enemies.filter((slot) => (slot.laneProbability ?? (slot.role === role ? 1 : 0)) >= 0.45)
   return laneEnemy.length > 0 ? laneEnemy : enemies
 }
 
 function enemyDescriptors(championId: number, role: DraftRole, ctx: RuneMatchupContext): ChampionDescriptor[] {
   return relevantEnemySlots(ctx.snapshot, role)
     .filter((slot) => slot.championId !== championId)
-    .map((slot) =>
-      descriptorForChampion(
+    .map((slot) => {
+      const descriptor = descriptorForChampion(
         slot.championId!,
         slot.role,
         resolvedSlotName(slot, ctx.idToName),
         ctx.championMetaById
       )
-    )
+      descriptor.roleProbability = slot.laneProbability
+      return descriptor
+    })
 }
 
 function archetypeDefault(champion: ChampionDescriptor, role: DraftRole): RuneLoadoutHint {
@@ -690,6 +801,14 @@ function archetypeDefault(champion: ChampionDescriptor, role: DraftRole): RuneLo
 
   if (role === 'support') {
     if (classes.has('mage')) {
+      if (wantsDeathfireTouch(champion)) {
+        return {
+          primaryTree: 'Sorcery',
+          keystone: 'Deathfire Touch',
+          secondary: 'Domination or Inspiration',
+          note: 'Sustained poke/DoT support; Deathfire Touch uses the April 30 nerfed live values, while Comet remains the long-range burst poke page.'
+        }
+      }
       return {
         primaryTree: 'Sorcery',
         keystone: 'Arcane Comet or Summon Aery',
@@ -710,6 +829,14 @@ function archetypeDefault(champion: ChampionDescriptor, role: DraftRole): RuneLo
 
   if (role === 'bottom') {
     if (classes.has('mage')) {
+      if (wantsDeathfireTouch(champion)) {
+        return {
+          primaryTree: 'Sorcery',
+          keystone: 'Deathfire Touch',
+          secondary: 'Inspiration (Biscuit Delivery)',
+          note: 'Mage bot with sustained damage; Deathfire Touch is the DoT page, Comet is for long-range poke lanes.'
+        }
+      }
       return {
         primaryTree: 'Sorcery',
         keystone: 'Arcane Comet',
@@ -729,9 +856,9 @@ function archetypeDefault(champion: ChampionDescriptor, role: DraftRole): RuneLo
     if (classes.has('tank')) {
       return {
         primaryTree: 'Resolve',
-        keystone: 'Aftershock or Phase Rush',
+        keystone: "Aftershock or Stormraider's Surge",
         secondary: 'Precision (Triumph) or Inspiration',
-        note: 'Aftershock for engage; Phase Rush when you need to keep moving after contact.'
+        note: "Aftershock for engage; Stormraider's Surge when you can trigger it and need to keep moving after contact."
       }
     }
     if (classes.has('assassin')) {
@@ -747,13 +874,21 @@ function archetypeDefault(champion: ChampionDescriptor, role: DraftRole): RuneLo
         primaryTree: 'Precision',
         keystone: 'Conqueror or Press the Attack',
         secondary: 'Inspiration or Domination',
-        note: 'Phase Rush is the kite-comp pivot.'
+        note: "Stormraider's Surge is the kite-comp pivot when you can trigger it."
       }
     }
     return cloneHint(ROLE_DEFAULT.jungle)
   }
 
   if (role === 'middle') {
+    if (classes.has('mage') && wantsDeathfireTouch(champion)) {
+      return {
+        primaryTree: 'Sorcery',
+        keystone: 'Deathfire Touch',
+        secondary: 'Inspiration or Resolve',
+        note: 'Sustained caster page; Deathfire Touch live values are 4-12 plus 7% bonus AD and 2.5% AP per second, ramping by 75% after 3s.'
+      }
+    }
     if (classes.has('assassin')) {
       return {
         primaryTree: 'Domination',
@@ -782,13 +917,21 @@ function archetypeDefault(champion: ChampionDescriptor, role: DraftRole): RuneLo
         primaryTree: 'Precision',
         keystone: 'Conqueror',
         secondary: 'Resolve',
-        note: 'Grasp for short trades; Phase Rush when the lane is about kiting.'
+        note: "Grasp for short trades; Stormraider's Surge when the lane is about kiting and burst windows."
+      }
+    }
+    if (classes.has('mage') && wantsDeathfireTouch(champion)) {
+      return {
+        primaryTree: 'Sorcery',
+        keystone: 'Deathfire Touch',
+        secondary: 'Resolve',
+        note: 'Sustained top-lane burn page; use Comet instead when long-range poke is the actual win condition.'
       }
     }
     if (classes.has('marksman') || classes.has('mage')) {
       return {
         primaryTree: classes.has('marksman') ? 'Precision' : 'Sorcery',
-        keystone: classes.has('marksman') ? 'Press the Attack or Fleet Footwork' : 'Arcane Comet or Phase Rush',
+        keystone: classes.has('marksman') ? 'Press the Attack or Fleet Footwork' : "Arcane Comet or Stormraider's Surge",
         secondary: 'Resolve',
         note: 'Ranged top needs defensive secondaries when enemy can force all-ins.'
       }
@@ -826,7 +969,7 @@ function relevanceForPickVsEnemy(
   if (myRole && myRole !== 'unknown' && enemy.role !== 'unknown') {
     const lane = publicMetaLaneRate(myRole, candidateId, enemy.championId)
     if (lane != null) {
-      return 100 + Math.abs(lane - 0.5) * 20
+      return (100 + Math.abs(lane - 0.5) * 20) * (0.35 + (enemy.roleProbability ?? 1) * 0.65)
     }
   }
   const sr = shrunkLaneRate(candidateId, enemy.championId)
@@ -866,7 +1009,7 @@ function laneOpponentRuneLine(
   const isHardCc = HARD_CC.has(c) || (primary.classes.has('tank') && primary.role !== 'top')
 
   if (hasArt && wantsMovementKeystone(my, role)) {
-    return `Vs ${primary.name} (artillery and angles): value movement (Phase/Fleet) and Celerity for skillshots.`
+    return `Vs ${primary.name} (artillery and angles): value movement (Stormraider/Fleet) and Celerity for skillshots.`
   }
   if (isBurst || isAllIn) {
     return `Vs ${primary.name} (burst/engage): Bone Plating and Resolve second help short trades.`
@@ -913,9 +1056,9 @@ function adjustForMatchup(
     if (role === 'bottom' || champion.classes.has('marksman')) {
       hint.primaryTree = 'Precision'
       hint.keystone = hint.keystone.includes('Fleet Footwork') ? hint.keystone : `Fleet Footwork or ${hint.keystone}`
-    } else if (!hint.keystone.includes('Phase Rush')) {
+    } else if (!hint.keystone.includes("Stormraider's Surge")) {
       hint.primaryTree = hint.primaryTree === 'Domination' ? hint.primaryTree : 'Sorcery'
-      hint.keystone = `Phase Rush or ${hint.keystone}`
+      hint.keystone = `Stormraider's Surge or ${hint.keystone}`
     }
     preferSecondary(hint, 'Sorcery (Nimbus Cloak + Celerity)')
   }

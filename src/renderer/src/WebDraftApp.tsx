@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ClipboardEvent as ReactClipboardEvent,
+  type DragEvent as ReactDragEvent,
   type FormEvent as ReactFormEvent,
   type KeyboardEvent as ReactKeyEvent
 } from 'react'
@@ -13,16 +14,31 @@ import { ddragonChampionImageUrl, getLatestDDragonVersion, loadChampionMaps, typ
 import {
   bestAllySlotsForSuggestion,
   bestEnemySlotsForSuggestion,
+  buildDraftIntel,
+  championIdsForMyPool,
+  championPoolPreferenceToComfort,
   ENGINE_V1_LABEL,
   focusedContextSlots,
   formatRuneTipNote,
+  importedProfileToPreferences,
+  inferEnemyRoleAssignments,
+  mergeChampionPoolPreferences,
   MEANINGFUL_TEAM_SYNERGY_DELTA,
+  RIOT_PLATFORMS,
   resolveChampionName,
   suggestPicks,
+  validatePlayerChampionPoolProfile,
   type DraftDeltaListMode,
+  type DraftIntel,
   type DraftRole,
   type DraftSnapshot,
+  type EnemyRoleInference,
+  type ChampionPoolPreference,
+  type PlayerChampionPoolProfile,
+  type PlayerChampionPoolResponse,
   type PickSuggestion,
+  type RecommendationPoolMode,
+  type RiotPlatform,
   type SuggestionContextSlot
 } from '@shared/draft'
 import { MicroLabel, NexusPanel, NexusPlus } from './nexus-ui'
@@ -33,17 +49,26 @@ import {
   savePersistedWebDraft
 } from './web/persistedWebDraft'
 import { nexusWebTrack } from './web/webAnalytics'
+import {
+  livePublicDataStatusLine,
+  refreshLivePublicData,
+  type LivePublicDataRefreshStatus
+} from './livePublicDataClient'
 
 const ROLES: Exclude<DraftRole, 'unknown'>[] = ['top', 'jungle', 'middle', 'bottom', 'support']
 const DEFAULT_WEB_ROLLOUTS = 40
 const MAX_WEB_ROLLOUTS = 200
-const EXE_DOWNLOAD_URL = 'https://drive.google.com/file/d/1aFnu-ezRLUzk5SPOGNLj2j9fhK5CfNSK/view?usp=sharing'
+const LS_WEB_CHAMPION_POOL_PREFS = 'nexusdraft.web.v1.championPoolPrefs'
+const LS_WEB_PLAYER_POOL_PROFILE = 'nexusdraft.web.v1.playerChampionPoolProfile'
+const LS_WEB_RECOMMENDATION_POOL_MODE = 'nexusdraft.web.v1.recommendationPoolMode'
+const EXE_DOWNLOAD_URL = 'https://drive.google.com/file/d/1f-smHsI2RecsqNDEL68jHiXaLLGwPOML/view?usp=sharing'
 const VIRUSTOTAL_SCAN_URL =
-  'https://www.virustotal.com/gui/file/29e021c773e315e67bfdcbcf753dff204227de7d7c4f257bfd4274686a976afa/detection'
+  'https://www.virustotal.com/gui/file-analysis/Yzk1YTE5OTMwNGNhYjQwOWUxNjZiZjk4YmVhNjlhOGE6MTc3ODI5MzIxNw=='
 const GITHUB_PROFILE_URL = 'https://github.com/alexg0405'
 const GITHUB_REPO_URL = 'https://github.com/alexg0405/NexusDraftFeedback'
 const GITHUB_ISSUE_URL = `${GITHUB_REPO_URL}/issues/new`
 const VISITOR_COUNTER_URL = '/api/visit'
+const LIVE_META_REFRESH_MS = 30 * 60 * 1000
 
 /** Solid dark fill + [color-scheme:dark] so native selects/inputs do not render as light system panels. */
 const webFieldClass =
@@ -87,6 +112,33 @@ type VisionResponse = {
 
 type WebRoute = 'draft' | 'suggestions'
 
+type ChampionPoolPrefs = Record<string, ChampionPoolPreference>
+type PoolUndoState = {
+  championId: number
+  championName: string
+  previousManualPreference: ChampionPoolPreference | null
+}
+
+const POOL_DRAG_MIME = 'application/x-nexus-pool-champion-id'
+const LEGACY_AATROX_PLACEHOLDER_PREFS: ChampionPoolPrefs = { '266': 'main' }
+
+function stripLegacyChampionPoolPlaceholder(prefs: ChampionPoolPrefs): ChampionPoolPrefs {
+  const keys = Object.keys(prefs)
+  if (
+    keys.length === 1 &&
+    prefs[Object.keys(LEGACY_AATROX_PLACEHOLDER_PREFS)[0]] === LEGACY_AATROX_PLACEHOLDER_PREFS['266']
+  ) {
+    return {}
+  }
+  return prefs
+}
+
+function parsePoolDragChampionId(event: ReactDragEvent<HTMLElement>): number | null {
+  const raw = event.dataTransfer.getData(POOL_DRAG_MIME) || event.dataTransfer.getData('text/plain')
+  const n = Number(raw)
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null
+}
+
 const SUGGESTION_CATEGORIES = [
   { value: 'draft_advice', label: 'Draft advice' },
   { value: 'feature_idea', label: 'Feature idea' },
@@ -94,6 +146,13 @@ const SUGGESTION_CATEGORIES = [
   { value: 'data_fix', label: 'Champion data fix' },
   { value: 'other', label: 'Other' }
 ] as const
+
+const CHAMPION_POOL_PREFERENCES: { value: ChampionPoolPreference; label: string }[] = [
+  { value: 'main', label: 'Main' },
+  { value: 'comfortable', label: 'Comfort' },
+  { value: 'learning', label: 'Learning' },
+  { value: 'never', label: 'Avoid' }
+]
 
 type SuggestionCategory = (typeof SUGGESTION_CATEGORIES)[number]['value']
 
@@ -147,6 +206,52 @@ function cloneInputs(b: ManualInputBoard): ManualInputBoard {
   return { ally: { ...b.ally }, enemy: { ...b.enemy } }
 }
 
+function readChampionPoolPrefs(): ChampionPoolPrefs {
+  try {
+    const raw = localStorage.getItem(LS_WEB_CHAMPION_POOL_PREFS)
+    if (!raw) {
+      return {}
+    }
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const out: ChampionPoolPrefs = {}
+    for (const [id, pref] of Object.entries(parsed)) {
+      if (!/^\d+$/.test(id)) {
+        continue
+      }
+      if (pref === 'main' || pref === 'comfortable' || pref === 'learning' || pref === 'never') {
+        out[id] = pref
+      }
+    }
+    return stripLegacyChampionPoolPlaceholder(out)
+  } catch {
+    return {}
+  }
+}
+
+function readPlayerChampionPoolProfile(): PlayerChampionPoolProfile | null {
+  try {
+    const raw = localStorage.getItem(LS_WEB_PLAYER_POOL_PROFILE)
+    if (!raw) {
+      return null
+    }
+    return validatePlayerChampionPoolProfile(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+function readRecommendationPoolMode(): RecommendationPoolMode {
+  try {
+    const raw = localStorage.getItem(LS_WEB_RECOMMENDATION_POOL_MODE)
+    if (raw === 'my-champs' || raw === 'all-champs') {
+      return raw
+    }
+  } catch {
+    /* ignore */
+  }
+  return 'all-champs'
+}
+
 type OcrUndoState = {
   board: ManualBoard
   championInputs: ManualInputBoard
@@ -162,7 +267,15 @@ function roleLabel(role: DraftRole): string {
   if (role === 'bottom') {
     return 'adc'
   }
+  if (role === 'middle') {
+    return 'mid'
+  }
   return role
+}
+
+function enemyInferenceLabel(row: EnemyRoleInference | null | undefined): string | null {
+  void row
+  return null
 }
 
 function readWebRoute(): WebRoute {
@@ -283,12 +396,36 @@ function dataUrlToBase64(dataUrl: string): string {
   return dataUrl.includes(',') ? dataUrl.slice(dataUrl.indexOf(',') + 1) : dataUrl
 }
 
-function slotPicksToContextSlots(slots: DraftSnapshot['ally']): SuggestionContextSlot[] {
-  return slots.map((p) => ({
-    role: p.role,
-    championName: p.championName,
-    championId: p.championId
-  }))
+async function fetchWebPlayerChampionPool(
+  riotId: string,
+  platform: RiotPlatform
+): Promise<PlayerChampionPoolResponse> {
+  const response = await fetch('/api/player-champion-pool', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ riotId, platform, count: 20 })
+  })
+  const data = (await response.json()) as PlayerChampionPoolResponse
+  if (!response.ok && data && data.ok === false) {
+    return data
+  }
+  return data
+}
+
+function slotPicksToContextSlots(
+  slots: DraftSnapshot['ally'],
+  enemyRoleInference?: EnemyRoleInference[] | null
+): SuggestionContextSlot[] {
+  return slots.map((p, index) => {
+    const inferred = enemyRoleInference?.find((row) => row.enemyIndex === index && row.championId === p.championId)
+    return {
+      role: p.role,
+      championName: p.championName,
+      championId: p.championId,
+      inferredRole: inferred?.inferredRole ?? null,
+      roleProbabilities: inferred?.roleProbabilities ?? null
+    }
+  })
 }
 
 function SuggestionRowsSkeleton() {
@@ -348,6 +485,23 @@ function ChampionIcon({
   )
 }
 
+function PoolTrashIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M9 6V4h6v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M5 7h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path
+        d="M8 10v9h8v-9"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M10.5 11.5v5M13.5 11.5v5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 function SuggestionContextPortrait({
   slot,
   champions,
@@ -387,7 +541,9 @@ function SuggestionRow({
   ddragonVersion,
   snapshot,
   myRole,
-  nameById
+  nameById,
+  enemyRoleInference,
+  matchupPlan
 }: {
   suggestion: PickSuggestion
   champions: ChampionLite[]
@@ -395,6 +551,8 @@ function SuggestionRow({
   snapshot: DraftSnapshot
   myRole: Exclude<DraftRole, 'unknown'>
   nameById: ReadonlyMap<number, string>
+  enemyRoleInference?: EnemyRoleInference[] | null
+  matchupPlan?: DraftIntel['matchupPlans'][number] | null
 }) {
   const poolRole: DraftRole = myRole
   const showTeamSynergy =
@@ -402,7 +560,7 @@ function SuggestionRow({
     suggestion.winRateDelta != null &&
     Math.abs(suggestion.winRateDelta) >= MEANINGFUL_TEAM_SYNERGY_DELTA
   const allyCtx = useMemo(() => slotPicksToContextSlots(snapshot.ally), [snapshot.ally])
-  const enemyCtx = useMemo(() => slotPicksToContextSlots(snapshot.enemy), [snapshot.enemy])
+  const enemyCtx = useMemo(() => slotPicksToContextSlots(snapshot.enemy, enemyRoleInference), [snapshot.enemy, enemyRoleInference])
   const { synergySlots, goodVsSlots } = useMemo(() => {
     const rankedAllies = bestAllySlotsForSuggestion(suggestion.championId, poolRole, allyCtx, null, 2)
     const rankedEnemies = bestEnemySlotsForSuggestion(suggestion.championId, poolRole, enemyCtx, 2)
@@ -520,6 +678,16 @@ function SuggestionRow({
           </summary>
           <div className="pb-2 text-nexus-text/80">
             <span>{tip}</span>
+            {suggestion.buildProfile?.itemHint && (
+              <p className="m-0 mt-1.5 text-nexus-muted/90">
+                <span className="text-nexus-lime/80">Items:</span> {suggestion.buildProfile.itemHint}
+              </p>
+            )}
+            {matchupPlan && (
+              <p className="m-0 mt-1.5 text-nexus-muted/90">
+                <span className="text-nexus-lime/80">Plan:</span> {matchupPlan.summonerSpells}; {matchupPlan.startingItem}
+              </p>
+            )}
             {suggestion.buildProfile && suggestion.buildProfile.tagsLine !== '—' && (
               <p className="m-0 mt-1.5 text-nexus-muted/85">{suggestion.buildProfile.tagsLine}</p>
             )}
@@ -803,6 +971,8 @@ export function WebDraftApp() {
   const [champions, setChampions] = useState<ChampionLite[]>([])
   const [nameById, setNameById] = useState(() => new Map<number, string>())
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [liveDataRevision, setLiveDataRevision] = useState(0)
+  const [liveDataStatus, setLiveDataStatus] = useState<LivePublicDataRefreshStatus | null>(null)
   const [board, setBoard] = useState<ManualBoard>(() => {
     const p = loadPersistedWebDraft()
     return p ? cloneBoard(p.board as ManualBoard) : emptyBoard()
@@ -825,9 +995,25 @@ export function WebDraftApp() {
     roleChanged: boolean
   } | null>(null)
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
+  const [championPoolPrefs, setChampionPoolPrefs] = useState<ChampionPoolPrefs>(readChampionPoolPrefs)
+  const [playerPoolProfile, setPlayerPoolProfile] = useState<PlayerChampionPoolProfile | null>(
+    readPlayerChampionPoolProfile
+  )
+  const [recommendationPoolMode, setRecommendationPoolMode] = useState<RecommendationPoolMode>(
+    readRecommendationPoolMode
+  )
+  const [riotIdInput, setRiotIdInput] = useState(() => readPlayerChampionPoolProfile()?.riotId ?? '')
+  const [riotPlatform, setRiotPlatform] = useState<RiotPlatform>(() => readPlayerChampionPoolProfile()?.platform ?? 'na1')
+  const [playerPoolStatus, setPlayerPoolStatus] = useState<string | null>(null)
+  const [playerPoolBusy, setPlayerPoolBusy] = useState(false)
+  const [poolChampionId, setPoolChampionId] = useState<number | null>(null)
+  const [poolPreference, setPoolPreference] = useState<ChampionPoolPreference>('comfortable')
+  const [poolUndoStack, setPoolUndoStack] = useState<PoolUndoState[]>([])
+  const [poolTrashActive, setPoolTrashActive] = useState(false)
   const firstChampInputRef = useRef<HTMLInputElement | null>(null)
   const listboxId = useId()
   const [webRoute, setWebRoute] = useState<WebRoute>(() => readWebRoute())
+  const poolUndo = poolUndoStack[poolUndoStack.length - 1] ?? null
 
   const navigateWebRoute = useCallback((next: WebRoute) => {
     const nextPath = next === 'suggestions' ? '/ask' : '/'
@@ -885,6 +1071,28 @@ export function WebDraftApp() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+    const refresh = async () => {
+      const status = await refreshLivePublicData()
+      if (cancelled) {
+        return
+      }
+      setLiveDataStatus(status)
+      if (status.ok && status.applied) {
+        setLiveDataRevision((revision) => revision + 1)
+      }
+    }
+    void refresh()
+    const timer = window.setInterval(() => {
+      void refresh()
+    }, LIVE_META_REFRESH_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  useEffect(() => {
     const onPopState = () => setWebRoute(readWebRoute())
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
@@ -910,6 +1118,34 @@ export function WebDraftApp() {
     }, 500)
     return () => clearTimeout(t)
   }, [board, championInputs, role, rollouts, deltaMode, champions.length])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_WEB_CHAMPION_POOL_PREFS, JSON.stringify(championPoolPrefs))
+    } catch {
+      /* ignore */
+    }
+  }, [championPoolPrefs])
+
+  useEffect(() => {
+    try {
+      if (playerPoolProfile) {
+        localStorage.setItem(LS_WEB_PLAYER_POOL_PROFILE, JSON.stringify(playerPoolProfile))
+      } else {
+        localStorage.removeItem(LS_WEB_PLAYER_POOL_PROFILE)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [playerPoolProfile])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_WEB_RECOMMENDATION_POOL_MODE, recommendationPoolMode)
+    } catch {
+      /* ignore */
+    }
+  }, [recommendationPoolMode])
 
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
@@ -947,7 +1183,35 @@ export function WebDraftApp() {
   const championMetaById = useMemo(() => {
     return new Map(champions.map((c) => [c.id, { tags: c.tags, partype: c.partype }]))
   }, [champions])
+  const importedChampionPoolPrefs = useMemo(() => importedProfileToPreferences(playerPoolProfile), [playerPoolProfile])
+  const effectiveChampionPoolPrefs = useMemo(
+    () => mergeChampionPoolPreferences(importedChampionPoolPrefs, championPoolPrefs),
+    [importedChampionPoolPrefs, championPoolPrefs]
+  )
+  const visibleImportedPoolEntries = useMemo(() => {
+    return (playerPoolProfile?.entries ?? []).filter(
+      (entry) => effectiveChampionPoolPrefs[String(entry.championId)] !== 'never'
+    )
+  }, [playerPoolProfile, effectiveChampionPoolPrefs])
+  const visibleManualPoolEntries = useMemo(() => {
+    return Object.entries(championPoolPrefs).filter(
+      ([id, pref]) => pref !== 'never' && importedChampionPoolPrefs[id] == null
+    )
+  }, [championPoolPrefs, importedChampionPoolPrefs])
+  const championPoolPreferenceMap = useMemo((): ReadonlyMap<number, ChampionPoolPreference> => {
+    return new Map(Object.entries(effectiveChampionPoolPrefs).map(([id, pref]) => [Number(id), pref] as const))
+  }, [effectiveChampionPoolPrefs])
+  const comfortByChampionId = useMemo((): ReadonlyMap<number, number> => {
+    return new Map(
+      Object.entries(effectiveChampionPoolPrefs).map(([id, pref]) => [Number(id), championPoolPreferenceToComfort(pref)] as const)
+    )
+  }, [effectiveChampionPoolPrefs])
+  const candidateChampionIds = useMemo(
+    () => (recommendationPoolMode === 'my-champs' ? championIdsForMyPool(effectiveChampionPoolPrefs) : null),
+    [recommendationPoolMode, effectiveChampionPoolPrefs]
+  )
   const snapshot = useMemo(() => buildSnapshot(board, role, nameById), [board, role, nameById])
+  const enemyRoleInference = useMemo(() => inferEnemyRoleAssignments(snapshot), [snapshot, liveDataRevision])
   const { suggestions, patchLabel } = useMemo(() => {
     if (champions.length === 0) {
       return { suggestions: [], patchLabel: ENGINE_V1_LABEL }
@@ -962,20 +1226,52 @@ export function WebDraftApp() {
       rngSeed: 0x4d_44_57_45,
       championMetaById,
       trainedEffects: null,
+      comfortByChampionId,
+      candidateChampionIds,
       sortBy: 'delta',
       deltaListMode: deltaMode
     })
-  }, [champions.length, role, snapshot, nameById, ddragonVersion, rollouts, championMetaById, deltaMode])
+  }, [
+    champions.length,
+    role,
+    snapshot,
+    nameById,
+    ddragonVersion,
+    rollouts,
+    championMetaById,
+    comfortByChampionId,
+    candidateChampionIds,
+    deltaMode,
+    liveDataRevision
+  ])
 
-  const liveDataNote = useMemo(() => {
-    if (loadError) {
-      return null
-    }
-    if (!ddragonVersion) {
-      return 'Loading League patch and champion data (Riot Data Dragon)…'
-    }
-    return `League patch ${ddragonVersion} — Riot Data Dragon (icons & champion metadata). Recommendations: ${patchLabel} · ${rollouts} rollouts.`
-  }, [loadError, ddragonVersion, patchLabel, rollouts])
+  const draftIntel = useMemo(() => {
+    return buildDraftIntel({
+      snapshot,
+      myRole: role,
+      suggestions,
+      idToName: nameById,
+      championMetaById,
+      enemyRoleInference,
+      patchLabel,
+      dataDragonVersion: ddragonVersion,
+      championPoolPreferences: championPoolPreferenceMap
+    })
+  }, [
+    snapshot,
+    role,
+    suggestions,
+    nameById,
+    championMetaById,
+    enemyRoleInference,
+    patchLabel,
+    ddragonVersion,
+    championPoolPreferenceMap,
+    liveDataRevision
+  ])
+  const hasLockedDraftContext = useMemo(() => {
+    return [...snapshot.ally, ...snapshot.enemy].some((slot) => slot.championId != null && slot.championId > 0)
+  }, [snapshot])
 
   const updateBoard = (side: 'ally' | 'enemy', slotRole: Exclude<DraftRole, 'unknown'>, id: number | null) => {
     setBoard((prev) => ({
@@ -1015,8 +1311,11 @@ export function WebDraftApp() {
     if (suggestions.length > 0) {
       return null
     }
+    if (recommendationPoolMode === 'my-champs') {
+      return 'No personal-pool champs are legal for this role and board. Switch to All Champs or import/add more champions.'
+    }
     return 'The engine has no recommended picks for this exact board state. Try another role, change the board, or reload if champion data is stale.'
-  }, [champions.length, loadError, suggestions.length])
+  }, [champions.length, loadError, suggestions.length, recommendationPoolMode])
 
   const copyTopSuggestions = useCallback(async () => {
     if (suggestions.length === 0) {
@@ -1037,6 +1336,101 @@ export function WebDraftApp() {
       setCopyFeedback('Copy failed (permission?)')
     }
   }, [suggestions, role, ddragonVersion])
+
+  const topMatchupPlan = draftIntel?.matchupPlans[0] ?? null
+
+  const saveChampionPoolPreference = () => {
+    if (poolChampionId == null) {
+      return
+    }
+    setChampionPoolPrefs((prev) => ({ ...prev, [String(poolChampionId)]: poolPreference }))
+    setPoolUndoStack([])
+    nexusWebTrack('champion_pool_pref', { pref: poolPreference })
+  }
+
+  const removeChampionFromPool = useCallback(
+    (championId: number) => {
+      const id = String(championId)
+      const importedPreference = importedChampionPoolPrefs[id] ?? null
+      const previousManualPreference = championPoolPrefs[id] ?? null
+      const championName = nameById.get(championId) ?? resolveChampionName(championId, nameById)
+      setChampionPoolPrefs((prev) => {
+        const next = { ...prev }
+        if (importedPreference) {
+          next[id] = 'never'
+        } else {
+          delete next[id]
+        }
+        return next
+      })
+      setPoolUndoStack((prev) => [...prev, { championId, championName, previousManualPreference }].slice(-20))
+      setPlayerPoolStatus(`Removed ${championName} from personal pool.`)
+      nexusWebTrack('champion_pool_remove', { imported: Boolean(importedPreference) })
+    },
+    [championPoolPrefs, importedChampionPoolPrefs, nameById]
+  )
+
+  const undoChampionPoolRemoval = useCallback(() => {
+    if (!poolUndo) {
+      return
+    }
+    const id = String(poolUndo.championId)
+    setChampionPoolPrefs((prev) => {
+      const next = { ...prev }
+      if (poolUndo.previousManualPreference == null) {
+        delete next[id]
+      } else {
+        next[id] = poolUndo.previousManualPreference
+      }
+      return next
+    })
+    setPlayerPoolStatus(`Restored ${poolUndo.championName}.`)
+    setPoolUndoStack((prev) => prev.slice(0, -1))
+    nexusWebTrack('champion_pool_remove_undo')
+  }, [poolUndo])
+
+  const handlePoolChipDragStart = (event: ReactDragEvent<HTMLElement>, championId: number) => {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData(POOL_DRAG_MIME, String(championId))
+    event.dataTransfer.setData('text/plain', String(championId))
+  }
+
+  const handlePoolTrashDrop = (event: ReactDragEvent<HTMLElement>) => {
+    event.preventDefault()
+    setPoolTrashActive(false)
+    const championId = parsePoolDragChampionId(event)
+    if (championId != null) {
+      removeChampionFromPool(championId)
+    }
+  }
+
+  const importPlayerChampionPool = useCallback(async () => {
+    const riotId = riotIdInput.trim()
+    if (!riotId) {
+      setPlayerPoolStatus('Enter a Riot ID like GameName#TagLine.')
+      return
+    }
+    setPlayerPoolBusy(true)
+    setPlayerPoolStatus('Importing Riot mastery...')
+    try {
+      const result = await fetchWebPlayerChampionPool(riotId, riotPlatform)
+      if (!result.ok) {
+        setPlayerPoolStatus(result.error)
+        return
+      }
+      setPlayerPoolProfile(result.profile)
+      setRiotIdInput(result.profile.riotId)
+      setRiotPlatform(result.profile.platform)
+      setRecommendationPoolMode('my-champs')
+      setPoolUndoStack([])
+      setPlayerPoolStatus(`Imported ${result.profile.entries.length} mastery champs.`)
+      nexusWebTrack('riot_pool_import', { platform: result.profile.platform, n: result.profile.entries.length })
+    } catch (error) {
+      setPlayerPoolStatus(error instanceof Error ? error.message : 'Riot import failed. Try again shortly.')
+    } finally {
+      setPlayerPoolBusy(false)
+    }
+  }, [riotIdInput, riotPlatform])
 
   const undoOcr = useCallback(() => {
     if (!ocrUndoSnapshot) {
@@ -1267,13 +1661,7 @@ export function WebDraftApp() {
               </p>
               {loadError ? (
                 <p className="mt-2 m-0 max-w-2xl font-mono text-xs text-nexus-red/80 leading-relaxed">{loadError}</p>
-              ) : (
-                <p className="mt-2 m-0 max-w-2xl font-mono text-xs leading-relaxed text-nexus-text/80">
-                  <span className="text-nexus-lime/80">Live data</span>
-                  <span className="text-nexus-muted"> — </span>
-                  {liveDataNote}
-                </p>
-              )}
+              ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
               <a className={buttonClass} href={EXE_DOWNLOAD_URL} target="_blank" rel="noreferrer">
@@ -1354,7 +1742,7 @@ export function WebDraftApp() {
                     <button
                       type="button"
                       className="nexus-focus inline-flex items-center justify-center border border-nexus-line px-4 py-2 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10"
-                      onClick={() => setVisionStatus('Copy a screenshot, then press Ctrl+V anywhere on this page.')}
+                      onClick={() => setVisionStatus('Paste target')}
                     >
                       Paste Screenshot
                     </button>
@@ -1365,41 +1753,21 @@ export function WebDraftApp() {
                   tabIndex={0}
                   role="button"
                   onPaste={handleScreenshotPaste}
-                  onClick={() => setVisionStatus('Copy a screenshot, then press Ctrl+V anywhere on this page.')}
+                  onClick={() => setVisionStatus('Paste target')}
                 >
-                  Paste target: click here, then press Ctrl+V with a copied screenshot.
+                  Paste target
                 </div>
-                <p
-                  className={visionStatus.toLowerCase().includes('failed') || visionStatus.toLowerCase().includes('key') ? 'm-0 mt-2 font-mono text-xs text-nexus-red/80' : 'm-0 mt-2 font-mono text-xs text-nexus-muted'}
-                  aria-live="polite"
-                  aria-atomic="true"
-                >
-                  {visionStatus}
-                </p>
-                {ocrUndoSnapshot ? (
-                  <div className="mt-2 space-y-2 rounded border border-nexus-lime/20 bg-nexus-bg/50 px-3 py-2">
-                    {ocrResult ? (
-                      <p className="m-0 font-mono text-xs text-nexus-text/90">
-                        Autofill: <span className="text-nexus-lime/85">{ocrResult.ally}</span> ally name(s),{' '}
-                        <span className="text-nexus-red/85">{ocrResult.enemy}</span> enemy name(s) from the image.
-                      </p>
-                    ) : (
-                      <p className="m-0 font-mono text-xs text-nexus-muted">
-                        Autofill did not complete; you can restore the board from before the attempt.
-                      </p>
-                    )}
-                    {ocrResult?.roleChanged ? (
-                      <p className="m-0 font-mono text-xs text-nexus-muted">Your role was updated from vision (check &quot;Your role&quot; above).</p>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="nexus-focus font-mono text-xs uppercase tracking-wide text-nexus-lime/90 hover:underline"
-                      onClick={undoOcr}
-                    >
-                      Undo autofill
-                    </button>
-                  </div>
-                ) : null}
+                {visionStatus.toLowerCase().includes('failed') ||
+                visionStatus.toLowerCase().includes('key') ||
+                visionStatus.toLowerCase().includes('error') ? (
+                  <p className="m-0 mt-2 font-mono text-xs text-nexus-red/80" aria-live="polite" aria-atomic="true">
+                    {visionStatus}
+                  </p>
+                ) : (
+                  <span className="sr-only" aria-live="polite" aria-atomic="true">
+                    {visionStatus}
+                  </span>
+                )}
               </div>
               <div className="grid gap-4 md:grid-cols-3">
                 <label className="flex flex-col gap-1.5">
@@ -1464,6 +1832,13 @@ export function WebDraftApp() {
                         const isFirstSlot = side === 'ally' && slotRole === 'top'
                         const isMyRoleRow = slotRole === role && side === 'ally'
                         const isLaneOppRow = slotRole === role && side === 'enemy'
+                        const inferredEnemy =
+                          side === 'enemy'
+                            ? enemyRoleInference.find(
+                                (row) => row.enemyIndex === ROLES.indexOf(slotRole) && row.championId === board.enemy[slotRole]
+                              )
+                            : null
+                        const inferredEnemyLabel = enemyInferenceLabel(inferredEnemy)
                         const roleClass =
                           side === 'ally'
                             ? isMyRoleRow
@@ -1539,6 +1914,11 @@ export function WebDraftApp() {
                                   ))}
                                 </span>
                               )}
+                              {side === 'enemy' && inferredEnemyLabel ? (
+                                <p className="m-0 mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-red/75">
+                                  {inferredEnemyLabel}
+                                </p>
+                              ) : null}
                             </span>
                           </label>
                         )
@@ -1552,19 +1932,207 @@ export function WebDraftApp() {
 
           <aside className="min-w-0" aria-label="Recommendations and desktop download">
             <NexusPanel kicker="recommendations" title={`Picks for ${roleLabel(role)}`} accent>
-              <div className="mb-3 border-b border-nexus-line/60 bg-nexus-bg/25 px-2 py-2 font-mono text-xs">
-                {loadError ? (
+              {loadError ? (
+                <div className="mb-3 border-b border-nexus-line/60 bg-nexus-bg/25 px-2 py-2 font-mono text-xs">
                   <p className="m-0 text-nexus-red/80" role="status">
                     {loadError}
                   </p>
-                ) : (
-                  <p className="m-0 leading-relaxed text-nexus-text/85">
-                    <span className="text-nexus-lime/80">Live data</span>
-                    <span className="text-nexus-muted"> — </span>
-                    {liveDataNote}
-                  </p>
+                </div>
+              ) : null}
+              <p className="mb-3 mt-0 font-mono text-[11px] uppercase tracking-[0.12em] text-nexus-muted">
+                {livePublicDataStatusLine(liveDataStatus)}
+              </p>
+              <div className="mb-3 rounded-md border border-white/[0.08] bg-nexus-bg/35 px-2 py-2 font-mono text-xs">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="m-0 uppercase tracking-[0.12em] text-nexus-lime/75">Personal pool</p>
+                  <div className="inline-flex overflow-hidden rounded-md border border-nexus-line/70">
+                    {(['my-champs', 'all-champs'] as const).map((mode) => (
+                      <button
+                        key={`web-pool-mode-${mode}`}
+                        type="button"
+                        className={
+                          'nexus-focus px-2 py-1 uppercase tracking-wide ' +
+                          (recommendationPoolMode === mode
+                            ? 'bg-nexus-lime text-nexus-bg'
+                            : 'bg-transparent text-nexus-muted hover:text-nexus-text')
+                        }
+                        onClick={() => setRecommendationPoolMode(mode)}
+                      >
+                        {mode === 'my-champs' ? 'My Champs' : 'All Champs'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_5.75rem_auto]">
+                  <input
+                    className={webFieldClassCompact}
+                    value={riotIdInput}
+                    onChange={(event) => setRiotIdInput(event.target.value)}
+                    placeholder="GameName#TagLine"
+                    autoComplete="off"
+                  />
+                  <select
+                    className={webFieldClassCompact}
+                    value={riotPlatform}
+                    onChange={(event) => setRiotPlatform(event.target.value as RiotPlatform)}
+                  >
+                    {RIOT_PLATFORMS.map((platform) => (
+                      <option key={`web-riot-platform-${platform}`} value={platform}>
+                        {platform.toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="nexus-focus border border-nexus-line/70 px-2 py-1.5 text-[10px] uppercase tracking-wide text-nexus-lime/90 hover:border-nexus-lime/50 disabled:opacity-45"
+                    disabled={playerPoolBusy}
+                    onClick={importPlayerChampionPool}
+                  >
+                    {playerPoolBusy ? 'Importing' : 'Import'}
+                  </button>
+                </div>
+                {playerPoolStatus ? <p className="m-0 mt-2 text-nexus-muted" role="status">{playerPoolStatus}</p> : null}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <div
+                    className={
+                      'nexus-focus inline-flex h-9 w-9 items-center justify-center rounded-md border text-nexus-muted transition-colors ' +
+                      (poolTrashActive
+                        ? 'border-nexus-red/80 bg-nexus-red/15 text-nexus-red'
+                        : 'border-nexus-line/70 bg-nexus-bg/40 hover:border-nexus-red/60 hover:text-nexus-red/85')
+                    }
+                    role="button"
+                    tabIndex={0}
+                    title="Drop a champion chip here to remove it from My Champs"
+                    aria-label="Drop a champion chip here to remove it from My Champs"
+                    onDragOver={(event) => {
+                      event.preventDefault()
+                      event.dataTransfer.dropEffect = 'move'
+                      setPoolTrashActive(true)
+                    }}
+                    onDragLeave={() => setPoolTrashActive(false)}
+                    onDrop={handlePoolTrashDrop}
+                  >
+                    <PoolTrashIcon className="h-4 w-4" />
+                  </div>
+                  {poolUndo ? (
+                    <button
+                      type="button"
+                      className="nexus-focus rounded-md border border-nexus-line/70 px-2.5 py-2 font-mono text-[10px] uppercase tracking-wide text-nexus-lime/90 hover:border-nexus-lime/50"
+                      onClick={undoChampionPoolRemoval}
+                    >
+                      Undo{poolUndoStack.length > 1 ? ` (${poolUndoStack.length})` : ''}
+                    </button>
+                  ) : null}
+                </div>
+                {playerPoolProfile ? (
+                  <div className="mt-2">
+                    <p className="m-0 text-nexus-muted">
+                      {playerPoolProfile.riotId} / {playerPoolProfile.platform.toUpperCase()} / {playerPoolProfile.entries.length} champs
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {visibleImportedPoolEntries.slice(0, 20).map((entry) => (
+                        <button
+                          key={`web-imported-pool-${entry.championId}`}
+                          type="button"
+                          draggable
+                          className="nexus-focus cursor-grab rounded-sm border border-nexus-line/70 px-1.5 py-0.5 text-[10px] text-nexus-muted hover:border-nexus-red/50 active:cursor-grabbing"
+                          title="Click or drag to trash to remove"
+                          onClick={() => removeChampionFromPool(entry.championId)}
+                          onDragStart={(event) => handlePoolChipDragStart(event, entry.championId)}
+                        >
+                          {nameById.get(entry.championId) ?? `Champion ${entry.championId}`} /{' '}
+                          {effectiveChampionPoolPrefs[String(entry.championId)] ?? entry.preference}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_7.5rem_auto]">
+                  <select className={webFieldClassCompact} value={poolChampionId ?? ''} onChange={(event) => setPoolChampionId(parseChampionId(event.target.value))}>
+                    <option value="">Champion</option>
+                    {sortedChampions.map((champion) => (
+                      <option key={`web-pool-${champion.id}`} value={champion.id}>{champion.name}</option>
+                    ))}
+                  </select>
+                  <select className={webFieldClassCompact} value={poolPreference} onChange={(event) => setPoolPreference(event.target.value as ChampionPoolPreference)}>
+                    {CHAMPION_POOL_PREFERENCES.map((pref) => (
+                      <option key={pref.value} value={pref.value}>{pref.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="nexus-focus border border-nexus-line/70 px-2 py-1.5 text-[10px] uppercase tracking-wide text-nexus-lime/90 hover:border-nexus-lime/50"
+                    disabled={poolChampionId == null}
+                    onClick={saveChampionPoolPreference}
+                  >
+                    Save
+                  </button>
+                </div>
+                {visibleManualPoolEntries.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {visibleManualPoolEntries.map(([id, pref]) => (
+                      <button
+                        key={`web-pool-chip-${id}`}
+                        type="button"
+                        draggable
+                        className="nexus-focus cursor-grab border border-nexus-line/70 px-1.5 py-0.5 text-[10px] text-nexus-muted hover:border-nexus-red/50 active:cursor-grabbing"
+                        title="Click or drag to trash to remove"
+                        onClick={() => removeChampionFromPool(Number(id))}
+                        onDragStart={(event) => handlePoolChipDragStart(event, Number(id))}
+                      >
+                        {(nameById.get(Number(id)) ?? `Champion ${id}`)} / {pref}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
+              {draftIntel && hasLockedDraftContext && (
+                <details className="group mb-3 border-b border-nexus-line/60 pb-3 font-mono text-xs">
+                  <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-white/[0.08] bg-nexus-bg/35 px-2 py-2 uppercase tracking-[0.12em] text-nexus-lime/85 marker:hidden hover:border-nexus-lime/35 hover:bg-nexus-lime/[0.06]">
+                    <span>Draft intel</span>
+                    <span className="text-nexus-lime/75 transition-transform group-open:rotate-45" aria-hidden>
+                      +
+                    </span>
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    <div className="rounded-md border border-nexus-lime/25 bg-nexus-lime/[0.06] px-2 py-2">
+                      <p className="m-0 uppercase tracking-[0.12em] text-nexus-lime/85">Win condition</p>
+                      <p className="m-0 mt-1 leading-relaxed text-nexus-text/85">{draftIntel.compIdentity.winCondition}</p>
+                      {draftIntel.compIdentity.warnings[0] ? (
+                        <p className="m-0 mt-1 leading-relaxed text-nexus-red/80">{draftIntel.compIdentity.warnings[0]}</p>
+                      ) : null}
+                    </div>
+                  <div className="grid gap-2">
+                    <div className="rounded-md border border-white/[0.08] bg-nexus-bg/35 px-2 py-2">
+                      <p className="m-0 mb-1 uppercase tracking-[0.12em] text-nexus-lime/75">Loading brief</p>
+                      <ul className="m-0 list-disc pl-3.5 space-y-1 text-nexus-muted">
+                        {draftIntel.loadingBrief.slice(0, 3).map((line, idx) => (
+                          <li key={`web-brief-${idx}`}>{line}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                  {topMatchupPlan && (
+                    <div className="rounded-md border border-white/[0.08] bg-nexus-bg/35 px-2 py-2 text-nexus-muted">
+                      <p className="m-0 mb-1 uppercase tracking-[0.12em] text-nexus-lime/75">Top plan</p>
+                      <p className="m-0 text-nexus-text/85">
+                        {topMatchupPlan.championName}{topMatchupPlan.laneOpponentName ? ` vs ${topMatchupPlan.laneOpponentName}` : ''} - {topMatchupPlan.summonerSpells}
+                      </p>
+                      <p className="m-0 mt-1">Start: {topMatchupPlan.startingItem}</p>
+                      <p className="m-0">Recall: {topMatchupPlan.firstRecall}</p>
+                    </div>
+                  )}
+                  <details className="rounded-md border border-white/[0.08] bg-nexus-bg/35 px-2 py-2 text-nexus-muted">
+                    <summary className="nexus-focus cursor-pointer uppercase tracking-[0.12em] text-nexus-lime/75">Confidence</summary>
+                    <ul className="m-0 mt-2 list-disc pl-3.5 space-y-1 text-[11px]">
+                      {draftIntel.confidenceNotes.slice(0, 3).map((line, idx) => (
+                        <li key={`web-confidence-${idx}`}>{line}</li>
+                      ))}
+                    </ul>
+                  </details>
+                  </div>
+                </details>
+              )}
               {loadError && champions.length === 0 ? (
                 <p className="m-0 font-mono text-sm text-nexus-muted" role="status">
                   Load champion data in the main column to see suggestions.
@@ -1606,6 +2174,12 @@ export function WebDraftApp() {
                         snapshot={snapshot}
                         myRole={role}
                         nameById={nameById}
+                        enemyRoleInference={enemyRoleInference}
+                        matchupPlan={
+                          hasLockedDraftContext
+                            ? draftIntel?.matchupPlans.find((plan) => plan.championId === suggestion.championId) ?? null
+                            : null
+                        }
                       />
                     ))}
                   </ol>
@@ -1630,20 +2204,14 @@ export function WebDraftApp() {
               </a>
               <div className="mt-4 flex items-center gap-2 border-t border-nexus-line/50 pt-3 text-nexus-muted">
                 <NexusPlus className="text-[10px]" />
-                <span className="font-mono text-xs">Web build v0.5.0</span>
+                <span className="font-mono text-xs">Web build v3.11.0</span>
               </div>
             </NexusPanel>
           </aside>
         </div>
       </main>
       <VisitorCounter
-        dataLine={
-          loadError
-            ? 'League data failed to load — recommendations may be unavailable.'
-            : ddragonVersion
-              ? `League patch ${ddragonVersion} (Data Dragon) · model ${patchLabel}.`
-              : 'Loading current League patch from Riot…'
-        }
+        dataLine={loadError ? 'League data failed to load. Recommendations may be unavailable.' : null}
         legalLine="Nexus Draft is a fan project and is not affiliated with or endorsed by Riot Games, Inc. League of Legends and Riot Games are trademarks of Riot Games, Inc. Game data: Riot Data Dragon."
       />
     </div>

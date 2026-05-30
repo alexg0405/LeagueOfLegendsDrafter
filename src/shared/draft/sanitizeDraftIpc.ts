@@ -1,4 +1,4 @@
-import type { ChampionBuildProfile, DraftUpdate, PickSuggestion } from './types'
+import type { ChampionBuildProfile, DraftIntel, DraftUpdate, EnemyRoleInference, PickSuggestion } from './types'
 import { isOverlayEngineEcho } from './validate'
 
 /**
@@ -27,10 +27,14 @@ function sanitizeBuildProfile(
   if (typeof o.archetype !== 'string' || typeof o.buildHint !== 'string' || typeof o.tagsLine !== 'string' || typeof o.partype !== 'string') {
     return null
   }
+  if (o.itemHint != null && typeof o.itemHint !== 'string') {
+    return null
+  }
   return {
     damage: dmg,
     archetype: o.archetype,
     buildHint: o.buildHint,
+    itemHint: typeof o.itemHint === 'string' ? o.itemHint : undefined,
     tagsLine: o.tagsLine,
     partype: o.partype
   }
@@ -97,10 +101,112 @@ function sanitizeTrainedEffectsStatus(
   }
 }
 
+const roleKeys = ['top', 'jungle', 'middle', 'bottom', 'support'] as const
+
+function sanitizeEnemyRoleInference(
+  rows: DraftUpdate['enemyRoleInference']
+): EnemyRoleInference[] | null {
+  if (rows == null) {
+    return null
+  }
+  return rows
+    .filter((row) => row != null && typeof row === 'object')
+    .map((row) => {
+      const r = row as EnemyRoleInference
+      const roleProbabilities = Object.fromEntries(
+        roleKeys.map((role) => [role, finiteOr(r.roleProbabilities?.[role], 0)])
+      ) as EnemyRoleInference['roleProbabilities']
+      return {
+        enemyIndex: finiteOr(r.enemyIndex, -1),
+        cellId: r.cellId == null ? null : Number.isFinite(r.cellId) ? r.cellId : null,
+        championId: finiteOr(r.championId, 0),
+        assignedRole: r.assignedRole,
+        inferredRole: r.inferredRole,
+        confidence: finiteOr(r.confidence, 0),
+        confidenceLabel: r.confidenceLabel,
+        roleProbabilities
+      }
+    })
+    .filter((row) => row.enemyIndex >= 0 && row.championId > 0)
+    .slice(0, 5)
+}
+
+function text(v: unknown, fallback = ''): string {
+  return typeof v === 'string' ? v : fallback
+}
+
+function nullableText(v: unknown): string | null {
+  return typeof v === 'string' ? v : null
+}
+
+function sanitizeDraftIntel(intel: DraftUpdate['draftIntel']): DraftIntel | null {
+  if (intel == null || typeof intel !== 'object') {
+    return null
+  }
+  const i = intel as DraftIntel
+  return {
+    banRecommendations: Array.isArray(i.banRecommendations)
+      ? i.banRecommendations
+          .filter((row) => row != null && typeof row === 'object')
+          .map((row) => ({
+            championId: finiteOr(row.championId, 0),
+            championName: text(row.championName, 'Champion'),
+            role: roleKeys.includes(row.role) ? row.role : 'middle',
+            score: finiteOr(row.score, 0),
+            reason: text(row.reason)
+          }))
+          .filter((row) => row.championId > 0)
+          .slice(0, 8)
+      : [],
+    compIdentity: {
+      ally: Array.isArray(i.compIdentity?.ally) ? i.compIdentity.ally.filter((x): x is string => typeof x === 'string').slice(0, 8) : [],
+      enemy: Array.isArray(i.compIdentity?.enemy) ? i.compIdentity.enemy.filter((x): x is string => typeof x === 'string').slice(0, 8) : [],
+      missing: Array.isArray(i.compIdentity?.missing) ? i.compIdentity.missing.filter((x): x is string => typeof x === 'string').slice(0, 8) : [],
+      warnings: Array.isArray(i.compIdentity?.warnings) ? i.compIdentity.warnings.filter((x): x is string => typeof x === 'string').slice(0, 8) : [],
+      winCondition: text(i.compIdentity?.winCondition)
+    },
+    matchupPlans: Array.isArray(i.matchupPlans)
+      ? i.matchupPlans
+          .filter((row) => row != null && typeof row === 'object')
+          .map((row) => ({
+            championId: finiteOr(row.championId, 0),
+            championName: text(row.championName, 'Champion'),
+            laneOpponentId: row.laneOpponentId == null || finiteOr(row.laneOpponentId, 0) <= 0 ? null : finiteOr(row.laneOpponentId, 0),
+            laneOpponentName: nullableText(row.laneOpponentName),
+            summonerSpells: text(row.summonerSpells),
+            startingItem: text(row.startingItem),
+            firstRecall: text(row.firstRecall),
+            runeExport: text(row.runeExport),
+            gamePlan: text(row.gamePlan)
+          }))
+          .filter((row) => row.championId > 0)
+          .slice(0, 8)
+      : [],
+    pickComparison: Array.isArray(i.pickComparison)
+      ? i.pickComparison
+          .filter((row) => row != null && typeof row === 'object')
+          .map((row) => ({
+            championId: finiteOr(row.championId, 0),
+            championName: text(row.championName, 'Champion'),
+            score: finiteOr(row.score, 0),
+            estWin: row.estWin == null || !Number.isFinite(row.estWin) ? undefined : row.estWin,
+            delta: row.delta == null || !Number.isFinite(row.delta) ? undefined : row.delta,
+            summary: text(row.summary)
+          }))
+          .filter((row) => row.championId > 0)
+          .slice(0, 8)
+      : [],
+    loadingBrief: Array.isArray(i.loadingBrief) ? i.loadingBrief.filter((x): x is string => typeof x === 'string').slice(0, 8) : [],
+    confidenceNotes: Array.isArray(i.confidenceNotes) ? i.confidenceNotes.filter((x): x is string => typeof x === 'string').slice(0, 8) : []
+  }
+}
+
 export function sanitizeDraftUpdateForIpc(d: DraftUpdate): DraftUpdate {
   return {
     ...d,
     suggestions: d.suggestions.map(sanitizePickSuggestion),
+    enemyRoleInference: sanitizeEnemyRoleInference(d.enemyRoleInference),
+    draftIntel: sanitizeDraftIntel(d.draftIntel),
     championsSearch: sanitizeChampionsSearch(d.championsSearch),
     trainedEffectsStatus: sanitizeTrainedEffectsStatus(d.trainedEffectsStatus),
     overlayEngineEcho:

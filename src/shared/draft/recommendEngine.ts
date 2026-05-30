@@ -7,8 +7,7 @@
  * This file still uses bundled heuristics (matchupData/synergyData/statsModel) until
  * the app loads the export bundle; see `training/DRAFT_STATE.md`.
  *
- * Flex picks: slots use LCU `assignedPosition`; ambiguous role (e.g. “top” showing a mid)
- * is not modeled with P(role|champion) yet — see roadmap in product notes.
+ * Flex picks: enemy slots use P(role|champion) inference from public meta rows and LCU priors.
  */
 import { getChampionBuildProfile } from './championBuildProfile'
 import { getChampionThreatOverride } from './championThreatOverrides'
@@ -50,6 +49,8 @@ export type RecommendArgs = {
   sortBy?: 'score' | 'delta'
   /** When `sortBy` is delta and board context exists: order by largest winrate gains vs smallest. */
   deltaListMode?: DraftDeltaListMode
+  /** Optional hard filter used by "My Champs" mode. */
+  candidateChampionIds?: Iterable<number> | null
 }
 
 const ALLY_ADJ_MIN = 0.09
@@ -215,7 +216,7 @@ function allyTerm(
     const al = a.championId
     /**
      * Trained synergy is a logit delta around 0.5; we turn it into a probability in [0.3, 0.7] and
-     * fall back to the sparse hand-tuned `ALLY_SYNERGY_BONUS` table when we have no trained signal.
+     * fall back to the generated patch-aware `ALLY_SYNERGY_BONUS` table when we have no trained signal.
      */
     const trainedDelta = trainedSynergyDelta(trained ?? null, myRole, a.role, c, al)
     if (trainedDelta != null) {
@@ -446,6 +447,26 @@ function laneCertainty(snapshot: DraftSnapshot, myRole: DraftRole): number {
     laneMass += p ? p[myRole] ?? 0 : 0
   })
   return clamp01(laneMass)
+}
+
+function inferredLaneOpponentId(snapshot: DraftSnapshot, myRole: DraftRole): number | null {
+  if (myRole === 'unknown') {
+    return null
+  }
+  const post = inferEnemyRolePosteriors(snapshot)
+  let bestId: number | null = null
+  let bestP = 0
+  snapshot.enemy.forEach((e, idx) => {
+    if (e.championId == null || e.championId <= 0) {
+      return
+    }
+    const p = post.get(idx)?.[myRole as Exclude<DraftRole, 'unknown'>] ?? 0
+    if (p > bestP) {
+      bestP = p
+      bestId = e.championId
+    }
+  })
+  return bestP >= 0.45 ? bestId : null
 }
 
 function hasBoardContext(s: DraftSnapshot, myRole: DraftRole, localCell: number | null): boolean {
@@ -684,7 +705,8 @@ export function recommend(args: RecommendArgs): {
     championMetaById = null,
     trainedEffects = null,
     sortBy = 'score',
-    deltaListMode = 'best'
+    deltaListMode = 'best',
+    candidateChampionIds = null
   } = args
   /** Fold trained per-champion comfort into the provided map when the caller did not pass one. */
   const mergedComfort: ReadonlyMap<number, number> | null | undefined =
@@ -702,29 +724,37 @@ export function recommend(args: RecommendArgs): {
   for (const c of publicMetaCandidateIdsForRole(poolKey as DraftRole)) {
     legal.add(c)
   }
+  const candidateFilter =
+    candidateChampionIds == null
+      ? null
+      : new Set(
+          Array.from(candidateChampionIds)
+            .filter((id) => Number.isFinite(id) && id > 0)
+            .map((id) => Math.trunc(id))
+        )
   const un = state.unavailable
   const pinnedLocalPickId = localLockedPickId(state.snapshot, myRole)
   const pool: number[] = []
   for (const c of Array.from(legal)) {
-    if (!un.has(c) || c === pinnedLocalPickId) {
+    if (candidateFilter != null && !candidateFilter.has(c)) {
+      continue
+    }
+    const allowPinnedLockedPick = candidateFilter == null && c === pinnedLocalPickId
+    if (!un.has(c) || allowPinnedLockedPick) {
       pool.push(c)
     }
   }
-  if (pinnedLocalPickId != null && pinnedLocalPickId > 0 && !pool.includes(pinnedLocalPickId)) {
+  if (
+    candidateFilter == null &&
+    pinnedLocalPickId != null &&
+    pinnedLocalPickId > 0 &&
+    !pool.includes(pinnedLocalPickId)
+  ) {
     pool.push(pinnedLocalPickId)
   }
 
   const nameOf = (id: number) => resolveChampionName(id, idToName)
-  const laneOpp = (() => {
-    if (myRole === 'unknown') {
-      return null
-    }
-    const e = state.snapshot.enemy.find((p) => p.role === myRole)
-    if (!e?.championId) {
-      return null
-    }
-    return e.championId
-  })()
+  const laneOpp = inferredLaneOpponentId(state.snapshot, myRole)
 
   const nMc = Math.max(0, Math.min(200, monteCarloSamples | 0))
   const useMc = nMc > 0

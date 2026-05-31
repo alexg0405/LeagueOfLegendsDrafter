@@ -2038,7 +2038,7 @@ export function WebDraftApp() {
               <div className="mb-3 rounded-md border border-white/[0.08] bg-nexus-bg/35 px-2 py-2 font-mono text-xs">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="m-0 uppercase tracking-[0.12em] text-nexus-lime/75">
-                    Personal pool {!WEB_PLAYER_POOL_IMPORT_ENABLED ? 'import WIP' : ''}
+                    Personal pool
                   </p>
                   <div className="inline-flex overflow-hidden rounded-md border border-nexus-line/70">
                     {(['my-champs', 'all-champs'] as const).map((mode) => (
@@ -2058,37 +2058,50 @@ export function WebDraftApp() {
                     ))}
                   </div>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_5.75rem_auto]">
-                  <input
-                    className={webFieldClassCompact}
-                    value={riotIdInput}
-                    onChange={(event) => setRiotIdInput(event.target.value)}
-                    placeholder={WEB_PLAYER_POOL_IMPORT_ENABLED ? 'GameName#TagLine' : 'Riot ID import paused'}
-                    autoComplete="off"
-                    disabled={!WEB_PLAYER_POOL_IMPORT_ENABLED}
-                  />
-                  <select
-                    className={webFieldClassCompact}
-                    value={riotPlatform}
-                    onChange={(event) => setRiotPlatform(event.target.value as RiotPlatform)}
-                    disabled={!WEB_PLAYER_POOL_IMPORT_ENABLED}
-                  >
-                    {RIOT_PLATFORMS.map((platform) => (
-                      <option key={`web-riot-platform-${platform}`} value={platform}>
-                        {platform.toUpperCase()}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="nexus-focus border border-nexus-line/70 px-2 py-1.5 text-[10px] uppercase tracking-wide text-nexus-lime/90 hover:border-nexus-lime/50 disabled:opacity-45"
-                    disabled={playerPoolBusy || !WEB_PLAYER_POOL_IMPORT_ENABLED}
-                    onClick={importPlayerChampionPool}
-                  >
-                    {!WEB_PLAYER_POOL_IMPORT_ENABLED ? 'WIP' : playerPoolBusy ? 'Importing' : 'Import'}
-                  </button>
-                </div>
-                {playerPoolStatus ? <p className="m-0 mt-2 text-nexus-muted" role="status">{playerPoolStatus}</p> : null}
+                <details className="group mb-2 rounded-sm border border-nexus-line/70 bg-nexus-bg/30">
+                  <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 text-[10px] uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
+                    <span>{WEB_PLAYER_POOL_IMPORT_ENABLED ? 'Riot import' : 'Riot import WIP'}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-nexus-lime/75">{riotPlatform.toUpperCase()}</span>
+                      <span className="text-nexus-lime/80 transition-transform group-open:rotate-45" aria-hidden>
+                        +
+                      </span>
+                    </span>
+                  </summary>
+                  <div className="border-t border-nexus-line/60 p-2">
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_5.75rem_auto]">
+                      <input
+                        className={webFieldClassCompact}
+                        value={riotIdInput}
+                        onChange={(event) => setRiotIdInput(event.target.value)}
+                        placeholder={WEB_PLAYER_POOL_IMPORT_ENABLED ? 'GameName#TagLine' : 'Riot ID import paused'}
+                        autoComplete="off"
+                        disabled={!WEB_PLAYER_POOL_IMPORT_ENABLED}
+                      />
+                      <select
+                        className={webFieldClassCompact}
+                        value={riotPlatform}
+                        onChange={(event) => setRiotPlatform(event.target.value as RiotPlatform)}
+                        disabled={!WEB_PLAYER_POOL_IMPORT_ENABLED}
+                      >
+                        {RIOT_PLATFORMS.map((platform) => (
+                          <option key={`web-riot-platform-${platform}`} value={platform}>
+                            {platform.toUpperCase()}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="nexus-focus border border-nexus-line/70 px-2 py-1.5 text-[10px] uppercase tracking-wide text-nexus-lime/90 hover:border-nexus-lime/50 disabled:opacity-45"
+                        disabled={playerPoolBusy || !WEB_PLAYER_POOL_IMPORT_ENABLED}
+                        onClick={importPlayerChampionPool}
+                      >
+                        {!WEB_PLAYER_POOL_IMPORT_ENABLED ? 'WIP' : playerPoolBusy ? 'Importing' : 'Import'}
+                      </button>
+                    </div>
+                    {playerPoolStatus ? <p className="m-0 mt-2 text-nexus-muted" role="status">{playerPoolStatus}</p> : null}
+                  </div>
+                </details>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <div
                     className={

@@ -571,47 +571,60 @@ export function NexusOperationsView({
             </span>
           ) : null}
         </div>
-        <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem_auto] sm:items-end">
-          <label className="flex flex-col gap-1.5">
-            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Riot ID</span>
-            <input
-              className={inField}
-              value={riotIdInput}
-              onChange={(e) => setRiotIdInput(e.target.value)}
-              placeholder={DESKTOP_PLAYER_POOL_IMPORT_ENABLED ? 'GameName#TagLine' : 'Riot ID import paused'}
-              autoComplete="off"
-              disabled={!DESKTOP_PLAYER_POOL_IMPORT_ENABLED}
-            />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Platform</span>
-            <select
-              className={inField}
-              value={riotPlatform}
-              onChange={(e) => setRiotPlatform(e.target.value as RiotPlatform)}
-              disabled={!DESKTOP_PLAYER_POOL_IMPORT_ENABLED}
-            >
-              {RIOT_PLATFORMS.map((platform) => (
-                <option key={`riot-platform-${platform}`} value={platform}>
-                  {platform.toUpperCase()}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className={btnPrimary}
-            disabled={playerPoolBusy || !DESKTOP_PLAYER_POOL_IMPORT_ENABLED}
-            onClick={() => {
-              setPoolActionStatus(null)
-              setPoolUndoStack([])
-              onImportPlayerChampionPool(riotIdInput, riotPlatform)
-            }}
-          >
-            {!DESKTOP_PLAYER_POOL_IMPORT_ENABLED ? 'WIP' : playerPoolBusy ? 'Importing' : 'Import'}
-          </button>
-        </div>
-        {poolStatusLine ? <p className={`${textMuted} mb-4 font-mono text-sm`} role="status">{poolStatusLine}</p> : null}
+        <details className="group mb-4 border border-nexus-line/60 bg-nexus-bg/25">
+          <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 font-mono text-xs uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
+            <span>{DESKTOP_PLAYER_POOL_IMPORT_ENABLED ? 'Riot import' : 'Riot import WIP'}</span>
+            <span className="flex items-center gap-2">
+              <span className="text-nexus-lime/75">{riotPlatform.toUpperCase()}</span>
+              <span className="text-nexus-lime/80 transition-transform group-open:rotate-45" aria-hidden>
+                +
+              </span>
+            </span>
+          </summary>
+          <div className="border-t border-nexus-line/55 p-3">
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem_auto] sm:items-end">
+              <label className="flex flex-col gap-1.5">
+                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Riot ID</span>
+                <input
+                  className={inField}
+                  value={riotIdInput}
+                  onChange={(e) => setRiotIdInput(e.target.value)}
+                  placeholder={DESKTOP_PLAYER_POOL_IMPORT_ENABLED ? 'GameName#TagLine' : 'Riot ID import paused'}
+                  autoComplete="off"
+                  disabled={!DESKTOP_PLAYER_POOL_IMPORT_ENABLED}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Platform</span>
+                <select
+                  className={inField}
+                  value={riotPlatform}
+                  onChange={(e) => setRiotPlatform(e.target.value as RiotPlatform)}
+                  disabled={!DESKTOP_PLAYER_POOL_IMPORT_ENABLED}
+                >
+                  {RIOT_PLATFORMS.map((platform) => (
+                    <option key={`riot-platform-${platform}`} value={platform}>
+                      {platform.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className={btnPrimary}
+                disabled={playerPoolBusy || !DESKTOP_PLAYER_POOL_IMPORT_ENABLED}
+                onClick={() => {
+                  setPoolActionStatus(null)
+                  setPoolUndoStack([])
+                  onImportPlayerChampionPool(riotIdInput, riotPlatform)
+                }}
+              >
+                {!DESKTOP_PLAYER_POOL_IMPORT_ENABLED ? 'WIP' : playerPoolBusy ? 'Importing' : 'Import'}
+              </button>
+            </div>
+            {poolStatusLine ? <p className={`${textMuted} mb-0 mt-3 font-mono text-sm`} role="status">{poolStatusLine}</p> : null}
+          </div>
+        </details>
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <div
             className={

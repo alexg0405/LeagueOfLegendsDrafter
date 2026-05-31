@@ -69,6 +69,16 @@ function normalizePosterior(p: RolePosterior): RolePosterior {
   }
 }
 
+function oneHotPosterior(role: RoleKey): RolePosterior {
+  return {
+    top: role === 'top' ? 1 : 0,
+    jungle: role === 'jungle' ? 1 : 0,
+    middle: role === 'middle' ? 1 : 0,
+    bottom: role === 'bottom' ? 1 : 0,
+    support: role === 'support' ? 1 : 0
+  }
+}
+
 function lockedEnemies(snapshot: DraftSnapshot): LockedEnemy[] {
   const out: LockedEnemy[] = []
   snapshot.enemy.forEach((p, idx) => {
@@ -91,6 +101,22 @@ export function inferEnemyRolePosteriors(snapshot: DraftSnapshot): Map<number, R
   const locked = lockedEnemies(snapshot)
   const out = new Map<number, RolePosterior>()
   if (locked.length === 0) {
+    roleInferenceCache.set(snapshot, out)
+    return out
+  }
+
+  const assignedRoles = new Set<DraftRole>()
+  const hasKnownUniqueAssignments = locked.every((enemy) => {
+    if (!ROLE_KEYS.includes(enemy.slotRole as RoleKey) || assignedRoles.has(enemy.slotRole)) {
+      return false
+    }
+    assignedRoles.add(enemy.slotRole)
+    return true
+  })
+  if (hasKnownUniqueAssignments) {
+    for (const enemy of locked) {
+      out.set(enemy.idx, oneHotPosterior(enemy.slotRole as RoleKey))
+    }
     roleInferenceCache.set(snapshot, out)
     return out
   }

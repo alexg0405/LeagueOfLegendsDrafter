@@ -29,6 +29,23 @@ describe('inferEnemyRolePosteriors', () => {
     expect(inferEnemyRolePosteriors(emptyBoard).size).toBe(0)
   })
 
+  it('uses one-hot probabilities when locked enemies have unique known slot roles', () => {
+    const snap: DraftSnapshot = {
+      ...emptyBoard,
+      enemy: [
+        { role: 'top', championId: 2, championName: 'Olaf', cellId: 5 },
+        { role: 'jungle', championId: 64, championName: 'Lee Sin', cellId: 6 },
+        { role: 'middle', championId: 103, championName: 'Ahri', cellId: 7 },
+        { role: 'bottom', championId: 222, championName: 'Jinx', cellId: 8 },
+        { role: 'support', championId: 111, championName: 'Nautilus', cellId: 9 }
+      ]
+    }
+    const assignments = inferEnemyRoleAssignments(snap)
+    expect(assignments.map((row) => row.inferredRole)).toEqual(['top', 'jungle', 'middle', 'bottom', 'support'])
+    expect(assignments[0]?.roleProbabilities).toEqual({ top: 1, jungle: 0, middle: 0, bottom: 0, support: 0 })
+    expect(assignments[3]?.roleProbabilities).toEqual({ top: 0, jungle: 0, middle: 0, bottom: 1, support: 0 })
+  })
+
   it('reassigns flex pick when a hard support is already present', () => {
     const snap: DraftSnapshot = {
       ...emptyBoard,

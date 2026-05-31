@@ -27,6 +27,9 @@ const CHAMPION_POOL_PREFERENCES: { value: ChampionPoolPreference; label: string 
   { value: 'never', label: 'Avoid' }
 ]
 const POOL_DRAG_MIME = 'application/x-nexus-pool-champion-id'
+const DESKTOP_PLAYER_POOL_IMPORT_ENABLED = false
+const DESKTOP_PLAYER_POOL_IMPORT_WIP_MESSAGE =
+  'Riot mastery import is temporarily WIP. Manual champion pool weights still work.'
 
 const inField =
   'nexus-focus w-full min-w-0 max-w-md bg-nexus-bg border border-nexus-line text-nexus-text font-mono text-sm py-2 px-3 focus:border-nexus-lime/50 focus:outline-none disabled:opacity-45'
@@ -257,7 +260,7 @@ export function NexusOperationsView({
   const visibleManualPoolEntries = Object.entries(championPoolPreferences).filter(([id, pref]) => {
     return pref !== 'never' && !importedPreferenceById.has(id)
   })
-  const poolStatusLine = poolActionStatus ?? playerPoolStatus
+  const poolStatusLine = poolActionStatus ?? playerPoolStatus ?? (DESKTOP_PLAYER_POOL_IMPORT_ENABLED ? null : DESKTOP_PLAYER_POOL_IMPORT_WIP_MESSAGE)
   const poolUndo = poolUndoStack[poolUndoStack.length - 1] ?? null
 
   const removeChampionFromPool = (championId: number) => {
@@ -483,7 +486,7 @@ export function NexusOperationsView({
       <CollapsibleOpsSection
         id="CP_01"
         kicker="personal"
-        title="Champion pool"
+        title={`Champion pool${DESKTOP_PLAYER_POOL_IMPORT_ENABLED ? '' : ' import WIP'}`}
         open={openSectionIds.has('CP_01')}
         onToggle={() => toggleSection('CP_01')}
       >
@@ -518,13 +521,19 @@ export function NexusOperationsView({
               className={inField}
               value={riotIdInput}
               onChange={(e) => setRiotIdInput(e.target.value)}
-              placeholder="GameName#TagLine"
+              placeholder={DESKTOP_PLAYER_POOL_IMPORT_ENABLED ? 'GameName#TagLine' : 'Riot ID import paused'}
               autoComplete="off"
+              disabled={!DESKTOP_PLAYER_POOL_IMPORT_ENABLED}
             />
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Platform</span>
-            <select className={inField} value={riotPlatform} onChange={(e) => setRiotPlatform(e.target.value as RiotPlatform)}>
+            <select
+              className={inField}
+              value={riotPlatform}
+              onChange={(e) => setRiotPlatform(e.target.value as RiotPlatform)}
+              disabled={!DESKTOP_PLAYER_POOL_IMPORT_ENABLED}
+            >
               {RIOT_PLATFORMS.map((platform) => (
                 <option key={`riot-platform-${platform}`} value={platform}>
                   {platform.toUpperCase()}
@@ -535,14 +544,14 @@ export function NexusOperationsView({
           <button
             type="button"
             className={btnPrimary}
-            disabled={playerPoolBusy}
+            disabled={playerPoolBusy || !DESKTOP_PLAYER_POOL_IMPORT_ENABLED}
             onClick={() => {
               setPoolActionStatus(null)
               setPoolUndoStack([])
               onImportPlayerChampionPool(riotIdInput, riotPlatform)
             }}
           >
-            {playerPoolBusy ? 'Importing' : 'Import'}
+            {!DESKTOP_PLAYER_POOL_IMPORT_ENABLED ? 'WIP' : playerPoolBusy ? 'Importing' : 'Import'}
           </button>
         </div>
         {poolStatusLine ? <p className={`${textMuted} mb-4 font-mono text-sm`} role="status">{poolStatusLine}</p> : null}

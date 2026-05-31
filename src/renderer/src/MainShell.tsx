@@ -60,6 +60,9 @@ const DEFAULT_SUGGEST_MC = 40
 const MAX_SUGGEST_MC = 200
 const SUGGESTION_RESULT_LIMIT = 40
 const LIVE_META_REFRESH_MS = 30 * 60 * 1000
+const DESKTOP_PLAYER_POOL_IMPORT_ENABLED = false
+const DESKTOP_PLAYER_POOL_IMPORT_WIP_MESSAGE =
+  'Riot mastery import is temporarily WIP. Manual champion pool weights still work.'
 
 type ChampionPoolPrefs = Record<string, ChampionPoolPreference>
 const LEGACY_AATROX_PLACEHOLDER_PREFS: ChampionPoolPrefs = { '266': 'main' }
@@ -298,7 +301,9 @@ export function MainShell() {
   const [recommendationPoolMode, setRecommendationPoolMode] = useState<RecommendationPoolMode>(
     readStoredRecommendationPoolMode
   )
-  const [playerPoolStatus, setPlayerPoolStatus] = useState<string | null>(null)
+  const [playerPoolStatus, setPlayerPoolStatus] = useState<string | null>(
+    DESKTOP_PLAYER_POOL_IMPORT_ENABLED ? null : DESKTOP_PLAYER_POOL_IMPORT_WIP_MESSAGE
+  )
   const [playerPoolBusy, setPlayerPoolBusy] = useState(false)
   const [overlayEnginePrefs, setOverlayEnginePrefs] = useState<OverlayEnginePrefs>(() => ({
     ...defaultOverlayEnginePrefs
@@ -342,6 +347,10 @@ export function MainShell() {
 
   useEffect(() => {
     return window.drafter.onOverlayPlayerChampionPoolImported((result) => {
+      if (!DESKTOP_PLAYER_POOL_IMPORT_ENABLED) {
+        setPlayerPoolStatus(DESKTOP_PLAYER_POOL_IMPORT_WIP_MESSAGE)
+        return
+      }
       if (!result.ok) {
         return
       }
@@ -580,6 +589,10 @@ export function MainShell() {
   ])
 
   const importPlayerChampionPool = useCallback(async (riotId: string, platform: RiotPlatform) => {
+    if (!DESKTOP_PLAYER_POOL_IMPORT_ENABLED) {
+      setPlayerPoolStatus(DESKTOP_PLAYER_POOL_IMPORT_WIP_MESSAGE)
+      return
+    }
     const trimmed = riotId.trim()
     if (!trimmed) {
       setPlayerPoolStatus('Enter a Riot ID like GameName#TagLine.')

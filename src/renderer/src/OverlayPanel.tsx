@@ -35,6 +35,9 @@ import {
 } from './livePublicDataClient'
 
 const LIVE_META_REFRESH_MS = 30 * 60 * 1000
+const OVERLAY_PLAYER_POOL_IMPORT_ENABLED = false
+const OVERLAY_PLAYER_POOL_IMPORT_WIP_MESSAGE =
+  'Riot mastery import is temporarily WIP. Use manual pool weights in the main window.'
 
 const empty: DraftUpdate = {
   source: 'none',
@@ -323,7 +326,9 @@ export function OverlayPanel() {
   const [riotIdInput, setRiotIdInput] = useState('')
   const [riotPlatform, setRiotPlatform] = useState<RiotPlatform>('na1')
   const [playerPoolBusy, setPlayerPoolBusy] = useState(false)
-  const [playerPoolStatus, setPlayerPoolStatus] = useState<string | null>(null)
+  const [playerPoolStatus, setPlayerPoolStatus] = useState<string | null>(
+    OVERLAY_PLAYER_POOL_IMPORT_ENABLED ? null : OVERLAY_PLAYER_POOL_IMPORT_WIP_MESSAGE
+  )
   const [, setLiveDataRevision] = useState(0)
   const [liveDataStatus, setLiveDataStatus] = useState<LivePublicDataRefreshStatus | null>(null)
 
@@ -419,6 +424,10 @@ export function OverlayPanel() {
   }, [])
 
   const importPlayerChampionPool = async () => {
+    if (!OVERLAY_PLAYER_POOL_IMPORT_ENABLED) {
+      setPlayerPoolStatus(OVERLAY_PLAYER_POOL_IMPORT_WIP_MESSAGE)
+      return
+    }
     const riotId = riotIdInput.trim()
     if (!riotId) {
       setPlayerPoolStatus('Enter Riot ID: GameName#TagLine.')
@@ -901,12 +910,12 @@ export function OverlayPanel() {
         )}
 
         <section className="mb-5">
-          <SectionLabel>Personal pool</SectionLabel>
+          <SectionLabel>Personal pool {OVERLAY_PLAYER_POOL_IMPORT_ENABLED ? '' : 'import WIP'}</SectionLabel>
           <div className="grid grid-cols-[minmax(0,1fr)_5rem] gap-2">
             <input
               type="text"
               className="nexus-focus min-w-0 font-mono text-xs py-1.5 px-2.5 border border-nexus-line bg-nexus-bg text-nexus-text placeholder:text-nexus-muted/70"
-              placeholder="GameName#TagLine"
+              placeholder={OVERLAY_PLAYER_POOL_IMPORT_ENABLED ? 'GameName#TagLine' : 'Import paused'}
               value={riotIdInput}
               onChange={(event) => setRiotIdInput(event.target.value)}
               onKeyDown={(event) => {
@@ -916,12 +925,14 @@ export function OverlayPanel() {
                 }
               }}
               aria-label="Riot ID"
+              disabled={!OVERLAY_PLAYER_POOL_IMPORT_ENABLED}
             />
             <select
               className="nexus-focus min-w-0 font-mono text-xs py-1.5 px-2 border border-nexus-line bg-nexus-bg text-nexus-text"
               value={riotPlatform}
               onChange={(event) => setRiotPlatform(event.target.value as RiotPlatform)}
               aria-label="Riot platform"
+              disabled={!OVERLAY_PLAYER_POOL_IMPORT_ENABLED}
             >
               {RIOT_PLATFORMS.map((platform) => (
                 <option key={`overlay-riot-platform-${platform}`} value={platform}>
@@ -934,10 +945,10 @@ export function OverlayPanel() {
             <button
               type="button"
               className="nexus-focus border border-nexus-lime/70 bg-nexus-lime/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime hover:bg-nexus-lime/18 disabled:opacity-45"
-              disabled={playerPoolBusy}
+              disabled={playerPoolBusy || !OVERLAY_PLAYER_POOL_IMPORT_ENABLED}
               onClick={() => void importPlayerChampionPool()}
             >
-              {playerPoolBusy ? 'Importing' : 'Import'}
+              {!OVERLAY_PLAYER_POOL_IMPORT_ENABLED ? 'WIP' : playerPoolBusy ? 'Importing' : 'Import'}
             </button>
             <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-nexus-muted">
               My Champs

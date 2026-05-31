@@ -3,6 +3,17 @@
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist/web",
   "framework": "vite",
+  "headers": [
+    {
+      "source": "/downloads/(.*)",
+      "headers": [
+        {
+          "key": "Content-Disposition",
+          "value": "attachment"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",

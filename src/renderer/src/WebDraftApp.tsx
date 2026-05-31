@@ -1836,7 +1836,7 @@ export function WebDraftApp() {
               ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
-              <a className={buttonClass} href={EXE_DOWNLOAD_URL} target="_blank" rel="noopener noreferrer">
+              <a className={buttonClass} href={EXE_DOWNLOAD_URL} download="Nexus-Draft-Setup-3.11.0.exe">
                 Download EXE
               </a>
               <a
@@ -2422,7 +2422,7 @@ export function WebDraftApp() {
               <p className="font-mono text-sm text-nexus-muted leading-relaxed">
                 Use the Windows desktop app for League Client API detection, automatic role parsing, and the always-on-top overlay.
               </p>
-              <a className={buttonClass + ' mt-3'} href={EXE_DOWNLOAD_URL} target="_blank" rel="noopener noreferrer">
+              <a className={buttonClass + ' mt-3'} href={EXE_DOWNLOAD_URL} download="Nexus-Draft-Setup-3.11.0.exe">
                 Download EXE
               </a>
               <div className="mt-4 flex items-center gap-2 border-t border-nexus-line/50 pt-3 text-nexus-muted">

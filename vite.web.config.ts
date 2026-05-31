@@ -33,6 +33,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,svg}'],
         navigateFallback: 'index.html',
+        navigateFallbackDenylist: [/^\/downloads\//, /^\/data\//, /^\/api\//, /\/[^/?]+\.[^/]+$/],
         globIgnores: ['**/api/**']
       }
     })

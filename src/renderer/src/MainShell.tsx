@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import type { AppUpdateStatus } from '@shared/appUpdate'
 import { getLatestDDragonVersion, loadChampionMaps, loadItemMaps, type ChampionLite, type ItemLite } from '@shared/dataDragon'
 import {
   applyChampionNames,
   buildDraftIntel,
-  buildDraftItemMatrixPlans,
   championIdsForMyPool,
   championPoolPreferenceToComfort,
   compileTrainedEffects,
@@ -50,6 +49,7 @@ import {
   type LivePublicDataRefreshStatus
 } from './livePublicDataClient'
 import { copyBottomStatusStrip, copyDraftSource } from './nexus-ui/nexusCopy'
+import { buildDraftItemMatrixPlansAsync } from './itemMatrix/itemMatrixClient'
 
 const ROLES: DraftRole[] = ['top', 'jungle', 'middle', 'bottom', 'support']
 const LS_MY_ROLE = 'nexusdraft.v1.myRole'
@@ -604,7 +604,8 @@ export function MainShell() {
   ])
 
   const [itemMatrixPlans, setItemMatrixPlans] = useState<DraftIntel['itemMatrixPlans'] | null>(null)
-  const buildItemMatrixPlans = useCallback(() => buildDraftItemMatrixPlans({
+  const itemMatrixRequestRef = useRef(0)
+  const buildItemMatrixPlans = useCallback(() => buildDraftItemMatrixPlansAsync({
     snapshot: activeSnapshot,
     myRole: roleForSuggestions,
     suggestions,
@@ -629,18 +630,30 @@ export function MainShell() {
     liveDataRevision
   ])
 
+  const prepareItemMatrixPlans = useCallback(() => {
+    const requestId = ++itemMatrixRequestRef.current
+    void buildItemMatrixPlans().then((plans) => {
+      if (itemMatrixRequestRef.current === requestId) {
+        setItemMatrixPlans(plans)
+      }
+    })
+  }, [buildItemMatrixPlans])
+
   useEffect(() => {
     if (!draftIntel) {
+      itemMatrixRequestRef.current += 1
       setItemMatrixPlans(null)
       return
     }
     setItemMatrixPlans(null)
     let cancelled = false
+    const requestId = ++itemMatrixRequestRef.current
     const cancelIdle = scheduleIdleWork(() => {
-      const plans = buildItemMatrixPlans()
-      if (!cancelled) {
-        setItemMatrixPlans(plans)
-      }
+      void buildItemMatrixPlans().then((plans) => {
+        if (!cancelled && itemMatrixRequestRef.current === requestId) {
+          setItemMatrixPlans(plans)
+        }
+      })
     })
     return () => {
       cancelled = true
@@ -976,7 +989,7 @@ export function MainShell() {
               suggestions={suggestions}
               ddragonVersion={ddVersion && ddVersion[0] !== '(' ? ddVersion : null}
               draftIntel={draftIntelWithMatrix}
-              onPrepareItemMatrixPlans={() => setItemMatrixPlans(buildItemMatrixPlans())}
+              onPrepareItemMatrixPlans={prepareItemMatrixPlans}
               appUpdateStatusLine={appUpdateStatusLine(appUpdateStatus)}
               appUpdateBusy={appUpdateBusy}
               appUpdateAvailable={appUpdateStatus?.state === 'available'}

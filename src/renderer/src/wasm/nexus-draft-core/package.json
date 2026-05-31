@@ -1,0 +1,16 @@
+{
+  "name": "nexus-draft-core",
+  "type": "module",
+  "description": "Rust/WASM scoring core for Nexus Draft item matrix plans",
+  "version": "0.1.0",
+  "files": [
+    "nexus_draft_core_bg.wasm",
+    "nexus_draft_core.js",
+    "nexus_draft_core.d.ts"
+  ],
+  "main": "nexus_draft_core.js",
+  "types": "nexus_draft_core.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

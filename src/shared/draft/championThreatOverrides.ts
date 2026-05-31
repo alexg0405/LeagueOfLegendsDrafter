@@ -193,3 +193,7 @@ export function getChampionThreatOverride(name: string | null | undefined): Cham
   return O[k(name)] ?? null
 }
 
+export function championThreatOverrideRows(): { key: string; threat: ThreatLabel; classes: ClassLabel[] }[] {
+  return Object.entries(O).map(([key, value]) => ({ key, threat: value.threat, classes: value.classes }))
+}
+

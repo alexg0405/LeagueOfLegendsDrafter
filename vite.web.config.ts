@@ -37,6 +37,9 @@ export default defineConfig({
       }
     })
   ],
+  worker: {
+    format: 'es'
+  },
   build: {
     outDir: '../../dist/web',
     emptyOutDir: true

@@ -28,6 +28,12 @@ export {
   type BuildDraftIntelArgs
 } from './draftIntel'
 export {
+  normalizeMatrixPlanForParity,
+  serializeItemMatrixInput,
+  type ComparableMatrixPlan,
+  type RustItemMatrixInput
+} from './itemMatrixRust'
+export {
   buildAdaptiveItemPlan,
   championKitProfileFromTexts,
   classifyItem,

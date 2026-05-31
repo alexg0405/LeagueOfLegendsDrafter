@@ -22,7 +22,6 @@ import {
   bestAllySlotsForSuggestion,
   bestEnemySlotsForSuggestion,
   buildDraftIntel,
-  buildDraftItemMatrixPlans,
   championIdsForMyPool,
   championPoolPreferenceToComfort,
   ENGINE_V1_LABEL,
@@ -62,6 +61,7 @@ import {
   refreshLivePublicData,
   type LivePublicDataRefreshStatus
 } from './livePublicDataClient'
+import { buildDraftItemMatrixPlansAsync } from './itemMatrix/itemMatrixClient'
 
 const ROLES: Exclude<DraftRole, 'unknown'>[] = ['top', 'jungle', 'middle', 'bottom', 'support']
 const DEFAULT_WEB_ROLLOUTS = 40
@@ -1045,6 +1045,7 @@ export function WebDraftApp() {
   const [itemMatrixOpen, setItemMatrixOpen] = useState(false)
   const [itemMatrixPlan, setItemMatrixPlan] = useState<DraftIntel['matchupPlans'][number] | null>(null)
   const [itemMatrixPlans, setItemMatrixPlans] = useState<DraftIntel['itemMatrixPlans'] | null>(null)
+  const itemMatrixRequestRef = useRef(0)
   const firstChampInputRef = useRef<HTMLInputElement | null>(null)
   const listboxId = useId()
   const [webRoute, setWebRoute] = useState<WebRoute>(() => readWebRoute())
@@ -1352,7 +1353,7 @@ export function WebDraftApp() {
     championPoolPreferenceMap,
     liveDataRevision
   ])
-  const buildItemMatrixPlans = useCallback(() => buildDraftItemMatrixPlans({
+  const buildItemMatrixPlans = useCallback(() => buildDraftItemMatrixPlansAsync({
     snapshot,
     myRole: role,
     suggestions,
@@ -1379,16 +1380,19 @@ export function WebDraftApp() {
 
   useEffect(() => {
     if (!draftIntel) {
+      itemMatrixRequestRef.current += 1
       setItemMatrixPlans(null)
       return
     }
     setItemMatrixPlans(null)
     let cancelled = false
+    const requestId = ++itemMatrixRequestRef.current
     const cancelIdle = scheduleIdleWork(() => {
-      const plans = buildItemMatrixPlans()
-      if (!cancelled) {
-        setItemMatrixPlans(plans)
-      }
+      void buildItemMatrixPlans().then((plans) => {
+        if (!cancelled && itemMatrixRequestRef.current === requestId) {
+          setItemMatrixPlans(plans)
+        }
+      })
     })
     return () => {
       cancelled = true
@@ -1398,11 +1402,14 @@ export function WebDraftApp() {
 
   const ensureItemMatrixPlans = useCallback(() => {
     if (itemMatrixPlans != null) {
-      return itemMatrixPlans
+      return
     }
-    const plans = buildItemMatrixPlans()
-    setItemMatrixPlans(plans)
-    return plans
+    const requestId = ++itemMatrixRequestRef.current
+    void buildItemMatrixPlans().then((plans) => {
+      if (itemMatrixRequestRef.current === requestId) {
+        setItemMatrixPlans(plans)
+      }
+    })
   }, [buildItemMatrixPlans, itemMatrixPlans])
 
   const draftIntelWithMatrix = useMemo(() => {

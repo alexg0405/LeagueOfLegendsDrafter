@@ -15,6 +15,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b",
+    "core:build": "wasm-pack build crates/nexus-draft-core --target web --release --out-dir ../../src/renderer/src/wasm/nexus-draft-core --out-name nexus_draft_core && node -e \"require('fs').rmSync('src/renderer/src/wasm/nexus-draft-core/.gitignore',{force:true})\"",
+    "core:test": "cargo test -p nexus-draft-core",
+    "core:check": "npm run core:test && npm run core:build && npm test -- --run src/shared/draft/itemMatrixRust.test.ts",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
     "release:stage-web": "node scripts/stage-desktop-update-feed.mjs",
@@ -59,7 +62,8 @@
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
     "vite-plugin-pwa": "^1.2.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "wasm-pack": "^0.15.0"
   },
   "build": {
     "appId": "dev.nexusdraft.app",

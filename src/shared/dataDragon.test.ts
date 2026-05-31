@@ -56,4 +56,30 @@ describe('Data Dragon item normalization', () => {
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({ id: 1001, name: 'Boots' })
   })
+
+  it('collapses same-name current items and keeps the best populated row', () => {
+    const items = itemsFromDDragonData({
+      3504: {
+        name: 'Ardent Censer',
+        description: 'Ability Power, heal and shield power, and ally attack speed.',
+        plaintext: 'Empowers allies',
+        tags: ['SpellDamage', 'ManaRegen'],
+        stats: { FlatMagicDamageMod: 45 },
+        gold: { base: 700, total: 2200, sell: 1540, purchasable: true },
+        maps: { 11: true }
+      },
+      9504: {
+        name: 'Ardent Censer',
+        description: '',
+        plaintext: '',
+        tags: [],
+        stats: {},
+        gold: { base: 0, total: 2200, sell: 1540, purchasable: true },
+        maps: { 11: true }
+      }
+    })
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ id: 3504, name: 'Ardent Censer' })
+  })
 })

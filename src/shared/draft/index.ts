@@ -18,7 +18,7 @@ export {
   type CompiledTrainedEffects,
   type TrainedEffectsStatus
 } from './trainedEffects'
-export { suggestPicks } from './suggestPicks'
+export { suggestPicks, type SuggestPicksArgs } from './suggestPicks'
 export {
   buildDraftIntel,
   buildDraftItemMatrixPlans,

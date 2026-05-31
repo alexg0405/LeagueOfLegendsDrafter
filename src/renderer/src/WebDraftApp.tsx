@@ -33,7 +33,6 @@ import {
   MEANINGFUL_TEAM_SYNERGY_DELTA,
   RIOT_PLATFORMS,
   resolveChampionName,
-  suggestPicks,
   validatePlayerChampionPoolProfile,
   type DraftDeltaListMode,
   type DraftIntel,
@@ -62,6 +61,7 @@ import {
   type LivePublicDataRefreshStatus
 } from './livePublicDataClient'
 import { buildDraftItemMatrixPlansAsync } from './itemMatrix/itemMatrixClient'
+import { suggestPicksAsync } from './recommend/recommendClient'
 
 const ROLES: Exclude<DraftRole, 'unknown'>[] = ['top', 'jungle', 'middle', 'bottom', 'support']
 const DEFAULT_WEB_ROLLOUTS = 40
@@ -1293,11 +1293,11 @@ export function WebDraftApp() {
   )
   const snapshot = useMemo(() => buildSnapshot(board, role, nameById), [board, role, nameById])
   const enemyRoleInference = useMemo(() => inferEnemyRoleAssignments(snapshot), [snapshot, liveDataRevision])
-  const { suggestions, patchLabel } = useMemo(() => {
+  const suggestionArgs = useMemo(() => {
     if (champions.length === 0) {
-      return { suggestions: [], patchLabel: ENGINE_V1_LABEL }
+      return null
     }
-    return suggestPicks({
+    return {
       myRole: role,
       snapshot,
       idToName: nameById,
@@ -1311,7 +1311,7 @@ export function WebDraftApp() {
       candidateChampionIds,
       sortBy: 'delta',
       deltaListMode: deltaMode
-    })
+    } as const
   }, [
     champions.length,
     role,
@@ -1325,6 +1325,27 @@ export function WebDraftApp() {
     deltaMode,
     liveDataRevision
   ])
+  const [suggestionResult, setSuggestionResult] = useState<{ suggestions: PickSuggestion[]; patchLabel: string }>({
+    suggestions: [],
+    patchLabel: ENGINE_V1_LABEL
+  })
+  useEffect(() => {
+    if (!suggestionArgs) {
+      setSuggestionResult({ suggestions: [], patchLabel: ENGINE_V1_LABEL })
+      return
+    }
+    let cancelled = false
+    void suggestPicksAsync(suggestionArgs).then((result) => {
+      if (!cancelled) {
+        setSuggestionResult(result)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [suggestionArgs])
+  const suggestions = suggestionResult.suggestions
+  const patchLabel = suggestionResult.patchLabel
 
   const draftIntel = useMemo(() => {
     return buildDraftIntel({

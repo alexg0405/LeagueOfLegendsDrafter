@@ -1,4 +1,4 @@
-import type { ItemLite } from '../dataDragon'
+import { canonicalItemName, type ItemLite } from '../dataDragon'
 import type { ChampionBuildProfile, DraftItemEnemyTarget, DraftItemPlan, DraftItemRef, DraftItemThreat, DraftRole } from './types'
 
 export type ItemPhase = DraftItemRef['phase']
@@ -344,16 +344,39 @@ function topRefs<T extends DraftItemRef>(rows: readonly T[], phase: ItemPhase, l
 
 function dedupeRefs<T extends DraftItemRef>(rows: readonly T[], limit: number): T[] {
   const seen = new Set<number>()
+  const seenNames = new Set<string>()
   const out: T[] = []
   for (const row of rows) {
-    if (seen.has(row.itemId)) {
+    const nameKey = canonicalItemName(row.name)
+    if (seen.has(row.itemId) || (nameKey && seenNames.has(nameKey))) {
       continue
     }
     seen.add(row.itemId)
+    if (nameKey) {
+      seenNames.add(nameKey)
+    }
     out.push(row)
     if (out.length >= limit) {
       break
     }
+  }
+  return out
+}
+
+function dedupeScoredItems<T extends { item: ItemLite }>(rows: readonly T[]): T[] {
+  const seen = new Set<number>()
+  const seenNames = new Set<string>()
+  const out: T[] = []
+  for (const row of rows) {
+    const nameKey = canonicalItemName(row.item.name)
+    if (seen.has(row.item.id) || (nameKey && seenNames.has(nameKey))) {
+      continue
+    }
+    seen.add(row.item.id)
+    if (nameKey) {
+      seenNames.add(nameKey)
+    }
+    out.push(row)
   }
   return out
 }
@@ -375,14 +398,16 @@ function threatSummary(ctx: AdaptiveItemContext): DraftItemThreat[] {
 }
 
 export function buildAdaptiveItemPlan(items: readonly ItemLite[], ctx: AdaptiveItemContext): DraftItemPlan {
-  const scored = items
-    .map((item) => {
-      const profile = classifyItem(item)
-      const score = scoreItem(item, profile, ctx)
-      return { item, profile, score }
-    })
-    .filter(({ item, profile, score }) => score > 20 && item.gold.total > 0 && !item.consumed && profile.phase !== 'consumable')
-    .sort((a, b) => b.score - a.score || b.item.gold.total - a.item.gold.total || a.item.name.localeCompare(b.item.name))
+  const scored = dedupeScoredItems(
+    items
+      .map((item) => {
+        const profile = classifyItem(item)
+        const score = scoreItem(item, profile, ctx)
+        return { item, profile, score }
+      })
+      .filter(({ item, profile, score }) => score > 20 && item.gold.total > 0 && !item.consumed && profile.phase !== 'consumable')
+      .sort((a, b) => b.score - a.score || b.item.gold.total - a.item.gold.total || a.item.name.localeCompare(b.item.name))
+  )
 
   const adaptiveRows = scored.slice(0, 60).map(({ item, profile, score }) => {
     const targets = enemyTargets(profile, ctx)

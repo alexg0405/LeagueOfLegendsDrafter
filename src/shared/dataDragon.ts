@@ -83,10 +83,11 @@ const RETIRED_OR_OFFSTORE_ITEM_NAMES = new Set([
   'duskblade of draktharr'
 ])
 
-function normalizedItemName(raw: unknown): string {
+export function canonicalItemName(raw: unknown): string {
   return typeof raw === 'string'
     ? raw
         .toLowerCase()
+        .replace(/\u2019/g, "'")
         .replace(/[’']/g, "'")
         .replace(/[^a-z0-9']+/g, ' ')
         .trim()
@@ -95,6 +96,31 @@ function normalizedItemName(raw: unknown): string {
 
 function hasNonstandardItemAccess(item: Record<string, unknown>): boolean {
   return item.requiredAlly != null || item.requiredBuffCurrencyName != null || item.specialRecipe != null
+}
+
+function itemQuality(item: ItemLite): number {
+  return [
+    item.gold.total > 0 ? 16 : 0,
+    item.description ? 8 : 0,
+    item.plaintext ? 4 : 0,
+    item.tags.length > 0 ? 4 : 0,
+    Object.keys(item.stats).length > 0 ? 4 : 0,
+    item.from?.length ? 2 : 0,
+    item.into?.length ? 1 : 0,
+    item.consumed ? -8 : 0
+  ].reduce((total, value) => total + value, 0)
+}
+
+function preferItemForCanonicalName(next: ItemLite, current: ItemLite): ItemLite {
+  const nextQuality = itemQuality(next)
+  const currentQuality = itemQuality(current)
+  if (nextQuality !== currentQuality) {
+    return nextQuality > currentQuality ? next : current
+  }
+  if (next.gold.total !== current.gold.total) {
+    return next.gold.total > current.gold.total ? next : current
+  }
+  return next.id < current.id ? next : current
 }
 
 export function isCurrentSummonersRiftStoreItem(id: number, item: Record<string, unknown>): boolean {
@@ -106,7 +132,7 @@ export function isCurrentSummonersRiftStoreItem(id: number, item: Record<string,
   if (gold.purchasable !== true) {
     return false
   }
-  const name = normalizedItemName(item.name)
+  const name = canonicalItemName(item.name)
   return id > 0 && !RETIRED_OR_OFFSTORE_ITEM_NAMES.has(name)
 }
 
@@ -153,7 +179,7 @@ function championsFromDDragonData(
 }
 
 export function itemsFromDDragonData(data: Record<string, unknown>): ItemLite[] {
-  const items: ItemLite[] = []
+  const itemsByName = new Map<string, ItemLite>()
   for (const [idText, raw] of Object.entries(data)) {
     const id = Number(idText)
     if (!Number.isFinite(id) || id <= 0 || raw == null || typeof raw !== 'object') {
@@ -166,7 +192,7 @@ export function itemsFromDDragonData(data: Record<string, unknown>): ItemLite[] 
     const maps = item.maps != null && typeof item.maps === 'object' ? item.maps as Record<string, unknown> : {}
     const gold = item.gold != null && typeof item.gold === 'object' ? item.gold as Record<string, unknown> : {}
     const total = typeof gold.total === 'number' ? gold.total : 0
-    items.push({
+    const itemLite: ItemLite = {
       id,
       name: typeof item.name === 'string' ? item.name : `Item ${id}`,
       description: typeof item.description === 'string' ? item.description : '',
@@ -186,9 +212,12 @@ export function itemsFromDDragonData(data: Record<string, unknown>): ItemLite[] 
       requiredChampion: typeof item.requiredChampion === 'string' ? item.requiredChampion : undefined,
       consumed: item.consumed === true,
       consumeOnFull: item.consumeOnFull === true
-    })
+    }
+    const key = canonicalItemName(itemLite.name) || String(itemLite.id)
+    const current = itemsByName.get(key)
+    itemsByName.set(key, current ? preferItemForCanonicalName(itemLite, current) : itemLite)
   }
-  return items.sort((a, b) => a.name.localeCompare(b.name))
+  return Array.from(itemsByName.values()).sort((a, b) => a.name.localeCompare(b.name))
 }
 
 /**

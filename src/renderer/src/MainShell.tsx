@@ -16,7 +16,6 @@ import {
   mergeChampionPoolPreferences,
   resolveChampionName,
   sanitizeDraftUpdateForIpc,
-  suggestPicks,
   validatePlayerChampionPoolProfile,
   type CompiledTrainedEffects,
   type DraftDeltaListMode,
@@ -50,6 +49,7 @@ import {
 } from './livePublicDataClient'
 import { copyBottomStatusStrip, copyDraftSource } from './nexus-ui/nexusCopy'
 import { buildDraftItemMatrixPlansAsync } from './itemMatrix/itemMatrixClient'
+import { suggestPicksAsync } from './recommend/recommendClient'
 
 const ROLES: DraftRole[] = ['top', 'jungle', 'middle', 'bottom', 'support']
 const LS_MY_ROLE = 'nexusdraft.v1.myRole'
@@ -536,12 +536,12 @@ export function MainShell() {
     [recommendationPoolMode, effectiveChampionPoolPrefs]
   )
 
-  const { suggestions, patchLabel } = useMemo(() => {
+  const suggestionArgs = useMemo(() => {
     if (!activeSnapshot) {
-      return { suggestions: [], patchLabel: ENGINE_V1_LABEL }
+      return null
     }
     const rngSeed = fnv1a32(boardSignature)
-    return suggestPicks({
+    return {
       myRole: roleForSuggestions,
       snapshot: activeSnapshot,
       idToName: nameById,
@@ -555,7 +555,7 @@ export function MainShell() {
       candidateChampionIds,
       sortBy: sortForSuggestions,
       deltaListMode: deltaListForSuggestions
-    })
+    } as const
   }, [
     activeSnapshot,
     roleForSuggestions,
@@ -571,6 +571,27 @@ export function MainShell() {
     candidateChampionIds,
     liveDataRevision
   ])
+  const [suggestionResult, setSuggestionResult] = useState<{ suggestions: DraftUpdate['suggestions']; patchLabel: string }>({
+    suggestions: [],
+    patchLabel: ENGINE_V1_LABEL
+  })
+  useEffect(() => {
+    if (!suggestionArgs) {
+      setSuggestionResult({ suggestions: [], patchLabel: ENGINE_V1_LABEL })
+      return
+    }
+    let cancelled = false
+    void suggestPicksAsync(suggestionArgs).then((result) => {
+      if (!cancelled) {
+        setSuggestionResult(result)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [suggestionArgs])
+  const suggestions = suggestionResult.suggestions
+  const patchLabel = suggestionResult.patchLabel
 
   const enemyRoleInference = useMemo(() => {
     return activeSnapshot ? inferEnemyRoleAssignments(activeSnapshot) : null

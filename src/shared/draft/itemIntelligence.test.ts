@@ -197,4 +197,61 @@ describe('item intelligence', () => {
     const antiHeal = plan.matrixRows?.find((row) => row.tags.includes('anti-heal'))
     expect(antiHeal?.enemyTargets?.[0]).toMatchObject({ championId: 267, championName: 'Nami', source: 'defaultBuild' })
   })
+
+  it('dedupes situational and final build items by display name with default rows winning', () => {
+    const ardent = item(3504, 'Ardent Censer', 'Heal and shield power for allies.', ['SpellDamage', 'ManaRegen'], { FlatMagicDamageMod: 45 }, 2200)
+    const duplicateArdent = item(9504, 'Ardent Censer', 'Heal and shield power for allies.', ['SpellDamage', 'ManaRegen'], { FlatMagicDamageMod: 45 }, 2200)
+    const plan = buildAdaptiveItemPlan([...catalog, ardent, duplicateArdent], {
+      championName: 'Lulu',
+      role: 'support',
+      buildProfile: {
+        damage: 'ap',
+        archetype: 'Support enchanter',
+        buildHint: 'Buff allies.',
+        itemHint: 'Default enchanter path.',
+        tagsLine: 'Support Mage',
+        partype: 'Mana'
+      },
+      ally: { magic: 1, physical: 2, frontline: 1, engage: 1, scaling: 2, slots: 4 },
+      enemy: {
+        magic: 2,
+        physical: 2,
+        frontline: 2,
+        tanks: 1,
+        assassins: 1,
+        supports: 1,
+        dive: 2,
+        poke: 2,
+        pick: 2,
+        sustain: 2,
+        marksmen: 1,
+        hardCc: 2,
+        healing: 2,
+        shielding: 2,
+        mobility: 1,
+        burst: 1
+      },
+      defaultBuild: {
+        source: 'ugg',
+        starting: [],
+        boots: [],
+        core: [ref(ardent)],
+        final: [],
+        defaultItemIds: [3504]
+      },
+      laneThreat: 'hybrid',
+      fallback: {
+        core: 'Fallback core',
+        boots: 'Fallback boots',
+        defensive: 'Fallback defense',
+        situational: [],
+        notes: []
+      }
+    })
+    for (const rows of [plan.matrixRows ?? [], plan.situationalItems ?? [], plan.finalBuild ?? []]) {
+      const names = rows.map((row) => row.name.toLowerCase())
+      expect(names.filter((name) => name === 'ardent censer')).toHaveLength(names.includes('ardent censer') ? 1 : 0)
+    }
+    expect(plan.matrixRows?.find((row) => row.name === 'Ardent Censer')?.itemId).toBe(3504)
+  })
 })

@@ -3,11 +3,14 @@
 
 export function build_item_matrix_plans_json(input_json: string): string;
 
+export function recommend_picks_json(input_json: string): string;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly build_item_matrix_plans_json: (a: number, b: number) => [number, number];
+    readonly recommend_picks_json: (a: number, b: number) => [number, number];
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

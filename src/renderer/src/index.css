@@ -67,6 +67,30 @@
     background: color-mix(in srgb, var(--nexus-lime) 25%, transparent);
   }
 
+  .nexus-matrix-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--nexus-lime) 45%, transparent) color-mix(in srgb, var(--nexus-bg) 92%, black 8%);
+    scrollbar-gutter: stable;
+  }
+  .nexus-matrix-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .nexus-matrix-scroll::-webkit-scrollbar-track {
+    background: color-mix(in srgb, var(--nexus-bg) 92%, black 8%);
+    border-left: 1px solid var(--nexus-line);
+  }
+  .nexus-matrix-scroll::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--nexus-lime) 38%, transparent);
+    border: 1px solid color-mix(in srgb, var(--nexus-lime) 28%, transparent);
+  }
+  .nexus-matrix-scroll::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--nexus-lime) 58%, transparent);
+  }
+  .nexus-matrix-scroll::-webkit-scrollbar-corner {
+    background: color-mix(in srgb, var(--nexus-bg) 92%, black 8%);
+  }
+
   /* Floating overlay: same tokens as main shell, electron drag areas */
   .nexus-overlay-root {
     border: 1px solid var(--nexus-line);

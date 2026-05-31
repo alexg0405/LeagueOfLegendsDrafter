@@ -1,5 +1,5 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type UIEvent } from 'react'
-import { ddragonItemImageUrl } from '@shared/dataDragon'
+import { canonicalItemName, ddragonItemImageUrl } from '@shared/dataDragon'
 import type { DraftIntel, DraftItemMatrixRow, DraftItemRef } from '@shared/draft'
 
 type MatchupPlan = DraftIntel['matchupPlans'][number]
@@ -56,11 +56,14 @@ function buildStatusFor(row: DraftItemMatrixRow, itemPlan: DraftItemPlan, defaul
 function matrixRows(itemPlan: DraftItemPlan | null | undefined): ItemMatrixRow[] {
   if (!itemPlan) return []
   const seen = new Set<number>()
+  const seenNames = new Set<string>()
   const defaultIds = defaultIdsFor(itemPlan)
   return (itemPlan.matrixRows ?? [])
     .filter((row) => {
-      if (seen.has(row.itemId)) return false
+      const nameKey = canonicalItemName(row.name)
+      if (seen.has(row.itemId) || (nameKey && seenNames.has(nameKey))) return false
       seen.add(row.itemId)
+      if (nameKey) seenNames.add(nameKey)
       return true
     })
     .map((row) => {
@@ -370,7 +373,7 @@ export function DraftItemMatrixView({
               Preparing full matrix...
             </div>
           ) : null}
-          <div className="flex gap-1.5 overflow-x-auto">
+          <div className="nexus-matrix-scroll flex gap-1.5 overflow-x-auto pb-1">
             {visibleChampionMatches.map((plan) => {
               const src = championImageUrl?.(plan.championId) ?? null
               const active = plan.championId === activePlan?.championId
@@ -390,7 +393,7 @@ export function DraftItemMatrixView({
           </div>
         </div>
       ) : null}
-      <div ref={scrollRef} className="max-h-[72vh] overflow-auto" onScroll={handleMatrixScroll}>
+      <div ref={scrollRef} className="nexus-matrix-scroll max-h-[72vh] overflow-auto" onScroll={handleMatrixScroll}>
         <table className="w-full min-w-[54rem] table-fixed border-collapse text-left font-mono text-xs">
           <colgroup>
             <col className="w-8" />

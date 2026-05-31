@@ -48,7 +48,7 @@ import {
   type RiotPlatform,
   type SuggestionContextSlot
 } from '@shared/draft'
-import { DraftItemPlanBlock as ItemPlanBlock, MicroLabel, NexusPanel, NexusPlus } from './nexus-ui'
+import { DraftItemMatrixView, DraftItemPlanBlock as ItemPlanBlock, MicroLabel, NexusPanel, NexusPlus } from './nexus-ui'
 import { idbGetChampions, idbGetItems, idbSetChampions, idbSetItems } from './web/ddragonIndexedDbCache'
 import {
   clearPersistedWebDraft,
@@ -550,7 +550,8 @@ function SuggestionRow({
   myRole,
   nameById,
   enemyRoleInference,
-  matchupPlan
+  matchupPlan,
+  onOpenItemMatrix
 }: {
   suggestion: PickSuggestion
   champions: ChampionLite[]
@@ -560,6 +561,7 @@ function SuggestionRow({
   nameById: ReadonlyMap<number, string>
   enemyRoleInference?: EnemyRoleInference[] | null
   matchupPlan?: DraftIntel['matchupPlans'][number] | null
+  onOpenItemMatrix?: (plan: DraftIntel['matchupPlans'][number]) => void
 }) {
   const poolRole: DraftRole = myRole
   const showTeamSynergy =
@@ -678,6 +680,16 @@ function SuggestionRow({
             </div>
           </details>
         )}
+        {matchupPlan?.itemPlan && (
+          <div className="py-2">
+            <ItemPlanBlock
+              itemPlan={matchupPlan.itemPlan}
+              ddragonVersion={ddragonVersion}
+              limit={4}
+              onOpenMatrix={() => onOpenItemMatrix?.(matchupPlan)}
+            />
+          </div>
+        )}
         <details className="group">
           <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 py-2 uppercase tracking-[0.1em] text-nexus-muted marker:hidden hover:text-nexus-text/90">
             <span>Tips</span>
@@ -695,7 +707,6 @@ function SuggestionRow({
                 <span className="text-nexus-lime/80">Plan:</span> {matchupPlan.summonerSpells}; {matchupPlan.startingItem}
               </p>
             )}
-            <ItemPlanBlock itemPlan={matchupPlan?.itemPlan} ddragonVersion={ddragonVersion} limit={4} />
             {suggestion.buildProfile && suggestion.buildProfile.tagsLine !== '—' && (
               <p className="m-0 mt-1.5 text-nexus-muted/85">{suggestion.buildProfile.tagsLine}</p>
             )}
@@ -1017,6 +1028,8 @@ export function WebDraftApp() {
   const [poolPreference, setPoolPreference] = useState<ChampionPoolPreference>('comfortable')
   const [poolUndoStack, setPoolUndoStack] = useState<PoolUndoState[]>([])
   const [poolTrashActive, setPoolTrashActive] = useState(false)
+  const [itemMatrixOpen, setItemMatrixOpen] = useState(false)
+  const [itemMatrixPlan, setItemMatrixPlan] = useState<DraftIntel['matchupPlans'][number] | null>(null)
   const firstChampInputRef = useRef<HTMLInputElement | null>(null)
   const listboxId = useId()
   const [webRoute, setWebRoute] = useState<WebRoute>(() => readWebRoute())
@@ -1400,6 +1413,7 @@ export function WebDraftApp() {
   }, [suggestions, role, ddragonVersion])
 
   const topMatchupPlan = draftIntel?.matchupPlans[0] ?? null
+  const activeItemMatrixPlan = itemMatrixPlan ?? topMatchupPlan
 
   const saveChampionPoolPreference = () => {
     if (poolChampionId == null) {
@@ -1680,6 +1694,29 @@ export function WebDraftApp() {
     <div className="min-h-screen overflow-hidden [color-scheme:dark] bg-[radial-gradient(circle_at_20%_0%,rgba(35,213,176,0.14),transparent_32%),radial-gradient(circle_at_80%_10%,rgba(83,166,255,0.1),transparent_28%),linear-gradient(180deg,var(--nexus-bg),#03100c)] text-nexus-text font-body antialiased flex flex-col">
       <div className="nexus-noise fixed inset-0 pointer-events-none opacity-60" aria-hidden />
       <div className="pointer-events-none fixed inset-x-0 top-0 h-px bg-nexus-lime/70 shadow-[0_0_24px_rgba(35,213,176,0.7)]" aria-hidden />
+      {itemMatrixOpen && activeItemMatrixPlan?.itemPlan ? (
+        <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/70 p-3 sm:p-5">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="Close item matrix"
+            onClick={() => {
+              setItemMatrixOpen(false)
+              setItemMatrixPlan(null)
+            }}
+          />
+          <DraftItemMatrixView
+            className="relative z-10 max-h-[92vh] w-full max-w-6xl overflow-hidden"
+            itemPlan={activeItemMatrixPlan.itemPlan}
+            championName={activeItemMatrixPlan.championName}
+            ddragonVersion={ddragonVersion}
+            onClose={() => {
+              setItemMatrixOpen(false)
+              setItemMatrixPlan(null)
+            }}
+          />
+        </div>
+      ) : null}
       <a
         href="#nexus-web-main"
         className="nexus-focus absolute -left-[9999px] z-[200] h-px w-px overflow-hidden focus:fixed focus:left-4 focus:top-4 focus:h-auto focus:w-auto focus:overflow-visible focus:rounded focus:border focus:border-nexus-lime/60 focus:bg-nexus-bg focus:px-3 focus:py-2 focus:font-mono focus:text-sm focus:text-nexus-lime"
@@ -2165,13 +2202,34 @@ export function WebDraftApp() {
                   </div>
                   {topMatchupPlan && (
                     <div className="rounded-md border border-white/[0.08] bg-nexus-bg/35 px-2 py-2 text-nexus-muted">
-                      <p className="m-0 mb-1 uppercase tracking-[0.12em] text-nexus-lime/75">Top plan</p>
+                      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                        <p className="m-0 uppercase tracking-[0.12em] text-nexus-lime/75">Top plan</p>
+                        <button
+                          type="button"
+                          className="nexus-focus border border-nexus-line/70 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/90 hover:border-nexus-lime/50 disabled:opacity-45"
+                          disabled={!topMatchupPlan.itemPlan?.matrixRows?.length}
+                          onClick={() => {
+                            setItemMatrixPlan(topMatchupPlan)
+                            setItemMatrixOpen(true)
+                          }}
+                        >
+                          Item matrix
+                        </button>
+                      </div>
                       <p className="m-0 text-nexus-text/85">
                         {topMatchupPlan.championName}{topMatchupPlan.laneOpponentName ? ` vs ${topMatchupPlan.laneOpponentName}` : ''} - {topMatchupPlan.summonerSpells}
                       </p>
                       <p className="m-0 mt-1">Start: {topMatchupPlan.startingItem}</p>
                       <p className="m-0">Recall: {topMatchupPlan.firstRecall}</p>
-                      <ItemPlanBlock itemPlan={topMatchupPlan.itemPlan} ddragonVersion={ddragonVersion} limit={4} />
+                      <ItemPlanBlock
+                        itemPlan={topMatchupPlan.itemPlan}
+                        ddragonVersion={ddragonVersion}
+                        limit={4}
+                        onOpenMatrix={() => {
+                          setItemMatrixPlan(topMatchupPlan)
+                          setItemMatrixOpen(true)
+                        }}
+                      />
                     </div>
                   )}
                   <details className="rounded-md border border-white/[0.08] bg-nexus-bg/35 px-2 py-2 text-nexus-muted">
@@ -2210,6 +2268,19 @@ export function WebDraftApp() {
                     {copyFeedback ? <span className="text-xs text-nexus-lime/90">{copyFeedback}</span> : null}
                     <button
                       type="button"
+                      onClick={() => {
+                        if (topMatchupPlan) {
+                          setItemMatrixPlan(topMatchupPlan)
+                          setItemMatrixOpen(true)
+                        }
+                      }}
+                      disabled={!topMatchupPlan?.itemPlan?.matrixRows?.length}
+                      className="nexus-focus inline-flex border border-nexus-line/70 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-nexus-lime/90 hover:border-nexus-lime/50 hover:bg-nexus-lime/10 disabled:opacity-45"
+                    >
+                      Item matrix
+                    </button>
+                    <button
+                      type="button"
                       onClick={copyTopSuggestions}
                       className="nexus-focus inline-flex border border-nexus-line/70 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-nexus-lime/90 hover:border-nexus-lime/50 hover:bg-nexus-lime/10"
                     >
@@ -2232,6 +2303,10 @@ export function WebDraftApp() {
                             ? draftIntel?.matchupPlans.find((plan) => plan.championId === suggestion.championId) ?? null
                             : null
                         }
+                        onOpenItemMatrix={(plan) => {
+                          setItemMatrixPlan(plan)
+                          setItemMatrixOpen(true)
+                        }}
                       />
                     ))}
                   </ol>

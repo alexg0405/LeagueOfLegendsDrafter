@@ -28,6 +28,7 @@ import {
   type RiotPlatform
 } from '@shared/draft'
 import { DraftItemPlanBlock as OverlayItemPlan } from './nexus-ui/DraftItemPlanBlock'
+import { DraftItemMatrixView } from './nexus-ui/DraftItemMatrixView'
 import {
   livePublicDataStatusLine,
   refreshLivePublicData,
@@ -323,6 +324,8 @@ export function OverlayPanel() {
   const [lookupQuery, setLookupQuery] = useState('')
   const [trainedEffects, setTrainedEffects] = useState<CompiledTrainedEffects | null>(null)
   const [pickMatrixOpen, setPickMatrixOpen] = useState(false)
+  const [itemMatrixOpen, setItemMatrixOpen] = useState(false)
+  const [itemMatrixPlan, setItemMatrixPlan] = useState<NonNullable<DraftUpdate['draftIntel']>['matchupPlans'][number] | null>(null)
   const [riotIdInput, setRiotIdInput] = useState('')
   const [riotPlatform, setRiotPlatform] = useState<RiotPlatform>('na1')
   const [playerPoolBusy, setPlayerPoolBusy] = useState(false)
@@ -397,23 +400,25 @@ export function OverlayPanel() {
   }, [])
 
   useEffect(() => {
-    if (!pickMatrixOpen) {
+    if (!pickMatrixOpen && !itemMatrixOpen) {
       return
     }
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setPickMatrixOpen(false)
+        setItemMatrixOpen(false)
+        setItemMatrixPlan(null)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [pickMatrixOpen])
+  }, [pickMatrixOpen, itemMatrixOpen])
 
   useEffect(() => {
-    void window.drafter.setOverlayProjectionMode(pickMatrixOpen).catch(() => {
+    void window.drafter.setOverlayProjectionMode(pickMatrixOpen || itemMatrixOpen).catch(() => {
       /* overlay may be closing */
     })
-  }, [pickMatrixOpen])
+  }, [pickMatrixOpen, itemMatrixOpen])
 
   useEffect(() => {
     return () => {
@@ -472,6 +477,8 @@ export function OverlayPanel() {
       : s?.myRole && s.myRole !== 'unknown'
         ? s.myRole
         : null
+  const topItemPlan = d.draftIntel?.matchupPlans[0] ?? null
+  const activeItemMatrixPlan = itemMatrixPlan ?? topItemPlan
 
   const enemySlotsWithInference = useMemo((): InferredOverlaySlot[] => {
     const rows = d.enemyRoleInference ?? []
@@ -739,7 +746,7 @@ export function OverlayPanel() {
               </button>
             </header>
             <div className="h-[calc(100%_-_4.8rem)] overflow-auto nexus-overlay-no-scrollbar">
-              <table className="w-full min-w-[68rem] border-collapse font-mono text-xs sm:text-sm">
+              <table className="w-full min-w-[48rem] border-collapse font-mono text-xs sm:text-sm">
                 <thead className="sticky top-0 z-10 bg-nexus-surface-2 text-nexus-lime/85">
                   <tr className="text-left uppercase tracking-[0.14em]">
                     <th className="px-3 py-2.5 border-b border-nexus-line/80">#</th>
@@ -748,21 +755,24 @@ export function OverlayPanel() {
                     <th className="px-3 py-2.5 border-b border-nexus-line/80">Base</th>
                     <th className="px-3 py-2.5 border-b border-nexus-line/80">Lobby</th>
                     <th className="px-3 py-2.5 border-b border-nexus-line/80">Delta</th>
+                    <th className="px-3 py-2.5 border-b border-nexus-line/80">Good vs</th>
                     <th className="px-3 py-2.5 border-b border-nexus-line/80">Runes</th>
-                    <th className="px-3 py-2.5 border-b border-nexus-line/80 max-w-[12rem]">Tip</th>
-                    <th className="px-3 py-2.5 border-b border-nexus-line/80">Build</th>
                     <th className="px-3 py-2.5 border-b border-nexus-line/80">Tags</th>
                   </tr>
                 </thead>
                 <tbody>
                   {d.suggestions.length === 0 && (
                     <tr>
-                      <td className="px-3 py-5 text-nexus-muted" colSpan={10}>
+                      <td className="px-3 py-5 text-nexus-muted" colSpan={9}>
                         No picks available.
                       </td>
                     </tr>
                   )}
-                  {d.suggestions.map((p, i) => (
+                  {d.suggestions.map((p, i) => {
+                    const enemies = bestEnemySlotsForCandidate(p.championId, poolRole, enemySlotsWithInference)
+                    const fallback = focusedSlots(enemySlotsWithInference, poolRole, 'enemy')
+                    const goodVs = enemies.length ? enemies : fallback
+                    return (
                     <tr
                       key={`matrix-${d.boardSignature ?? d.updatedAt}-${p.championId}`}
                       className="text-nexus-text/90 odd:bg-nexus-lime/[0.035] hover:bg-nexus-lime/[0.08]"
@@ -796,54 +806,64 @@ export function OverlayPanel() {
                       >
                         {signedPct(p.winRateDelta)}
                       </td>
+                      <td className="px-3 py-2.5 border-b border-nexus-line/45">
+                        <span className="inline-flex items-center gap-1">
+                          {goodVs.slice(0, 3).map((slot) => (
+                            <ContextPortrait
+                              key={`matrix-vs-${p.championId}-${slot.role}-${slot.championId}`}
+                              slot={slot}
+                              imageUrl={championIconUrl(slot.championId)}
+                              tone="enemy"
+                            />
+                          ))}
+                          {goodVs.length === 0 && <span className="text-nexus-muted">pending</span>}
+                        </span>
+                      </td>
                       <td className="px-3 py-2.5 border-b border-nexus-line/45 text-nexus-muted">
                         {p.runes ? (
                           <span>
                             <span className="text-nexus-text/85">{p.runes.keystone}</span>
-                            <span> / {p.runes.primaryTree}</span>
-                            <span className="block text-[10px] leading-snug text-nexus-muted/80 mt-0.5">
-                              {p.runes.secondary}
-                            </span>
+                            <span className="block text-[10px] text-nexus-muted/80">{p.runes.primaryTree} / {p.runes.secondary}</span>
                           </span>
                         ) : (
                           '--'
                         )}
                       </td>
-                      <td
-                        className="px-3 py-2.5 border-b border-nexus-line/45 text-nexus-muted/90 align-top max-w-[14rem] line-clamp-4"
-                        title={formatRuneTipNote(p.runes?.note, p.buildProfile?.buildHint ?? '')}
-                      >
-                        {p.runes
-                          ? formatRuneTipNote(
-                              p.runes.note,
-                              p.buildProfile?.buildHint ?? '—'
-                            )
-                          : '—'}
-                      </td>
                       <td className="px-3 py-2.5 border-b border-nexus-line/45 text-nexus-muted">
-                        {p.buildProfile && (
-                          <span>
-                            <span className="text-nexus-lime/80 uppercase">{p.buildProfile.damage}</span> {p.buildProfile.archetype}
-                            {p.buildProfile.itemHint && (
-                              <span className="block text-[10px] leading-snug text-nexus-muted/80 mt-0.5">
-                                Items: {p.buildProfile.itemHint}
-                              </span>
-                            )}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 border-b border-nexus-line/45 text-nexus-muted">
-                        {p.reasons.join(', ')}
-                        {p.lookaheadEV != null && (
-                          <span> / EV {(p.lookaheadEV * 100).toFixed(1)}%</span>
-                        )}
+                        <span>{p.reasons.slice(0, 3).join(', ')}</span>
+                        {p.buildProfile && <span className="block text-[10px] uppercase text-nexus-lime/75">{p.buildProfile.damage} {p.buildProfile.archetype}</span>}
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
           </section>
+        </div>
+      )}
+
+      {itemMatrixOpen && activeItemMatrixPlan?.itemPlan && (
+        <div className="nexus-overlay-nodrag nexus-matrix-stage absolute inset-0 z-40 flex items-center justify-center p-5 pointer-events-auto">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-transparent"
+            aria-label="Close item matrix"
+            onClick={() => {
+              setItemMatrixOpen(false)
+              setItemMatrixPlan(null)
+            }}
+          />
+          <DraftItemMatrixView
+            className="relative h-full w-full overflow-hidden"
+            itemPlan={activeItemMatrixPlan.itemPlan}
+            championName={activeItemMatrixPlan.championName}
+            ddragonVersion={d.dataDragonVersion}
+            onClose={() => {
+              setItemMatrixOpen(false)
+              setItemMatrixPlan(null)
+            }}
+          />
         </div>
       )}
 
@@ -1129,7 +1149,21 @@ export function OverlayPanel() {
               disabled={d.suggestions.length === 0}
               aria-expanded={pickMatrixOpen}
             >
-              Expand
+              Champs
+            </button>
+            <button
+              type="button"
+              className="nexus-focus border border-nexus-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide text-nexus-muted hover:border-nexus-lime/50 hover:text-nexus-text disabled:opacity-45"
+              onClick={() => {
+                if (topItemPlan) {
+                  setItemMatrixPlan(topItemPlan)
+                  setItemMatrixOpen(true)
+                }
+              }}
+              disabled={!topItemPlan?.itemPlan?.matrixRows?.length}
+              aria-expanded={itemMatrixOpen}
+            >
+              Items
             </button>
           </div>
           {topPicks.length === 0 && (
@@ -1257,6 +1291,24 @@ export function OverlayPanel() {
                         </div>
                       </details>
                     )}
+                    {matchupPlan?.itemPlan && (
+                      <div>
+                        <div className="mb-1 flex justify-end">
+                          <button
+                            type="button"
+                            className="nexus-focus border border-nexus-line/70 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85 hover:border-nexus-lime/50 disabled:opacity-45"
+                            disabled={!matchupPlan.itemPlan.matrixRows?.length}
+                            onClick={() => {
+                              setItemMatrixPlan(matchupPlan)
+                              setItemMatrixOpen(true)
+                            }}
+                          >
+                            Matrix
+                          </button>
+                        </div>
+                        <OverlayItemPlan itemPlan={matchupPlan.itemPlan} ddragonVersion={d.dataDragonVersion} compact limit={2} />
+                      </div>
+                    )}
                   <details className="group border border-nexus-line/65 bg-nexus-bg/25 font-mono text-[11px] leading-snug text-nexus-text/75">
                     <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
                       <span>Tips</span>
@@ -1269,7 +1321,6 @@ export function OverlayPanel() {
                           <span className="text-nexus-lime/80">Items:</span> {p.buildProfile.itemHint}
                         </div>
                       )}
-                      <OverlayItemPlan itemPlan={matchupPlan?.itemPlan} ddragonVersion={d.dataDragonVersion} compact limit={2} />
                       {p.buildProfile && (
                         <div className="mt-1 text-nexus-muted">
                           {p.buildProfile.archetype}

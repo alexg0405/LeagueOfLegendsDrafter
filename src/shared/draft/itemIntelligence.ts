@@ -51,6 +51,17 @@ export type AdaptiveItemContext = {
     mobility: number
     burst: number
   }
+  enemyDetails?: {
+    name: string
+    threat: 'ad' | 'ap' | 'hybrid' | 'utility'
+    classes: string[]
+    hardCc: boolean
+    healing: boolean
+    shielding: boolean
+    mobility: boolean
+    burst: boolean
+    poke: boolean
+  }[]
   laneThreat: 'ad' | 'ap' | 'hybrid' | 'utility' | null
   fallback: Pick<DraftItemPlan, 'core' | 'boots' | 'defensive' | 'situational' | 'notes'>
 }
@@ -203,6 +214,29 @@ function tagReason(tag: string): string {
   }
 }
 
+function goodAgainst(profile: ItemProfile, ctx: AdaptiveItemContext): string[] {
+  const targets: string[] = []
+  for (const enemy of ctx.enemyDetails ?? []) {
+    const classes = new Set(enemy.classes)
+    const p = profile.tags
+    const matches =
+      (p.includes('mr') && (enemy.threat === 'ap' || enemy.threat === 'hybrid' || classes.has('mage'))) ||
+      (p.includes('armor') && (enemy.threat === 'ad' || enemy.threat === 'hybrid' || classes.has('marksman') || classes.has('assassin') || classes.has('fighter'))) ||
+      (p.includes('anti-heal') && (enemy.healing || classes.has('support') || classes.has('fighter') || classes.has('tank'))) ||
+      (p.includes('anti-shield') && (enemy.shielding || classes.has('support'))) ||
+      (p.includes('anti-tank') && (classes.has('tank') || classes.has('fighter'))) ||
+      (p.includes('armor-pen') && (classes.has('tank') || classes.has('fighter') || enemy.threat === 'ad')) ||
+      (p.includes('magic-pen') && (classes.has('tank') || classes.has('fighter') || enemy.threat === 'ap' || enemy.threat === 'hybrid')) ||
+      (p.includes('anti-burst') && (enemy.burst || classes.has('assassin') || enemy.mobility)) ||
+      (p.includes('anti-cc') && (enemy.hardCc || classes.has('tank') || classes.has('support'))) ||
+      (p.includes('sustain') && (enemy.poke || classes.has('mage') || classes.has('marksman')))
+    if (matches && !targets.includes(enemy.name)) {
+      targets.push(enemy.name)
+    }
+  }
+  return targets.slice(0, 4)
+}
+
 function buildReason(profile: ItemProfile, ctx: AdaptiveItemContext, score: number): string {
   const reasons: string[] = []
   for (const tag of ['anti-heal', 'anti-shield', 'anti-tank', 'anti-burst', 'anti-cc', 'armor', 'mr', 'sustain']) {
@@ -315,6 +349,7 @@ export function buildAdaptiveItemPlan(items: readonly ItemLite[], ctx: AdaptiveI
   const matrixRows = scored.slice(0, 60).map(({ item, profile, score }) => ({
     ...itemRef(item, score, profile, buildReason(profile, ctx, score)),
     goodInto: profile.tags.map(tagReason).filter((value, idx, arr) => arr.indexOf(value) === idx).slice(0, 4),
+    goodAgainst: goodAgainst(profile, ctx),
     avoidWhen: avoidWhen(profile, ctx)
   }))
   const starting = topRefs(matrixRows, 'starter', 2)

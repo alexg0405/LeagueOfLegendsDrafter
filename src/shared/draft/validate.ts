@@ -215,7 +215,7 @@ function isDraftItemPlan(x: unknown): x is DraftItemPlan {
         return false
       }
       const r = row as Record<string, unknown>
-      return isStringArray(r.goodInto, 8) && isStringArray(r.avoidWhen, 8)
+      return isStringArray(r.goodInto, 8) && (r.goodAgainst == null || isStringArray(r.goodAgainst, 8)) && isStringArray(r.avoidWhen, 8)
     })
   const isThreats = (rows: unknown, max: number): boolean =>
     Array.isArray(rows) &&
@@ -279,7 +279,7 @@ function isDraftIntel(x: unknown): x is DraftIntel {
   if (typeof c.winCondition !== 'string') {
     return false
   }
-  if (!Array.isArray(o.matchupPlans) || o.matchupPlans.length > 8) {
+  if (!Array.isArray(o.matchupPlans) || o.matchupPlans.length > 16) {
     return false
   }
   for (const row of o.matchupPlans) {

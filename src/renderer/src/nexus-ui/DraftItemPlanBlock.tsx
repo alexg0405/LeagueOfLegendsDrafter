@@ -14,6 +14,7 @@ type DraftItemPlanBlockProps = {
   labelClassName?: string
   noteClassName?: string
   separator?: string
+  onOpenMatrix?: () => void
 }
 
 function ItemIcon({
@@ -69,11 +70,12 @@ export function DraftItemPlanBlock({
   limit = 3,
   ddragonVersion,
   compact = false,
-  showMatrix = true,
+  showMatrix = false,
   className = 'mt-1.5 grid gap-0.5 text-nexus-muted/90',
   labelClassName = 'text-nexus-lime/80',
   noteClassName = 'text-nexus-muted/75',
-  separator = ':'
+  separator = ':',
+  onOpenMatrix
 }: DraftItemPlanBlockProps) {
   const [matrixFilter, setMatrixFilter] = useState('all')
   const matrixRows = itemPlan?.matrixRows ?? []
@@ -117,15 +119,24 @@ export function DraftItemPlanBlock({
       <div className="mt-2 grid gap-2 rounded-md border border-nexus-line/60 bg-nexus-bg/30 p-2 text-nexus-muted/90">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[10px] uppercase tracking-[0.14em] text-nexus-lime/80">Suggested build</span>
-          {itemPlan.threatSummary?.length ? (
-            <span className="flex flex-wrap gap-1">
-              {itemPlan.threatSummary.slice(0, 6).map((threat) => (
+          <span className="flex flex-wrap items-center gap-1">
+            {itemPlan.threatSummary?.length
+              ? itemPlan.threatSummary.slice(0, 6).map((threat) => (
                 <span key={threat.label} className={`border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.1em] ${threatToneClass(threat.tone)}`} title={threat.reason}>
                   {threat.label}
                 </span>
-              ))}
-            </span>
-          ) : null}
+              ))
+              : null}
+            {onOpenMatrix && matrixRows.length > 0 ? (
+              <button
+                type="button"
+                className="nexus-focus border border-nexus-line/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/90 hover:border-nexus-lime/50"
+                onClick={onOpenMatrix}
+              >
+                Matrix
+              </button>
+            ) : null}
+          </span>
         </div>
         <div className="grid gap-2">
           <ItemRow label="Start" items={itemPlan.starting} ddragonVersion={ddragonVersion} empty={itemPlan.core} />

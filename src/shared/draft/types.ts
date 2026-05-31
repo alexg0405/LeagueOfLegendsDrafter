@@ -89,6 +89,7 @@ export type DraftItemRef = {
 
 export type DraftItemMatrixRow = DraftItemRef & {
   goodInto: string[]
+  goodAgainst?: string[]
   avoidWhen: string[]
 }
 

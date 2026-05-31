@@ -15,6 +15,7 @@ import {
   type RiotPlatform
 } from '@shared/draft'
 import { copyDraftSource } from './nexusCopy'
+import { DraftItemMatrixView } from './DraftItemMatrixView'
 import { DraftItemPlanBlock as ItemPlanBlock } from './DraftItemPlanBlock'
 import { MicroLabel } from './NexusTick'
 import { EASING, useNexusMotion } from './nexusMotion'
@@ -232,6 +233,8 @@ export function NexusOperationsView({
   const [poolUndoStack, setPoolUndoStack] = useState<PoolUndoState[]>([])
   const [poolTrashActive, setPoolTrashActive] = useState(false)
   const [poolActionStatus, setPoolActionStatus] = useState<string | null>(null)
+  const [itemMatrixOpen, setItemMatrixOpen] = useState(false)
+  const [itemMatrixPlan, setItemMatrixPlan] = useState<DraftIntel['matchupPlans'][number] | null>(null)
   useEffect(() => {
     if (!playerPoolProfile) {
       return
@@ -251,6 +254,7 @@ export function NexusOperationsView({
     })
   }
   const topPlan = draftIntel?.matchupPlans[0] ?? null
+  const activeItemMatrixPlan = itemMatrixPlan ?? topPlan
   const importedPreferenceById = new Map(
     (playerPoolProfile?.entries ?? []).map((entry) => [String(entry.championId), entry.preference] as const)
   )
@@ -299,6 +303,29 @@ export function NexusOperationsView({
 
   return (
     <div className="w-full max-w-4xl mx-auto px-3 sm:px-5 lg:px-6 py-2 sm:py-3 pb-10 text-nexus-text nexus-ops-scroll">
+      {itemMatrixOpen && activeItemMatrixPlan?.itemPlan ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="Close item matrix"
+            onClick={() => {
+              setItemMatrixOpen(false)
+              setItemMatrixPlan(null)
+            }}
+          />
+          <DraftItemMatrixView
+            className="relative z-10 max-h-[92vh] w-full max-w-6xl overflow-hidden"
+            itemPlan={activeItemMatrixPlan.itemPlan}
+            championName={activeItemMatrixPlan.championName}
+            ddragonVersion={ddragonVersion}
+            onClose={() => {
+              setItemMatrixOpen(false)
+              setItemMatrixPlan(null)
+            }}
+          />
+        </div>
+      ) : null}
       <CollapsibleOpsSection
         id="CL_01"
         kicker="league // link"
@@ -454,6 +481,19 @@ export function NexusOperationsView({
             <div>
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <p className="m-0 text-nexus-lime/85 uppercase tracking-[0.12em] text-xs">Top matchup plan</p>
+                <button
+                  type="button"
+                  className={btnPrimary + ' px-3 py-1.5 text-[10px]'}
+                  disabled={!topPlan?.itemPlan?.matrixRows?.length}
+                  onClick={() => {
+                    if (topPlan) {
+                      setItemMatrixPlan(topPlan)
+                      setItemMatrixOpen(true)
+                    }
+                  }}
+                >
+                  Item matrix
+                </button>
               </div>
               {topPlan ? (
                 <div className="border border-nexus-line/60 bg-nexus-bg/25 px-3 py-2 text-nexus-muted leading-relaxed">
@@ -463,7 +503,15 @@ export function NexusOperationsView({
                   <p className="m-0 mt-1">Start: {topPlan.startingItem}</p>
                   <p className="m-0">Recall: {topPlan.firstRecall}</p>
                   <p className="m-0">Plan: {topPlan.gamePlan}</p>
-                  <ItemPlanBlock itemPlan={topPlan.itemPlan} ddragonVersion={ddragonVersion} limit={4} />
+                  <ItemPlanBlock
+                    itemPlan={topPlan.itemPlan}
+                    ddragonVersion={ddragonVersion}
+                    limit={4}
+                    onOpenMatrix={() => {
+                      setItemMatrixPlan(topPlan)
+                      setItemMatrixOpen(true)
+                    }}
+                  />
                 </div>
               ) : (
                 <p className="m-0 text-nexus-muted">No pick plan yet.</p>
@@ -717,7 +765,7 @@ export function NexusOperationsView({
           {suggestions.map((s) => {
             const championKey = championKeyById.get(s.championId)
             const imageUrl = ddragonVersion && championKey ? ddragonChampionImageUrl(ddragonVersion, championKey) : null
-            const plan = draftIntel?.matchupPlans.find((row) => row.championId === s.championId) ?? null
+            const matchupPlan = draftIntel?.matchupPlans.find((plan) => plan.championId === s.championId) ?? null
             return (
             <li key={s.championId} className="border-b border-nexus-line/40 pb-3 last:border-0 last:pb-0">
               <div className="flex gap-2">
@@ -774,8 +822,18 @@ export function NexusOperationsView({
                       <span className="text-nexus-lime/75 uppercase">Items</span> · {s.buildProfile.itemHint}
                     </div>
                   )}
-                  <ItemPlanBlock itemPlan={plan?.itemPlan} ddragonVersion={ddragonVersion} limit={4} />
                 </div>
+              )}
+              {matchupPlan?.itemPlan && (
+                <ItemPlanBlock
+                  itemPlan={matchupPlan.itemPlan}
+                  ddragonVersion={ddragonVersion}
+                  limit={3}
+                  onOpenMatrix={() => {
+                    setItemMatrixPlan(matchupPlan)
+                    setItemMatrixOpen(true)
+                  }}
+                />
               )}
                 </div>
               </div>

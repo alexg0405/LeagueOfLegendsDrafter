@@ -435,6 +435,23 @@ function teamKitSignals(team: TeamRead, championMetaById: ReadonlyMap<number, Ch
   return signals
 }
 
+function teamItemTargets(team: TeamRead, championMetaById: ReadonlyMap<number, ChampionMeta> | null | undefined) {
+  return team.slots.map((slot) => {
+    const kit = championKitProfileFromTexts(kitTexts(championMetaById?.get(slot.championId)))
+    return {
+      name: slot.name,
+      threat: slot.threat,
+      classes: Array.from(slot.classes),
+      hardCc: kit.hardCc,
+      healing: kit.heal || kit.sustain,
+      shielding: kit.shield,
+      mobility: kit.mobility,
+      burst: kit.burst || kit.execute,
+      poke: kit.poke
+    }
+  })
+}
+
 function canAddMagicDamage(s: PickSuggestion): boolean {
   const dmg = s.buildProfile?.damage
   return dmg === 'ap' || dmg === 'mixed' || dmg === 'flex' || hasSuggestionClass(s, 'mage')
@@ -654,6 +671,7 @@ function itemPlan(
       mobility: enemyKit.mobility,
       burst: enemyKit.burst
     },
+    enemyDetails: teamItemTargets(enemy, championMetaById),
     laneThreat,
     fallback
   })
@@ -698,7 +716,7 @@ function matchupPlans(
   const laneOpponent = likelyLaneOpponent(snapshot, myRole, enemyRoleInference)
   const laneOpponentId = laneOpponent?.championId ?? null
   const laneOpponentName = laneOpponentId != null ? laneOpponent?.championName ?? championName(laneOpponentId, idToName) : null
-  return suggestions.slice(0, 5).map((s) => ({
+  return suggestions.slice(0, 12).map((s) => ({
     championId: s.championId,
     championName: s.championName,
     laneOpponentId,

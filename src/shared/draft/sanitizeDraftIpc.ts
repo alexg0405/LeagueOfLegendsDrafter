@@ -185,7 +185,7 @@ function sanitizeDraftItemPlan(plan: unknown): DraftItemPlan | undefined {
     Array.isArray(rows) ? rows.map(itemRef).filter((row): row is NonNullable<ReturnType<typeof itemRef>> => row != null && row.itemId > 0).slice(0, max) : undefined
   const matrixRows: DraftItemMatrixRow[] | undefined = Array.isArray(p.matrixRows)
     ? p.matrixRows
-        .map((row) => {
+        .map((row): DraftItemMatrixRow | null => {
           const base = itemRef(row)
           if (!base || row == null || typeof row !== 'object') {
             return null
@@ -194,6 +194,7 @@ function sanitizeDraftItemPlan(plan: unknown): DraftItemPlan | undefined {
           return {
             ...base,
             goodInto: sanitizeStringArray(r.goodInto, 8),
+            goodAgainst: sanitizeStringArray(r.goodAgainst, 8),
             avoidWhen: sanitizeStringArray(r.avoidWhen, 8)
           }
         })
@@ -246,7 +247,7 @@ function sanitizeDraftIntel(intel: DraftUpdate['draftIntel']): DraftIntel | null
             reason: text(row.reason)
           }))
           .filter((row) => row.championId > 0)
-          .slice(0, 8)
+          .slice(0, 16)
       : [],
     compIdentity: {
       ally: Array.isArray(i.compIdentity?.ally) ? i.compIdentity.ally.filter((x): x is string => typeof x === 'string').slice(0, 8) : [],

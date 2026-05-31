@@ -8,6 +8,7 @@ const repoRoot = resolve(__dirname, '..')
 const releaseDir = resolve(repoRoot, 'release')
 const publicDownloadsDir = resolve(repoRoot, 'src/renderer/public/downloads')
 const latestYmlPath = resolve(releaseDir, 'latest.yml')
+const packageJsonPath = resolve(repoRoot, 'package.json')
 
 function field(text, name) {
   const match = new RegExp(`^${name}:\\s*(.+)$`, 'm').exec(text)
@@ -27,14 +28,19 @@ function sourcePathFor(fileName) {
 }
 
 const latestYml = await readFile(latestYmlPath, 'utf8')
+const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'))
 const updatePath = field(latestYml, 'path')
 if (!updatePath) {
   throw new Error('release/latest.yml is missing a path field.')
 }
+const portablePath = `Nexus-Draft-Portable-${packageJson.version}.exe`
 
 await mkdir(publicDownloadsDir, { recursive: true })
 await copyFile(latestYmlPath, resolve(publicDownloadsDir, 'latest.yml'))
 await copyFile(sourcePathFor(updatePath), resolve(publicDownloadsDir, basename(updatePath)))
+if (existsSync(sourcePathFor(portablePath))) {
+  await copyFile(sourcePathFor(portablePath), resolve(publicDownloadsDir, basename(portablePath)))
+}
 
 const blockmapName = `${updatePath}.blockmap`
 const blockmapSource = sourcePathFor(blockmapName)

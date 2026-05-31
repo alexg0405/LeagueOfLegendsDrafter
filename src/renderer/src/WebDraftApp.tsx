@@ -69,7 +69,8 @@ const MAX_WEB_ROLLOUTS = 200
 const LS_WEB_CHAMPION_POOL_PREFS = 'nexusdraft.web.v1.championPoolPrefs'
 const LS_WEB_PLAYER_POOL_PROFILE = 'nexusdraft.web.v1.playerChampionPoolProfile'
 const LS_WEB_RECOMMENDATION_POOL_MODE = 'nexusdraft.web.v1.recommendationPoolMode'
-const EXE_DOWNLOAD_URL = '/downloads/Nexus-Draft-Setup-3.11.0.exe'
+const EXE_DOWNLOAD_FILE = 'Nexus-Draft-Portable-3.11.0.exe'
+const EXE_DOWNLOAD_URL = `/downloads/${EXE_DOWNLOAD_FILE}`
 const GITHUB_PROFILE_URL = 'https://github.com/alexg0405'
 const GITHUB_REPO_URL = 'https://github.com/alexg0405/NexusDraftFeedback'
 const GITHUB_ISSUE_URL = `${GITHUB_REPO_URL}/issues/new`
@@ -1836,7 +1837,7 @@ export function WebDraftApp() {
               ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
-              <a className={buttonClass} href={EXE_DOWNLOAD_URL} download="Nexus-Draft-Setup-3.11.0.exe">
+              <a className={buttonClass} href={EXE_DOWNLOAD_URL} download={EXE_DOWNLOAD_FILE}>
                 Download EXE
               </a>
               <a
@@ -2422,7 +2423,7 @@ export function WebDraftApp() {
               <p className="font-mono text-sm text-nexus-muted leading-relaxed">
                 Use the Windows desktop app for League Client API detection, automatic role parsing, and the always-on-top overlay.
               </p>
-              <a className={buttonClass + ' mt-3'} href={EXE_DOWNLOAD_URL} download="Nexus-Draft-Setup-3.11.0.exe">
+              <a className={buttonClass + ' mt-3'} href={EXE_DOWNLOAD_URL} download={EXE_DOWNLOAD_FILE}>
                 Download EXE
               </a>
               <div className="mt-4 flex items-center gap-2 border-t border-nexus-line/50 pt-3 text-nexus-muted">

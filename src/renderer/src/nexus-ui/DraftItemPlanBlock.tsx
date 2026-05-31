@@ -20,29 +20,35 @@ type DraftItemPlanBlockProps = {
 function ItemIcon({
   item,
   ddragonVersion,
-  onOpenMatrix
+  onOpenMatrix,
+  iconOnly = false
 }: {
   item: DraftItemRef
   ddragonVersion?: string | null
   onOpenMatrix?: () => void
+  iconOnly?: boolean
 }) {
   const src = ddragonVersion && ddragonVersion[0] !== '(' ? ddragonItemImageUrl(ddragonVersion, item.itemId) : null
-  const title = `${item.name} (${item.cost}g): ${item.reason}`
+  const reason = item.reason.replace(/U\.GG default build path(?:\s*\([^)]*\))?/gi, 'Default build path')
+  const title = `${item.name} (${item.cost}g): ${reason}`
   const inner = (
     <>
       {src ? (
-        <img className="h-7 w-7 shrink-0 border border-nexus-line/70 object-cover" src={src} alt="" width={28} height={28} />
+        <img className="h-7 w-7 shrink-0 border border-nexus-line/70 object-cover" src={src} alt={iconOnly ? item.name : ''} width={28} height={28} />
       ) : (
         <span className="h-7 w-7 shrink-0 border border-nexus-line/70 bg-nexus-surface-2" aria-hidden />
       )}
-      <span className="min-w-0 truncate text-[10px] text-nexus-text/85">{item.name}</span>
+      {iconOnly ? null : <span className="min-w-0 truncate text-[10px] text-nexus-text/85">{item.name}</span>}
     </>
   )
+  const className = iconOnly
+    ? 'nexus-focus inline-flex h-9 w-9 shrink-0 items-center justify-center border border-nexus-line/70 bg-nexus-bg/45 p-0.5 hover:border-nexus-lime/50 hover:bg-nexus-lime/10'
+    : 'nexus-focus inline-flex min-w-0 items-center gap-1.5 border border-nexus-line/70 bg-nexus-bg/45 px-1.5 py-1 text-left hover:border-nexus-lime/50 hover:bg-nexus-lime/10'
   if (onOpenMatrix) {
     return (
       <button
         type="button"
-        className="nexus-focus inline-flex min-w-0 items-center gap-1.5 border border-nexus-line/70 bg-nexus-bg/45 px-1.5 py-1 text-left hover:border-nexus-lime/50 hover:bg-nexus-lime/10"
+        className={className}
         title={`${title}. Open item matrix.`}
         onClick={onOpenMatrix}
       >
@@ -51,7 +57,7 @@ function ItemIcon({
     )
   }
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 border border-nexus-line/70 bg-nexus-bg/45 px-1.5 py-1" title={title}>
+    <span className={className.replace('nexus-focus ', '')} title={title}>
       {inner}
     </span>
   )
@@ -126,7 +132,7 @@ export function DraftItemPlanBlock({
         <div className="flex min-w-0 flex-wrap gap-1.5">
           {buildRows.length ? (
             buildRows.map((item) => (
-              <ItemIcon key={`build-${item.itemId}`} item={item} ddragonVersion={ddragonVersion} onOpenMatrix={onOpenMatrix} />
+              <ItemIcon key={`build-${item.itemId}`} item={item} ddragonVersion={ddragonVersion} onOpenMatrix={onOpenMatrix} iconOnly />
             ))
           ) : (
             <span className="text-nexus-muted/80">{itemPlan.core}</span>

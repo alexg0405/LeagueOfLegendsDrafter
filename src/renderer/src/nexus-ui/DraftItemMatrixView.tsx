@@ -75,6 +75,23 @@ function shortTags(row: DraftItemMatrixRow): string {
   return tags.slice(0, 4).join(', ') || row.goodInto.slice(0, 3).join(', ') || '-'
 }
 
+function cleanReason(reason: string): string {
+  return reason.replace(/U\.GG default build path(?:\s*\([^)]*\))?/gi, 'Default build path')
+}
+
+function targetSourceLabel(source: NonNullable<DraftItemMatrixRow['enemyTargets']>[number]['source']): string {
+  switch (source) {
+    case 'defaultBuild':
+      return 'default build path'
+    case 'teamThreat':
+      return 'team threat'
+    case 'kit':
+      return 'kit threat'
+    default:
+      return source
+  }
+}
+
 function CounterTargets({
   row,
   championImageUrl
@@ -91,7 +108,7 @@ function CounterTargets({
       <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
         {targets.map((target) => {
           const src = championImageUrl?.(target.championId) ?? null
-          const title = `${target.championName}: ${target.reason} (${target.source})`
+          const title = `${target.championName}: ${target.reason} (${targetSourceLabel(target.source)})`
           return (
             <span key={`${row.itemId}-${target.championId}-${target.reason}`} className="inline-flex items-center gap-1 text-nexus-muted/95" title={title}>
               {src ? (
@@ -126,6 +143,7 @@ export function DraftItemMatrixView({
   const selectablePlans = useMemo(() => (plans ?? []).filter((plan) => plan.itemPlan?.matrixRows?.length), [plans])
   const initialChampionId = selectedChampionId ?? championId ?? selectablePlans[0]?.championId ?? null
   const [activeChampionId, setActiveChampionId] = useState<number | null>(initialChampionId)
+  const [championQuery, setChampionQuery] = useState('')
 
   useEffect(() => {
     setActiveChampionId(selectedChampionId ?? championId ?? selectablePlans[0]?.championId ?? null)
@@ -137,6 +155,24 @@ export function DraftItemMatrixView({
   const rows = useMemo(() => matrixRows(activeItemPlan).slice(0, maxRows), [activeItemPlan, maxRows])
   const [filter, setFilter] = useState<'all' | 'default' | 'situational'>('all')
   const visibleRows = rows.filter((row) => filter === 'all' || (filter === 'default' ? row.buildDefault : !row.buildDefault))
+  const normalizedChampionQuery = championQuery.trim().toLowerCase()
+  const championMatches = useMemo(() => {
+    if (!normalizedChampionQuery) {
+      return selectablePlans
+    }
+    return selectablePlans.filter((plan) => plan.championName.toLowerCase().includes(normalizedChampionQuery))
+  }, [normalizedChampionQuery, selectablePlans])
+  const visibleChampionMatches = useMemo(() => {
+    if (normalizedChampionQuery) {
+      return championMatches.slice(0, 14)
+    }
+    const active = activePlan ? [activePlan] : []
+    return [...active, ...selectablePlans.filter((plan) => plan.championId !== activePlan?.championId)].slice(0, 10)
+  }, [activePlan, championMatches, normalizedChampionQuery, selectablePlans])
+  const selectPlan = (plan: MatchupPlan) => {
+    setActiveChampionId(plan.championId)
+    setChampionQuery('')
+  }
 
   return (
     <section className={`border border-nexus-lime/45 bg-nexus-surface/95 shadow-[0_0_42px_rgba(29,212,168,0.18)] ${className}`}>
@@ -172,26 +208,56 @@ export function DraftItemMatrixView({
         </div>
       </header>
       {selectablePlans.length > 1 ? (
-        <div className="flex gap-1.5 overflow-x-auto border-b border-nexus-line/70 bg-nexus-bg/70 px-3 py-2">
-          {selectablePlans.map((plan) => {
-            const src = championImageUrl?.(plan.championId) ?? null
-            const active = plan.championId === activePlan?.championId
-            return (
-              <button
-                key={`item-matrix-champion-${plan.championId}`}
-                type="button"
-                className={
-                  active
-                    ? 'nexus-focus inline-flex shrink-0 items-center gap-1.5 border border-nexus-lime/70 bg-nexus-lime/15 px-2 py-1 text-left font-mono text-[11px] text-nexus-lime'
-                    : 'nexus-focus inline-flex shrink-0 items-center gap-1.5 border border-nexus-line/70 px-2 py-1 text-left font-mono text-[11px] text-nexus-muted hover:border-nexus-lime/45 hover:text-nexus-text'
-                }
-                onClick={() => setActiveChampionId(plan.championId)}
-              >
-                {src ? <img className="h-6 w-6 border border-nexus-line/60 object-cover" src={src} alt="" width={24} height={24} /> : null}
-                <span>{plan.championName}</span>
-              </button>
-            )
-          })}
+        <div className="grid gap-2 border-b border-nexus-line/70 bg-nexus-bg/70 px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="min-w-0 flex-1">
+              <span className="sr-only">Champion lookup</span>
+              <input
+                className="nexus-focus w-full min-w-[12rem] border border-nexus-line/70 bg-nexus-bg px-2.5 py-1.5 font-mono text-xs text-nexus-text placeholder:text-nexus-muted/70"
+                value={championQuery}
+                onChange={(event) => setChampionQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') {
+                    return
+                  }
+                  const first = championMatches[0]
+                  if (!first) {
+                    return
+                  }
+                  event.preventDefault()
+                  selectPlan(first)
+                }}
+                placeholder="Lookup champion..."
+              />
+            </label>
+            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-muted">
+              {selectablePlans.length} builds
+            </span>
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto">
+            {visibleChampionMatches.map((plan) => {
+              const src = championImageUrl?.(plan.championId) ?? null
+              const active = plan.championId === activePlan?.championId
+              return (
+                <button
+                  key={`item-matrix-champion-${plan.championId}`}
+                  type="button"
+                  className={
+                    active
+                      ? 'nexus-focus inline-flex shrink-0 items-center gap-1.5 border border-nexus-lime/70 bg-nexus-lime/15 px-2 py-1 text-left font-mono text-[11px] text-nexus-lime'
+                      : 'nexus-focus inline-flex shrink-0 items-center gap-1.5 border border-nexus-line/70 px-2 py-1 text-left font-mono text-[11px] text-nexus-muted hover:border-nexus-lime/45 hover:text-nexus-text'
+                  }
+                  onClick={() => selectPlan(plan)}
+                >
+                  {src ? <img className="h-6 w-6 border border-nexus-line/60 object-cover" src={src} alt="" width={24} height={24} /> : null}
+                  <span>{plan.championName}</span>
+                </button>
+              )
+            })}
+            {visibleChampionMatches.length === 0 ? (
+              <span className="px-1 py-1.5 font-mono text-xs text-nexus-muted">No matching suggested champion.</span>
+            ) : null}
+          </div>
         </div>
       ) : null}
       <div className="max-h-[72vh] overflow-auto">
@@ -240,7 +306,7 @@ export function DraftItemMatrixView({
                     <td className="border-b border-nexus-line/45 px-2 py-2">
                       <CounterTargets row={row} championImageUrl={championImageUrl} />
                     </td>
-                    <td className="border-b border-nexus-line/45 px-2 py-2 text-nexus-text/80">{row.reason}</td>
+                    <td className="border-b border-nexus-line/45 px-2 py-2 text-nexus-text/80">{cleanReason(row.reason)}</td>
                     <td className="border-b border-nexus-line/45 px-2 py-2 text-nexus-muted">{shortTags(row)}</td>
                   </tr>
                 )

@@ -29,7 +29,7 @@ function ref(row: ItemLite, phase: DraftItemRef['phase'] = 'completed'): DraftIt
   return {
     itemId: row.id,
     name: row.name,
-    reason: 'U.GG default build path',
+    reason: 'Default build path',
     score: 100,
     tags: classifyItem(row).tags,
     phase,

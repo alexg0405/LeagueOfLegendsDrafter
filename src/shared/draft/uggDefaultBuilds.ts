@@ -41,11 +41,11 @@ function phaseFor(item: ItemLite, bucket: 'starting' | 'boots' | 'core' | 'final
   return item.into?.length ? 'component' : 'completed'
 }
 
-function refFor(item: ItemLite, bucket: 'starting' | 'boots' | 'core' | 'final', score: number, sourceUrl: string): DraftItemRef {
+function refFor(item: ItemLite, bucket: 'starting' | 'boots' | 'core' | 'final', score: number): DraftItemRef {
   return {
     itemId: item.id,
     name: item.name,
-    reason: `U.GG default build path (${sourceUrl})`,
+    reason: 'Default build path',
     score,
     tags: item.tags,
     phase: phaseFor(item, bucket),
@@ -56,13 +56,12 @@ function refFor(item: ItemLite, bucket: 'starting' | 'boots' | 'core' | 'final',
 function refsFor(
   ids: readonly number[] | undefined,
   byId: ReadonlyMap<number, ItemLite>,
-  bucket: 'starting' | 'boots' | 'core' | 'final',
-  sourceUrl: string
+  bucket: 'starting' | 'boots' | 'core' | 'final'
 ): DraftItemRef[] {
   return (ids ?? [])
     .map((id, idx) => {
       const item = byId.get(id)
-      return item ? refFor(item, bucket, 100 - idx, sourceUrl) : null
+      return item ? refFor(item, bucket, 100 - idx) : null
     })
     .filter((row): row is DraftItemRef => row != null)
 }
@@ -95,10 +94,10 @@ export function getUggDefaultItemBuild(
     return null
   }
   const byId = new Map(itemCatalog.map((item) => [item.id, item] as const))
-  const starting = refsFor(row.starting, byId, 'starting', row.sourceUrl)
-  const boots = refsFor(row.boots, byId, 'boots', row.sourceUrl)
-  const core = refsFor(row.core, byId, 'core', row.sourceUrl)
-  const final = refsFor(row.final, byId, 'final', row.sourceUrl)
+  const starting = refsFor(row.starting, byId, 'starting')
+  const boots = refsFor(row.boots, byId, 'boots')
+  const core = refsFor(row.core, byId, 'core')
+  const final = refsFor(row.final, byId, 'final')
   const defaultItemIds = dedupeIds([...starting, ...boots, ...core, ...final])
   if (defaultItemIds.length === 0) {
     return null

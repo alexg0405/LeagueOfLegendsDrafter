@@ -1286,7 +1286,7 @@ export function WebDraftApp() {
       myRole: role,
       snapshot,
       idToName: nameById,
-      maxResults: 12,
+      maxResults: 40,
       dataDragonVersion: ddragonVersion,
       monteCarloSamples: rollouts,
       rngSeed: 0x4d_44_57_45,

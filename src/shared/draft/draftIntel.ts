@@ -24,6 +24,7 @@ import type {
 } from './types'
 
 const ROLE_KEYS = ['top', 'jungle', 'middle', 'bottom', 'support'] as const
+const MATCHUP_PLAN_LIMIT = 40
 const PATCH_DATA_NOTE = 'Current-patch Emerald+ public meta seed; early-patch winrates can move as games accumulate.'
 
 type ChampionMeta = { tags: string[]; partype: string; passive?: ChampionSpellLite; spells?: ChampionSpellLite[] }
@@ -734,7 +735,7 @@ function matchupPlans(
   const laneOpponent = likelyLaneOpponent(snapshot, myRole, enemyRoleInference)
   const laneOpponentId = laneOpponent?.championId ?? null
   const laneOpponentName = laneOpponentId != null ? laneOpponent?.championName ?? championName(laneOpponentId, idToName) : null
-  return suggestions.slice(0, 12).map((s) => ({
+  return suggestions.slice(0, MATCHUP_PLAN_LIMIT).map((s) => ({
     championId: s.championId,
     championName: s.championName,
     laneOpponentId,

@@ -70,8 +70,6 @@ const LS_WEB_CHAMPION_POOL_PREFS = 'nexusdraft.web.v1.championPoolPrefs'
 const LS_WEB_PLAYER_POOL_PROFILE = 'nexusdraft.web.v1.playerChampionPoolProfile'
 const LS_WEB_RECOMMENDATION_POOL_MODE = 'nexusdraft.web.v1.recommendationPoolMode'
 const EXE_DOWNLOAD_URL = '/downloads/Nexus-Draft-Setup-3.11.0.exe'
-const VIRUSTOTAL_SCAN_URL =
-  'https://www.virustotal.com/gui/file-analysis/OWQyYjU0YWQwNzU0NmE5ZTgzY2QwN2QxMWQyZWZjYzc6MTc4MDE2NTI4Mg=='
 const GITHUB_PROFILE_URL = 'https://github.com/alexg0405'
 const GITHUB_REPO_URL = 'https://github.com/alexg0405/NexusDraftFeedback'
 const GITHUB_ISSUE_URL = `${GITHUB_REPO_URL}/issues/new`
@@ -1843,14 +1841,6 @@ export function WebDraftApp() {
               </a>
               <a
                 className="nexus-focus inline-flex items-center justify-center border border-nexus-line px-5 py-2.5 font-display text-xs sm:text-sm tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10"
-                href={VIRUSTOTAL_SCAN_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                VirusTotal Scan
-              </a>
-              <a
-                className="nexus-focus inline-flex items-center justify-center border border-nexus-line px-5 py-2.5 font-display text-xs sm:text-sm tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10"
                 href="/ask"
                 onClick={(event) => {
                   event.preventDefault()
@@ -2434,14 +2424,6 @@ export function WebDraftApp() {
               </p>
               <a className={buttonClass + ' mt-3'} href={EXE_DOWNLOAD_URL} target="_blank" rel="noopener noreferrer">
                 Download EXE
-              </a>
-              <a
-                className="nexus-focus mt-2 inline-flex items-center justify-center border border-nexus-line px-5 py-2.5 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10"
-                href={VIRUSTOTAL_SCAN_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                View Safety Scan
               </a>
               <div className="mt-4 flex items-center gap-2 border-t border-nexus-line/50 pt-3 text-nexus-muted">
                 <NexusPlus className="text-[10px]" />

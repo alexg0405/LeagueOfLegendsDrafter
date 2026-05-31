@@ -1,8 +1,8 @@
 version: 3.11.0
 files:
   - url: Nexus-Draft-Setup-3.11.0.exe
-    sha512: xPrziPvPctBcVD/fInAfqtTUX616PVGLZCB/Q6Nw2irk0WQp1YIgBm6e4b8dyVXNHqwJtRISht50VZ6DOfLlKg==
-    size: 84358112
+    sha512: qAOOnMWDGzLz+Fnf3iowRSacbXpv3wPo8i4k4UZ/sk7uuAKPPWhkTBNwhGU0epOv9DxXI5rXpLBxSzvqvg20JA==
+    size: 84373784
 path: Nexus-Draft-Setup-3.11.0.exe
-sha512: xPrziPvPctBcVD/fInAfqtTUX616PVGLZCB/Q6Nw2irk0WQp1YIgBm6e4b8dyVXNHqwJtRISht50VZ6DOfLlKg==
-releaseDate: '2026-05-31T02:06:22.673Z'
+sha512: qAOOnMWDGzLz+Fnf3iowRSacbXpv3wPo8i4k4UZ/sk7uuAKPPWhkTBNwhGU0epOv9DxXI5rXpLBxSzvqvg20JA==
+releaseDate: '2026-05-31T04:43:58.311Z'

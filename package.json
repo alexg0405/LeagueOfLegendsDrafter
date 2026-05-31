@@ -19,6 +19,7 @@
     "dist:win": "npm run build && electron-builder --win",
     "release:stage-web": "node scripts/stage-desktop-update-feed.mjs",
     "etl:riot-lane": "node scripts/riot-lane-etl.mjs",
+    "items:update:ugg": "node scripts/update-ugg-default-builds.mjs",
     "meta:update:mobalytics": "node scripts/update-public-meta-mobalytics.mjs",
     "train:score": "python training/score_v1.py --state training/examples/live_state.example.json",
     "train:init-db": "python -m training.scripts.init_nexus_db",

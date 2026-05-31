@@ -1,0 +1,51 @@
+{
+  "patch": "26.11",
+  "source": "U.GG public champion build pages, normalized to Riot Data Dragon item ids.",
+  "builds": [
+    {
+      "championId": 18,
+      "role": "bottom",
+      "sourceUrl": "https://u.gg/lol/champions/tristana/build/adc",
+      "starting": [1055],
+      "boots": [3006],
+      "core": [6676, 3031, 3036],
+      "final": [3006, 6676, 3031, 3036, 3033, 3085]
+    },
+    {
+      "championId": 119,
+      "role": "bottom",
+      "sourceUrl": "https://u.gg/lol/champions/draven/build/adc",
+      "starting": [1055],
+      "boots": [3006],
+      "core": [6676, 3031, 3072],
+      "final": [3006, 6676, 3031, 3072, 3033, 3156]
+    },
+    {
+      "championId": 21,
+      "role": "bottom",
+      "sourceUrl": "https://u.gg/lol/champions/missfortune/build/adc",
+      "starting": [1055],
+      "boots": [3006],
+      "core": [3508, 3031, 3036],
+      "final": [3006, 3508, 3031, 3036, 3033, 6676]
+    },
+    {
+      "championId": 29,
+      "role": "bottom",
+      "sourceUrl": "https://u.gg/lol/champions/twitch/build/adc",
+      "starting": [1055],
+      "boots": [3006],
+      "core": [3153, 3085, 3031],
+      "final": [3006, 3153, 3085, 3031, 3033, 3072]
+    },
+    {
+      "championId": 67,
+      "role": "bottom",
+      "sourceUrl": "https://u.gg/lol/champions/vayne/build/adc",
+      "starting": [1055],
+      "boots": [3006],
+      "core": [3153, 3124, 3302],
+      "final": [3006, 3153, 3124, 3302, 3033, 3072]
+    }
+  ]
+}

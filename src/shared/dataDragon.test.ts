@@ -27,6 +27,29 @@ describe('Data Dragon item normalization', () => {
         stats: {},
         gold: { total: 1000, purchasable: true },
         maps: { 12: true }
+      },
+      9003: {
+        name: 'Non Store Item',
+        tags: [],
+        stats: {},
+        gold: { total: 1000, purchasable: true },
+        maps: { 11: true },
+        inStore: false
+      },
+      9004: {
+        name: 'Non Purchasable Component',
+        tags: [],
+        stats: {},
+        gold: { total: 1000, purchasable: false },
+        maps: { 11: true },
+        into: ['1001']
+      },
+      6693: {
+        name: "Prowler's Claw",
+        tags: ['Damage'],
+        stats: { FlatPhysicalDamageMod: 55 },
+        gold: { total: 3000, purchasable: true },
+        maps: { 11: true }
       }
     })
 

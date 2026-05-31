@@ -215,7 +215,23 @@ function isDraftItemPlan(x: unknown): x is DraftItemPlan {
         return false
       }
       const r = row as Record<string, unknown>
-      return isStringArray(r.goodInto, 8) && (r.goodAgainst == null || isStringArray(r.goodAgainst, 8)) && isStringArray(r.avoidWhen, 8)
+      const validTargets =
+        r.enemyTargets == null ||
+        (Array.isArray(r.enemyTargets) &&
+          r.enemyTargets.length <= 8 &&
+          r.enemyTargets.every((target) => {
+            if (target == null || typeof target !== 'object') {
+              return false
+            }
+            const t = target as Record<string, unknown>
+            return (
+              typeof t.championId === 'number' &&
+              typeof t.championName === 'string' &&
+              typeof t.reason === 'string' &&
+              (t.source === 'kit' || t.source === 'teamThreat' || t.source === 'defaultBuild')
+            )
+          }))
+      return isStringArray(r.goodInto, 8) && (r.goodAgainst == null || isStringArray(r.goodAgainst, 8)) && isStringArray(r.avoidWhen, 8) && validTargets
     })
   const isThreats = (rows: unknown, max: number): boolean =>
     Array.isArray(rows) &&
@@ -233,6 +249,8 @@ function isDraftItemPlan(x: unknown): x is DraftItemPlan {
     typeof o.defensive === 'string' &&
     isStringArray(o.situational, 6) &&
     isStringArray(o.notes, 6) &&
+    (o.defaultBuildSource == null || o.defaultBuildSource === 'ugg' || o.defaultBuildSource === 'adaptive') &&
+    (o.defaultItemIds == null || (Array.isArray(o.defaultItemIds) && o.defaultItemIds.length <= 16 && o.defaultItemIds.every((id) => typeof id === 'number'))) &&
     (o.starting == null || isItemRefs(o.starting, 4)) &&
     (o.firstRecall == null || isItemRefs(o.firstRecall, 6)) &&
     (o.bootChoice == null || isItemRef(o.bootChoice)) &&

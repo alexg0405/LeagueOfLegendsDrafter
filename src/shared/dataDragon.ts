@@ -72,6 +72,44 @@ export type ItemLite = {
   consumeOnFull?: boolean
 }
 
+const RETIRED_OR_OFFSTORE_ITEM_NAMES = new Set([
+  'prowlers claw',
+  "prowler's claw",
+  'galeforce',
+  'everfrost',
+  'crown of the shattered queen',
+  'divine sunderer',
+  'goredrinker',
+  'duskblade of draktharr'
+])
+
+function normalizedItemName(raw: unknown): string {
+  return typeof raw === 'string'
+    ? raw
+        .toLowerCase()
+        .replace(/[’']/g, "'")
+        .replace(/[^a-z0-9']+/g, ' ')
+        .trim()
+    : ''
+}
+
+function hasNonstandardItemAccess(item: Record<string, unknown>): boolean {
+  return item.requiredAlly != null || item.requiredBuffCurrencyName != null || item.specialRecipe != null
+}
+
+export function isCurrentSummonersRiftStoreItem(id: number, item: Record<string, unknown>): boolean {
+  const maps = item.maps != null && typeof item.maps === 'object' ? item.maps as Record<string, unknown> : {}
+  if (maps['11'] !== true || item.hideFromAll === true || item.inStore === false || hasNonstandardItemAccess(item)) {
+    return false
+  }
+  const gold = item.gold != null && typeof item.gold === 'object' ? item.gold as Record<string, unknown> : {}
+  if (gold.purchasable !== true) {
+    return false
+  }
+  const name = normalizedItemName(item.name)
+  return id > 0 && !RETIRED_OR_OFFSTORE_ITEM_NAMES.has(name)
+}
+
 const championCache = new Map<string, Map<string, number>>()
 const championListCache = new Map<string, ChampionLite[]>()
 const itemByIdCache = new Map<string, Map<number, ItemLite>>()
@@ -122,16 +160,12 @@ export function itemsFromDDragonData(data: Record<string, unknown>): ItemLite[] 
       continue
     }
     const item = raw as Record<string, unknown>
-    const maps = item.maps != null && typeof item.maps === 'object' ? item.maps as Record<string, unknown> : {}
-    if (maps['11'] !== true || item.hideFromAll === true) {
+    if (!isCurrentSummonersRiftStoreItem(id, item)) {
       continue
     }
+    const maps = item.maps != null && typeof item.maps === 'object' ? item.maps as Record<string, unknown> : {}
     const gold = item.gold != null && typeof item.gold === 'object' ? item.gold as Record<string, unknown> : {}
     const total = typeof gold.total === 'number' ? gold.total : 0
-    const purchasable = gold.purchasable === true || total > 0
-    if (!purchasable && !Array.isArray(item.into)) {
-      continue
-    }
     items.push({
       id,
       name: typeof item.name === 'string' ? item.name : `Item ${id}`,
@@ -143,7 +177,7 @@ export function itemsFromDDragonData(data: Record<string, unknown>): ItemLite[] 
         base: typeof gold.base === 'number' ? gold.base : 0,
         total,
         sell: typeof gold.sell === 'number' ? gold.sell : 0,
-        purchasable
+        purchasable: true
       },
       from: Array.isArray(item.from) ? item.from.filter((x): x is string => typeof x === 'string') : undefined,
       into: Array.isArray(item.into) ? item.into.filter((x): x is string => typeof x === 'string') : undefined,

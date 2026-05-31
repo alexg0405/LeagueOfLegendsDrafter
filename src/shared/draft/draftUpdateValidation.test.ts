@@ -86,6 +86,8 @@ describe('DraftUpdate enemy role inference payload', () => {
               defensive: 'Buy MR if mid/jungle burst is fed.',
               situational: ['Anti-heal into sustain.', 'Anti-tank into frontline.'],
               notes: ['Team damage is mostly physical.'],
+              defaultBuildSource: 'ugg',
+              defaultItemIds: [1055, 3111, 3071],
               starting: [
                 {
                   itemId: 1055,
@@ -127,7 +129,15 @@ describe('DraftUpdate enemy role inference payload', () => {
                   phase: 'completed',
                   cost: 3000,
                   goodInto: ['frontline'],
-                  avoidWhen: []
+                  avoidWhen: [],
+                  enemyTargets: [
+                    {
+                      championId: 54,
+                      championName: 'Malphite',
+                      reason: 'armor stack',
+                      source: 'defaultBuild'
+                    }
+                  ]
                 }
               ],
               threatSummary: [
@@ -159,5 +169,7 @@ describe('DraftUpdate enemy role inference payload', () => {
     expect(sanitized.draftIntel?.matchupPlans[0]?.championName).toBe('Ezreal')
     expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.bootChoice?.itemId).toBe(3111)
     expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.matrixRows?.[0]?.goodInto).toContain('frontline')
+    expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.defaultBuildSource).toBe('ugg')
+    expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.matrixRows?.[0]?.enemyTargets?.[0]?.championName).toBe('Malphite')
   })
 })

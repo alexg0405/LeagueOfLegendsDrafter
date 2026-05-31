@@ -19,50 +19,58 @@ type DraftItemPlanBlockProps = {
 
 function ItemIcon({
   item,
-  ddragonVersion
+  ddragonVersion,
+  onOpenMatrix
 }: {
   item: DraftItemRef
   ddragonVersion?: string | null
+  onOpenMatrix?: () => void
 }) {
   const src = ddragonVersion && ddragonVersion[0] !== '(' ? ddragonItemImageUrl(ddragonVersion, item.itemId) : null
   const title = `${item.name} (${item.cost}g): ${item.reason}`
-  return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 border border-nexus-line/70 bg-nexus-bg/45 px-1.5 py-1" title={title}>
+  const inner = (
+    <>
       {src ? (
         <img className="h-7 w-7 shrink-0 border border-nexus-line/70 object-cover" src={src} alt="" width={28} height={28} />
       ) : (
         <span className="h-7 w-7 shrink-0 border border-nexus-line/70 bg-nexus-surface-2" aria-hidden />
       )}
       <span className="min-w-0 truncate text-[10px] text-nexus-text/85">{item.name}</span>
+    </>
+  )
+  if (onOpenMatrix) {
+    return (
+      <button
+        type="button"
+        className="nexus-focus inline-flex min-w-0 items-center gap-1.5 border border-nexus-line/70 bg-nexus-bg/45 px-1.5 py-1 text-left hover:border-nexus-lime/50 hover:bg-nexus-lime/10"
+        title={`${title}. Open item matrix.`}
+        onClick={onOpenMatrix}
+      >
+        {inner}
+      </button>
+    )
+  }
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5 border border-nexus-line/70 bg-nexus-bg/45 px-1.5 py-1" title={title}>
+      {inner}
     </span>
   )
 }
 
-function ItemRow({
-  label,
-  items,
-  ddragonVersion,
-  empty
-}: {
-  label: string
-  items: DraftItemRef[] | undefined
-  ddragonVersion?: string | null
-  empty?: string
-}) {
-  return (
-    <div className="grid gap-1">
-      <span className="text-[10px] uppercase tracking-[0.12em] text-nexus-lime/75">{label}</span>
-      <div className="flex min-w-0 flex-wrap gap-1.5">
-        {items?.length ? items.map((item) => <ItemIcon key={`${label}-${item.itemId}`} item={item} ddragonVersion={ddragonVersion} />) : <span className="text-nexus-muted/80">{empty ?? 'pending'}</span>}
-      </div>
-    </div>
-  )
-}
-
-function threatToneClass(tone: 'info' | 'warning' | 'danger'): string {
-  if (tone === 'danger') return 'border-nexus-red/50 bg-nexus-red/10 text-nexus-red/90'
-  if (tone === 'warning') return 'border-nexus-yellow/45 bg-nexus-yellow/10 text-nexus-yellow/90'
-  return 'border-nexus-lime/40 bg-nexus-lime/10 text-nexus-lime/85'
+function dedupeItems(rows: (DraftItemRef | null | undefined)[], limit: number): DraftItemRef[] {
+  const seen = new Set<number>()
+  const out: DraftItemRef[] = []
+  for (const row of rows) {
+    if (!row || seen.has(row.itemId)) {
+      continue
+    }
+    seen.add(row.itemId)
+    out.push(row)
+    if (out.length >= limit) {
+      break
+    }
+  }
+  return out
 }
 
 export function DraftItemPlanBlock({
@@ -93,60 +101,36 @@ export function DraftItemPlanBlock({
   if (!itemPlan) {
     return null
   }
-  const buildRows = itemPlan.finalBuild?.length ? itemPlan.finalBuild : [...(itemPlan.bootChoice ? [itemPlan.bootChoice] : []), ...(itemPlan.coreBuild ?? [])]
+  const buildRows = dedupeItems([
+    itemPlan.starting?.[0],
+    itemPlan.bootChoice,
+    ...(itemPlan.coreBuild ?? []),
+    ...(itemPlan.finalBuild ?? [])
+  ], 6)
   const visibleRows = matrixFilter === 'all' ? matrixRows : matrixRows.filter((row) => row.tags.includes(matrixFilter))
-  if (compact && (buildRows.length || itemPlan.situationalItems?.length || itemPlan.threatSummary?.length)) {
+  if (buildRows.length || matrixRows.length || itemPlan.threatSummary?.length || compact) {
     return (
-      <div className="mt-1.5 grid gap-1.5 text-nexus-muted/90">
-        {itemPlan.threatSummary?.length ? (
-          <div className="flex flex-wrap gap-1">
-            {itemPlan.threatSummary.slice(0, 4).map((threat) => (
-              <span key={threat.label} className={`border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.1em] ${threatToneClass(threat.tone)}`} title={threat.reason}>
-                {threat.label}
-              </span>
-            ))}
-          </div>
-        ) : null}
-        <ItemRow label="Build" items={buildRows.slice(0, 6)} ddragonVersion={ddragonVersion} empty={itemPlan.core} />
-        {itemPlan.situationalItems?.length ? (
-          <ItemRow label="Swaps" items={itemPlan.situationalItems.slice(0, limit)} ddragonVersion={ddragonVersion} />
-        ) : null}
-      </div>
-    )
-  }
-  if (buildRows.length || matrixRows.length || itemPlan.threatSummary?.length) {
-    return (
-      <div className="mt-2 grid gap-2 rounded-md border border-nexus-line/60 bg-nexus-bg/30 p-2 text-nexus-muted/90">
+      <div className="mt-2 grid gap-1.5 border border-nexus-line/60 bg-nexus-bg/30 p-2 text-nexus-muted/90">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[10px] uppercase tracking-[0.14em] text-nexus-lime/80">Suggested build</span>
-          <span className="flex flex-wrap items-center gap-1">
-            {itemPlan.threatSummary?.length
-              ? itemPlan.threatSummary.slice(0, 6).map((threat) => (
-                <span key={threat.label} className={`border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.1em] ${threatToneClass(threat.tone)}`} title={threat.reason}>
-                  {threat.label}
-                </span>
-              ))
-              : null}
-            {onOpenMatrix && matrixRows.length > 0 ? (
-              <button
-                type="button"
-                className="nexus-focus border border-nexus-line/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/90 hover:border-nexus-lime/50"
-                onClick={onOpenMatrix}
-              >
-                Matrix
-              </button>
-            ) : null}
-          </span>
-        </div>
-        <div className="grid gap-2">
-          <ItemRow label="Start" items={itemPlan.starting} ddragonVersion={ddragonVersion} empty={itemPlan.core} />
-          <ItemRow label="Recall" items={itemPlan.firstRecall} ddragonVersion={ddragonVersion} empty={itemPlan.defensive} />
-          <ItemRow label="Boots" items={[itemPlan.bootChoice, ...(itemPlan.bootAlternatives ?? [])].filter((item): item is DraftItemRef => item != null)} ddragonVersion={ddragonVersion} empty={itemPlan.boots} />
-          <ItemRow label="Core" items={itemPlan.coreBuild} ddragonVersion={ddragonVersion} empty={itemPlan.core} />
-          <ItemRow label="Final" items={buildRows.slice(0, 6)} ddragonVersion={ddragonVersion} empty={itemPlan.core} />
-          {itemPlan.situationalItems?.length ? (
-            <ItemRow label="Swaps" items={itemPlan.situationalItems.slice(0, limit)} ddragonVersion={ddragonVersion} />
+          <span className="text-[10px] uppercase tracking-[0.14em] text-nexus-lime/80">Build</span>
+          {onOpenMatrix && matrixRows.length > 0 ? (
+            <button
+              type="button"
+              className="nexus-focus border border-nexus-line/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/90 hover:border-nexus-lime/50"
+              onClick={onOpenMatrix}
+            >
+              Matrix
+            </button>
           ) : null}
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-1.5">
+          {buildRows.length ? (
+            buildRows.map((item) => (
+              <ItemIcon key={`build-${item.itemId}`} item={item} ddragonVersion={ddragonVersion} onOpenMatrix={onOpenMatrix} />
+            ))
+          ) : (
+            <span className="text-nexus-muted/80">{itemPlan.core}</span>
+          )}
         </div>
         {showMatrix && matrixRows.length > 0 && (
           <details className="group border-t border-nexus-line/50 pt-2">

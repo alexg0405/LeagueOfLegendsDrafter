@@ -1,6 +1,7 @@
 import type {
   ChampionBuildProfile,
   DraftIntel,
+  DraftItemEnemyTarget,
   DraftItemMatrixRow,
   DraftItemPhase,
   DraftItemPlan,
@@ -195,7 +196,24 @@ function sanitizeDraftItemPlan(plan: unknown): DraftItemPlan | undefined {
             ...base,
             goodInto: sanitizeStringArray(r.goodInto, 8),
             goodAgainst: sanitizeStringArray(r.goodAgainst, 8),
-            avoidWhen: sanitizeStringArray(r.avoidWhen, 8)
+            avoidWhen: sanitizeStringArray(r.avoidWhen, 8),
+            enemyTargets: Array.isArray(r.enemyTargets)
+              ? r.enemyTargets
+                  .filter((target) => target != null && typeof target === 'object')
+                  .map((target) => {
+                    const t = target as Record<string, unknown>
+                    const source: DraftItemEnemyTarget['source'] =
+                      t.source === 'kit' || t.source === 'teamThreat' || t.source === 'defaultBuild' ? t.source : 'teamThreat'
+                    return {
+                      championId: finiteOr(t.championId as number | null | undefined, 0),
+                      championName: text(t.championName),
+                      reason: text(t.reason),
+                      source
+                    }
+                  })
+                  .filter((target) => target.championId > 0 && target.championName.length > 0)
+                  .slice(0, 8)
+              : undefined
           }
         })
         .filter((row): row is DraftItemMatrixRow => row != null && row.itemId > 0)
@@ -218,6 +236,10 @@ function sanitizeDraftItemPlan(plan: unknown): DraftItemPlan | undefined {
     defensive: p.defensive,
     situational: sanitizeStringArray(p.situational, 6),
     notes: sanitizeStringArray(p.notes, 6),
+    defaultBuildSource: p.defaultBuildSource === 'ugg' || p.defaultBuildSource === 'adaptive' ? p.defaultBuildSource : undefined,
+    defaultItemIds: Array.isArray(p.defaultItemIds)
+      ? p.defaultItemIds.map((id) => finiteOr(id as number | null | undefined, 0)).filter((id) => id > 0).slice(0, 16)
+      : undefined,
     starting: itemRefs(p.starting, 4),
     firstRecall: itemRefs(p.firstRecall, 6),
     bootChoice: itemRef(p.bootChoice),

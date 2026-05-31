@@ -7,8 +7,9 @@ import {
   type PublicMetaBaseStat,
   type RoleKey
 } from './metaStats'
-import { buildAdaptiveItemPlan, championKitProfileFromTexts } from './itemIntelligence'
+import { buildAdaptiveItemPlan, championKitProfileFromTexts, classifyItem } from './itemIntelligence'
 import { resolveChampionName } from './championNameFallback'
+import { getUggDefaultItemBuild } from './uggDefaultBuilds'
 import type { ChampionSpellLite, ItemLite } from '../dataDragon'
 import type {
   ChampionPoolPreference,
@@ -43,6 +44,7 @@ export type BuildDraftIntelArgs = {
 type SlotRead = {
   slot: SlotPick
   championId: number
+  role: DraftRole
   name: string
   threat: ThreatLabel
   classes: Set<ClassLabel>
@@ -136,6 +138,7 @@ function readSlot(
   return {
     slot,
     championId: slot.championId,
+    role: slot.role,
     name,
     threat: override?.threat ?? inferThreatFromTags(classes),
     classes
@@ -435,10 +438,22 @@ function teamKitSignals(team: TeamRead, championMetaById: ReadonlyMap<number, Ch
   return signals
 }
 
-function teamItemTargets(team: TeamRead, championMetaById: ReadonlyMap<number, ChampionMeta> | null | undefined) {
+function teamItemTargets(
+  team: TeamRead,
+  championMetaById: ReadonlyMap<number, ChampionMeta> | null | undefined,
+  itemCatalog: readonly ItemLite[] | null | undefined
+) {
   return team.slots.map((slot) => {
     const kit = championKitProfileFromTexts(kitTexts(championMetaById?.get(slot.championId)))
+    const defaultBuild = getUggDefaultItemBuild(slot.championId, slot.role, itemCatalog)
+    const defaultBuildTags = defaultBuild
+      ? Array.from(new Set([...defaultBuild.starting, ...defaultBuild.boots, ...defaultBuild.core, ...defaultBuild.final].flatMap((ref) => {
+          const item = itemCatalog?.find((candidate) => candidate.id === ref.itemId)
+          return item ? classifyItem(item).tags : []
+        })))
+      : []
     return {
+      championId: slot.championId,
       name: slot.name,
       threat: slot.threat,
       classes: Array.from(slot.classes),
@@ -447,7 +462,8 @@ function teamItemTargets(team: TeamRead, championMetaById: ReadonlyMap<number, C
       shielding: kit.shield,
       mobility: kit.mobility,
       burst: kit.burst || kit.execute,
-      poke: kit.poke
+      poke: kit.poke,
+      defaultBuildTags
     }
   })
 }
@@ -641,6 +657,7 @@ function itemPlan(
   const enemyDamage = teamDamageCounts(enemy)
   const enemyKit = teamKitSignals(enemy, championMetaById)
   const laneThreat = laneOpponent?.championName ? getChampionThreatOverride(laneOpponent.championName)?.threat ?? null : null
+  const defaultBuild = getUggDefaultItemBuild(s.championId, myRole, itemCatalog)
   return buildAdaptiveItemPlan(itemCatalog, {
     championName: s.championName,
     role: myRole,
@@ -671,7 +688,8 @@ function itemPlan(
       mobility: enemyKit.mobility,
       burst: enemyKit.burst
     },
-    enemyDetails: teamItemTargets(enemy, championMetaById),
+    enemyDetails: teamItemTargets(enemy, championMetaById, itemCatalog),
+    defaultBuild,
     laneThreat,
     fallback
   })

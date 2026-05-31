@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ItemLite } from '../dataDragon'
+import type { DraftItemRef } from './types'
 import { buildAdaptiveItemPlan, championKitProfileFromTexts, classifyItem } from './itemIntelligence'
 
 function item(
@@ -21,6 +22,18 @@ function item(
     gold: { base: total, total, sell: Math.round(total * 0.7), purchasable: true },
     maps: { 11: true },
     ...extra
+  }
+}
+
+function ref(row: ItemLite, phase: DraftItemRef['phase'] = 'completed'): DraftItemRef {
+  return {
+    itemId: row.id,
+    name: row.name,
+    reason: 'U.GG default build path',
+    score: 100,
+    tags: classifyItem(row).tags,
+    phase,
+    cost: row.gold.total
   }
 }
 
@@ -112,5 +125,76 @@ describe('item intelligence', () => {
     expect(allNames).toMatch(/Void Staff|Black Cleaver/)
     expect(allNames).toMatch(/Serpent/)
     expect(allNames).toMatch(/Zhonya/)
+  })
+
+  it('keeps default build items first and targets enemy icons for situational counters', () => {
+    const plan = buildAdaptiveItemPlan(catalog, {
+      championName: 'Tristana',
+      role: 'bottom',
+      buildProfile: {
+        damage: 'ad',
+        archetype: 'Marksman',
+        buildHint: 'Crit carry.',
+        itemHint: 'Default crit path.',
+        tagsLine: 'Marksman',
+        partype: 'Mana'
+      },
+      ally: { magic: 1, physical: 2, frontline: 1, engage: 1, scaling: 2, slots: 4 },
+      enemy: {
+        magic: 1,
+        physical: 3,
+        frontline: 2,
+        tanks: 1,
+        assassins: 0,
+        supports: 1,
+        dive: 1,
+        poke: 1,
+        pick: 1,
+        sustain: 2,
+        marksmen: 1,
+        hardCc: 1,
+        healing: 2,
+        shielding: 0,
+        mobility: 1,
+        burst: 1
+      },
+      enemyDetails: [
+        {
+          championId: 267,
+          name: 'Nami',
+          threat: 'utility',
+          classes: ['support'],
+          hardCc: true,
+          healing: true,
+          shielding: false,
+          mobility: false,
+          burst: false,
+          poke: true,
+          defaultBuildTags: ['sustain']
+        }
+      ],
+      defaultBuild: {
+        source: 'ugg',
+        starting: [ref(catalog[0]!, 'starter')],
+        boots: [ref(catalog[3]!, 'boots')],
+        core: [ref(catalog[8]!)],
+        final: [ref(catalog[3]!, 'boots'), ref(catalog[8]!)],
+        defaultItemIds: [1055, 3047, 3031]
+      },
+      laneThreat: 'ad',
+      fallback: {
+        core: 'Fallback core',
+        boots: 'Fallback boots',
+        defensive: 'Fallback defense',
+        situational: [],
+        notes: []
+      }
+    })
+
+    expect(plan.defaultBuildSource).toBe('ugg')
+    expect(plan.defaultItemIds).toEqual(expect.arrayContaining([1055, 3047, 3031]))
+    expect(plan.matrixRows?.[0]?.itemId).toBe(1055)
+    const antiHeal = plan.matrixRows?.find((row) => row.tags.includes('anti-heal'))
+    expect(antiHeal?.enemyTargets?.[0]).toMatchObject({ championId: 267, championName: 'Nami', source: 'defaultBuild' })
   })
 })

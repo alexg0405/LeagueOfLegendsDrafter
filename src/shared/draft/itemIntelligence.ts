@@ -1,5 +1,5 @@
 import type { ItemLite } from '../dataDragon'
-import type { ChampionBuildProfile, DraftItemPlan, DraftItemRef, DraftItemThreat, DraftRole } from './types'
+import type { ChampionBuildProfile, DraftItemEnemyTarget, DraftItemPlan, DraftItemRef, DraftItemThreat, DraftRole } from './types'
 
 export type ItemPhase = DraftItemRef['phase']
 
@@ -52,6 +52,7 @@ export type AdaptiveItemContext = {
     burst: number
   }
   enemyDetails?: {
+    championId: number
     name: string
     threat: 'ad' | 'ap' | 'hybrid' | 'utility'
     classes: string[]
@@ -61,7 +62,16 @@ export type AdaptiveItemContext = {
     mobility: boolean
     burst: boolean
     poke: boolean
+    defaultBuildTags?: string[]
   }[]
+  defaultBuild?: {
+    source: 'ugg'
+    starting: DraftItemRef[]
+    boots: DraftItemRef[]
+    core: DraftItemRef[]
+    final: DraftItemRef[]
+    defaultItemIds: number[]
+  } | null
   laneThreat: 'ad' | 'ap' | 'hybrid' | 'utility' | null
   fallback: Pick<DraftItemPlan, 'core' | 'boots' | 'defensive' | 'situational' | 'notes'>
 }
@@ -214,27 +224,55 @@ function tagReason(tag: string): string {
   }
 }
 
-function goodAgainst(profile: ItemProfile, ctx: AdaptiveItemContext): string[] {
-  const targets: string[] = []
+function pushTarget(targets: DraftItemEnemyTarget[], target: DraftItemEnemyTarget): void {
+  if (!targets.some((row) => row.championId === target.championId && row.reason === target.reason)) {
+    targets.push(target)
+  }
+}
+
+function enemyTargets(profile: ItemProfile, ctx: AdaptiveItemContext): DraftItemEnemyTarget[] {
+  const targets: DraftItemEnemyTarget[] = []
   for (const enemy of ctx.enemyDetails ?? []) {
     const classes = new Set(enemy.classes)
+    const defaultTags = new Set(enemy.defaultBuildTags ?? [])
     const p = profile.tags
-    const matches =
-      (p.includes('mr') && (enemy.threat === 'ap' || enemy.threat === 'hybrid' || classes.has('mage'))) ||
-      (p.includes('armor') && (enemy.threat === 'ad' || enemy.threat === 'hybrid' || classes.has('marksman') || classes.has('assassin') || classes.has('fighter'))) ||
-      (p.includes('anti-heal') && (enemy.healing || classes.has('support') || classes.has('fighter') || classes.has('tank'))) ||
-      (p.includes('anti-shield') && (enemy.shielding || classes.has('support'))) ||
-      (p.includes('anti-tank') && (classes.has('tank') || classes.has('fighter'))) ||
-      (p.includes('armor-pen') && (classes.has('tank') || classes.has('fighter') || enemy.threat === 'ad')) ||
-      (p.includes('magic-pen') && (classes.has('tank') || classes.has('fighter') || enemy.threat === 'ap' || enemy.threat === 'hybrid')) ||
-      (p.includes('anti-burst') && (enemy.burst || classes.has('assassin') || enemy.mobility)) ||
-      (p.includes('anti-cc') && (enemy.hardCc || classes.has('tank') || classes.has('support'))) ||
-      (p.includes('sustain') && (enemy.poke || classes.has('mage') || classes.has('marksman')))
-    if (matches && !targets.includes(enemy.name)) {
-      targets.push(enemy.name)
+    const base = { championId: enemy.championId, championName: enemy.name }
+    if (p.includes('mr') && (enemy.threat === 'ap' || enemy.threat === 'hybrid' || classes.has('mage'))) {
+      pushTarget(targets, { ...base, reason: 'magic damage', source: 'teamThreat' })
+    }
+    if (p.includes('armor') && (enemy.threat === 'ad' || enemy.threat === 'hybrid' || classes.has('marksman') || classes.has('assassin') || classes.has('fighter'))) {
+      pushTarget(targets, { ...base, reason: classes.has('marksman') ? 'crit DPS' : 'physical damage', source: 'teamThreat' })
+    }
+    if (p.includes('anti-heal') && (enemy.healing || classes.has('support') || defaultTags.has('lifesteal') || defaultTags.has('sustain'))) {
+      pushTarget(targets, { ...base, reason: defaultTags.has('lifesteal') || defaultTags.has('sustain') ? 'default sustain' : 'healing', source: defaultTags.has('lifesteal') || defaultTags.has('sustain') ? 'defaultBuild' : 'kit' })
+    }
+    if (p.includes('anti-shield') && (enemy.shielding || classes.has('support') || defaultTags.has('anti-burst'))) {
+      pushTarget(targets, { ...base, reason: defaultTags.has('anti-burst') ? 'defensive default' : 'shields', source: defaultTags.has('anti-burst') ? 'defaultBuild' : 'kit' })
+    }
+    if (p.includes('anti-tank') && (classes.has('tank') || classes.has('fighter') || defaultTags.has('health') || defaultTags.has('tank'))) {
+      pushTarget(targets, { ...base, reason: defaultTags.has('health') || defaultTags.has('tank') ? 'health stack' : 'frontline', source: defaultTags.has('health') || defaultTags.has('tank') ? 'defaultBuild' : 'teamThreat' })
+    }
+    if (p.includes('armor-pen') && (classes.has('tank') || classes.has('fighter') || enemy.threat === 'ad' || defaultTags.has('armor'))) {
+      pushTarget(targets, { ...base, reason: defaultTags.has('armor') ? 'armor stack' : 'frontline armor', source: defaultTags.has('armor') ? 'defaultBuild' : 'teamThreat' })
+    }
+    if (p.includes('magic-pen') && (classes.has('tank') || classes.has('fighter') || enemy.threat === 'ap' || enemy.threat === 'hybrid' || defaultTags.has('mr'))) {
+      pushTarget(targets, { ...base, reason: defaultTags.has('mr') ? 'MR stack' : 'frontline MR', source: defaultTags.has('mr') ? 'defaultBuild' : 'teamThreat' })
+    }
+    if (p.includes('anti-burst') && (enemy.burst || classes.has('assassin') || enemy.mobility || defaultTags.has('crit') || defaultTags.has('attack-speed'))) {
+      pushTarget(targets, { ...base, reason: defaultTags.has('crit') || defaultTags.has('attack-speed') ? 'default DPS path' : 'burst/dive', source: defaultTags.has('crit') || defaultTags.has('attack-speed') ? 'defaultBuild' : 'kit' })
+    }
+    if (p.includes('anti-cc') && (enemy.hardCc || classes.has('tank') || classes.has('support'))) {
+      pushTarget(targets, { ...base, reason: 'hard CC', source: 'kit' })
+    }
+    if (p.includes('sustain') && (enemy.poke || classes.has('mage') || classes.has('marksman'))) {
+      pushTarget(targets, { ...base, reason: 'poke', source: 'kit' })
     }
   }
   return targets.slice(0, 4)
+}
+
+function goodAgainst(targets: readonly DraftItemEnemyTarget[]): string[] {
+  return targets.map((target) => target.championName).filter((value, idx, arr) => arr.indexOf(value) === idx).slice(0, 4)
 }
 
 function buildReason(profile: ItemProfile, ctx: AdaptiveItemContext, score: number): string {
@@ -300,13 +338,13 @@ function scoreItem(item: ItemLite, profile: ItemProfile, ctx: AdaptiveItemContex
   return score
 }
 
-function topRefs(rows: DraftItemRef[], phase: ItemPhase, limit: number): DraftItemRef[] {
+function topRefs<T extends DraftItemRef>(rows: readonly T[], phase: ItemPhase, limit: number): T[] {
   return rows.filter((row) => row.phase === phase).slice(0, limit)
 }
 
-function dedupeRefs(rows: DraftItemRef[], limit: number): DraftItemRef[] {
+function dedupeRefs<T extends DraftItemRef>(rows: readonly T[], limit: number): T[] {
   const seen = new Set<number>()
-  const out: DraftItemRef[] = []
+  const out: T[] = []
   for (const row of rows) {
     if (seen.has(row.itemId)) {
       continue
@@ -346,26 +384,46 @@ export function buildAdaptiveItemPlan(items: readonly ItemLite[], ctx: AdaptiveI
     .filter(({ item, profile, score }) => score > 20 && item.gold.total > 0 && !item.consumed && profile.phase !== 'consumable')
     .sort((a, b) => b.score - a.score || b.item.gold.total - a.item.gold.total || a.item.name.localeCompare(b.item.name))
 
-  const matrixRows = scored.slice(0, 60).map(({ item, profile, score }) => ({
-    ...itemRef(item, score, profile, buildReason(profile, ctx, score)),
-    goodInto: profile.tags.map(tagReason).filter((value, idx, arr) => arr.indexOf(value) === idx).slice(0, 4),
-    goodAgainst: goodAgainst(profile, ctx),
-    avoidWhen: avoidWhen(profile, ctx)
-  }))
-  const starting = topRefs(matrixRows, 'starter', 2)
-  const firstRecall = topRefs(matrixRows, 'component', 3)
-  const boots = topRefs(matrixRows, 'boots', 3)
+  const adaptiveRows = scored.slice(0, 60).map(({ item, profile, score }) => {
+    const targets = enemyTargets(profile, ctx)
+    return {
+      ...itemRef(item, score, profile, buildReason(profile, ctx, score)),
+      goodInto: profile.tags.map(tagReason).filter((value, idx, arr) => arr.indexOf(value) === idx).slice(0, 4),
+      goodAgainst: goodAgainst(targets),
+      avoidWhen: avoidWhen(profile, ctx),
+      enemyTargets: targets
+    }
+  })
+  const defaultRows = ctx.defaultBuild
+    ? [...ctx.defaultBuild.starting, ...ctx.defaultBuild.boots, ...ctx.defaultBuild.core, ...ctx.defaultBuild.final].map((row) => ({
+        ...row,
+        goodInto: ['default path'],
+        goodAgainst: [],
+        avoidWhen: [],
+        enemyTargets: []
+      }))
+    : []
+  const matrixRows = dedupeRefs([...defaultRows, ...adaptiveRows], 24)
+  const starting = ctx.defaultBuild?.starting.length ? ctx.defaultBuild.starting.slice(0, 2) : topRefs(adaptiveRows, 'starter', 2)
+  const firstRecall = topRefs(adaptiveRows, 'component', 3)
+  const boots = ctx.defaultBuild?.boots.length ? ctx.defaultBuild.boots.slice(0, 3) : topRefs(adaptiveRows, 'boots', 3)
   const completed = topRefs(matrixRows, 'completed', 20)
-  const coreBuild = dedupeRefs(completed.filter((row) => !row.tags.includes('support') || ctx.role === 'support'), 3)
+  const coreBuild = ctx.defaultBuild?.core.length
+    ? ctx.defaultBuild.core.slice(0, 3)
+    : dedupeRefs(completed.filter((row) => !row.tags.includes('support') || ctx.role === 'support'), 3)
   const situationalItems = dedupeRefs(
-    completed.filter((row) =>
+    adaptiveRows.filter((row) =>
       row.tags.some((tag) => ['anti-heal', 'anti-shield', 'anti-tank', 'anti-burst', 'anti-cc', 'armor', 'mr', 'sustain'].includes(tag))
     ),
     8
   )
-  const finalBuild = dedupeRefs([...coreBuild, ...situationalItems, ...completed], 5)
+  const seededFinal = ctx.defaultBuild?.final.length ? ctx.defaultBuild.final : []
+  const finalBuild = dedupeRefs([...seededFinal, ...coreBuild, ...situationalItems, ...completed], 5)
   const bootChoice = boots[0] ?? null
   const finalWithBoots = bootChoice ? dedupeRefs([bootChoice, ...finalBuild], 6) : finalBuild.slice(0, 6)
+  const defaultItemIds = ctx.defaultBuild?.defaultItemIds?.length
+    ? ctx.defaultBuild.defaultItemIds
+    : dedupeRefs([...starting, ...(bootChoice ? [bootChoice] : []), ...coreBuild, ...finalWithBoots], 12).map((row) => row.itemId)
   const names = (rows: DraftItemRef[]) => rows.map((row) => row.name).join(' -> ')
   const threats = threatSummary(ctx)
   return {
@@ -378,6 +436,8 @@ export function buildAdaptiveItemPlan(items: readonly ItemLite[], ctx: AdaptiveI
       threats.length ? `Threats: ${threats.map((threat) => threat.label).join(', ')}.` : null,
       ...ctx.fallback.notes
     ].filter((line): line is string => Boolean(line)).slice(0, 4),
+    defaultBuildSource: ctx.defaultBuild ? 'ugg' : 'adaptive',
+    defaultItemIds,
     starting,
     firstRecall,
     bootChoice,

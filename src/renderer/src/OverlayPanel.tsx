@@ -479,6 +479,7 @@ export function OverlayPanel() {
         : null
   const topItemPlan = d.draftIntel?.matchupPlans[0] ?? null
   const activeItemMatrixPlan = itemMatrixPlan ?? topItemPlan
+  const itemMatrixPlans = d.draftIntel?.matchupPlans.filter((plan) => plan.itemPlan?.matrixRows?.length) ?? []
 
   const enemySlotsWithInference = useMemo((): InferredOverlaySlot[] => {
     const rows = d.enemyRoleInference ?? []
@@ -856,8 +857,12 @@ export function OverlayPanel() {
           />
           <DraftItemMatrixView
             className="relative h-full w-full overflow-hidden"
+            plans={itemMatrixPlans}
+            selectedChampionId={activeItemMatrixPlan.championId}
             itemPlan={activeItemMatrixPlan.itemPlan}
             championName={activeItemMatrixPlan.championName}
+            championId={activeItemMatrixPlan.championId}
+            championImageUrl={championIconUrl}
             ddragonVersion={d.dataDragonVersion}
             onClose={() => {
               setItemMatrixOpen(false)
@@ -1292,22 +1297,16 @@ export function OverlayPanel() {
                       </details>
                     )}
                     {matchupPlan?.itemPlan && (
-                      <div>
-                        <div className="mb-1 flex justify-end">
-                          <button
-                            type="button"
-                            className="nexus-focus border border-nexus-line/70 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85 hover:border-nexus-lime/50 disabled:opacity-45"
-                            disabled={!matchupPlan.itemPlan.matrixRows?.length}
-                            onClick={() => {
-                              setItemMatrixPlan(matchupPlan)
-                              setItemMatrixOpen(true)
-                            }}
-                          >
-                            Matrix
-                          </button>
-                        </div>
-                        <OverlayItemPlan itemPlan={matchupPlan.itemPlan} ddragonVersion={d.dataDragonVersion} compact limit={2} />
-                      </div>
+                      <OverlayItemPlan
+                        itemPlan={matchupPlan.itemPlan}
+                        ddragonVersion={d.dataDragonVersion}
+                        compact
+                        limit={2}
+                        onOpenMatrix={() => {
+                          setItemMatrixPlan(matchupPlan)
+                          setItemMatrixOpen(true)
+                        }}
+                      />
                     )}
                   <details className="group border border-nexus-line/65 bg-nexus-bg/25 font-mono text-[11px] leading-snug text-nexus-text/75">
                     <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">

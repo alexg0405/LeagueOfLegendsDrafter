@@ -255,6 +255,11 @@ export function NexusOperationsView({
   }
   const topPlan = draftIntel?.matchupPlans[0] ?? null
   const activeItemMatrixPlan = itemMatrixPlan ?? topPlan
+  const itemMatrixPlans = draftIntel?.matchupPlans.filter((plan) => plan.itemPlan?.matrixRows?.length) ?? []
+  const matrixChampionImageUrl = (id: number): string | null => {
+    const key = championKeyById.get(id)
+    return key && ddragonVersion ? ddragonChampionImageUrl(ddragonVersion, key) : null
+  }
   const importedPreferenceById = new Map(
     (playerPoolProfile?.entries ?? []).map((entry) => [String(entry.championId), entry.preference] as const)
   )
@@ -316,8 +321,12 @@ export function NexusOperationsView({
           />
           <DraftItemMatrixView
             className="relative z-10 max-h-[92vh] w-full max-w-6xl overflow-hidden"
+            plans={itemMatrixPlans}
+            selectedChampionId={activeItemMatrixPlan.championId}
             itemPlan={activeItemMatrixPlan.itemPlan}
             championName={activeItemMatrixPlan.championName}
+            championId={activeItemMatrixPlan.championId}
+            championImageUrl={matrixChampionImageUrl}
             ddragonVersion={ddragonVersion}
             onClose={() => {
               setItemMatrixOpen(false)

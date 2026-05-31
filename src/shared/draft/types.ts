@@ -87,10 +87,18 @@ export type DraftItemRef = {
   cost: number
 }
 
+export type DraftItemEnemyTarget = {
+  championId: number
+  championName: string
+  reason: string
+  source: 'kit' | 'teamThreat' | 'defaultBuild'
+}
+
 export type DraftItemMatrixRow = DraftItemRef & {
   goodInto: string[]
   goodAgainst?: string[]
   avoidWhen: string[]
+  enemyTargets?: DraftItemEnemyTarget[]
 }
 
 export type DraftItemThreat = {
@@ -105,6 +113,8 @@ export type DraftItemPlan = {
   defensive: string
   situational: string[]
   notes: string[]
+  defaultBuildSource?: 'ugg' | 'adaptive'
+  defaultItemIds?: number[]
   starting?: DraftItemRef[]
   firstRecall?: DraftItemRef[]
   bootChoice?: DraftItemRef | null

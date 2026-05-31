@@ -1414,6 +1414,11 @@ export function WebDraftApp() {
 
   const topMatchupPlan = draftIntel?.matchupPlans[0] ?? null
   const activeItemMatrixPlan = itemMatrixPlan ?? topMatchupPlan
+  const itemMatrixPlans = draftIntel?.matchupPlans.filter((plan) => plan.itemPlan?.matrixRows?.length) ?? []
+  const matrixChampionImageUrl = useCallback((id: number): string | null => {
+    const champion = champions.find((row) => row.id === id)
+    return champion && ddragonVersion ? ddragonChampionImageUrl(ddragonVersion, champion.key) : null
+  }, [champions, ddragonVersion])
 
   const saveChampionPoolPreference = () => {
     if (poolChampionId == null) {
@@ -1707,8 +1712,12 @@ export function WebDraftApp() {
           />
           <DraftItemMatrixView
             className="relative z-10 max-h-[92vh] w-full max-w-6xl overflow-hidden"
+            plans={itemMatrixPlans}
+            selectedChampionId={activeItemMatrixPlan.championId}
             itemPlan={activeItemMatrixPlan.itemPlan}
             championName={activeItemMatrixPlan.championName}
+            championId={activeItemMatrixPlan.championId}
+            championImageUrl={matrixChampionImageUrl}
             ddragonVersion={ddragonVersion}
             onClose={() => {
               setItemMatrixOpen(false)

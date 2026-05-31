@@ -5,6 +5,7 @@ import { getLatestDDragonVersion, loadChampionMaps, loadItemMaps, type ChampionL
 import {
   applyChampionNames,
   buildDraftIntel,
+  buildDraftItemMatrixPlans,
   championIdsForMyPool,
   championPoolPreferenceToComfort,
   compileTrainedEffects,
@@ -20,6 +21,7 @@ import {
   validatePlayerChampionPoolProfile,
   type CompiledTrainedEffects,
   type DraftDeltaListMode,
+  type DraftIntel,
   type DraftRole,
   type DraftSnapshot,
   type DraftSource,
@@ -63,6 +65,19 @@ const LIVE_META_REFRESH_MS = 30 * 60 * 1000
 const DESKTOP_PLAYER_POOL_IMPORT_ENABLED = false
 const DESKTOP_PLAYER_POOL_IMPORT_WIP_MESSAGE =
   'Riot mastery import is temporarily WIP. Manual champion pool weights still work.'
+
+function scheduleIdleWork(work: () => void): () => void {
+  const idleWindow = window as Window & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number
+    cancelIdleCallback?: (handle: number) => void
+  }
+  if (typeof idleWindow.requestIdleCallback === 'function') {
+    const handle = idleWindow.requestIdleCallback(work, { timeout: 1200 })
+    return () => idleWindow.cancelIdleCallback?.(handle)
+  }
+  const handle = window.setTimeout(work, 80)
+  return () => window.clearTimeout(handle)
+}
 
 type ChampionPoolPrefs = Record<string, ChampionPoolPreference>
 const LEGACY_AATROX_PLACEHOLDER_PREFS: ChampionPoolPrefs = { '266': 'main' }
@@ -588,6 +603,61 @@ export function MainShell() {
     liveDataRevision
   ])
 
+  const [itemMatrixPlans, setItemMatrixPlans] = useState<DraftIntel['itemMatrixPlans'] | null>(null)
+  const buildItemMatrixPlans = useCallback(() => buildDraftItemMatrixPlans({
+    snapshot: activeSnapshot,
+    myRole: roleForSuggestions,
+    suggestions,
+    idToName: nameById,
+    championMetaById,
+    enemyRoleInference,
+    patchLabel,
+    dataDragonVersion: ddVersion,
+    championPoolPreferences: championPoolPreferenceMap,
+    itemCatalog: items
+  }), [
+    activeSnapshot,
+    roleForSuggestions,
+    suggestions,
+    nameById,
+    championMetaById,
+    enemyRoleInference,
+    patchLabel,
+    ddVersion,
+    championPoolPreferenceMap,
+    items,
+    liveDataRevision
+  ])
+
+  useEffect(() => {
+    if (!draftIntel) {
+      setItemMatrixPlans(null)
+      return
+    }
+    setItemMatrixPlans(null)
+    let cancelled = false
+    const cancelIdle = scheduleIdleWork(() => {
+      const plans = buildItemMatrixPlans()
+      if (!cancelled) {
+        setItemMatrixPlans(plans)
+      }
+    })
+    return () => {
+      cancelled = true
+      cancelIdle()
+    }
+  }, [draftIntel, buildItemMatrixPlans])
+
+  const draftIntelWithMatrix = useMemo(() => {
+    if (!draftIntel) {
+      return draftIntel
+    }
+    return {
+      ...draftIntel,
+      itemMatrixPlans: itemMatrixPlans ?? undefined
+    }
+  }, [draftIntel, itemMatrixPlans])
+
   const importPlayerChampionPool = useCallback(async (riotId: string, platform: RiotPlatform) => {
     if (!DESKTOP_PLAYER_POOL_IMPORT_ENABLED) {
       setPlayerPoolStatus(DESKTOP_PLAYER_POOL_IMPORT_WIP_MESSAGE)
@@ -643,7 +713,7 @@ export function MainShell() {
       suggestionMyRole: roleForSuggestions,
       banChampionNames,
       enemyRoleInference,
-      draftIntel,
+      draftIntel: draftIntelWithMatrix,
       boardSignature: boardSignature || null,
       championsSearch,
       trainedEffectsStatus: trainedEffects ? trainedEffects.status : null,
@@ -662,7 +732,7 @@ export function MainShell() {
     roleForSuggestions,
     banChampionNames,
     enemyRoleInference,
-    draftIntel,
+    draftIntelWithMatrix,
     boardSignature,
     championsSearch,
     trainedEffects,
@@ -905,7 +975,8 @@ export function MainShell() {
               onSuggestDeltaListMode={setSuggestDeltaListMode}
               suggestions={suggestions}
               ddragonVersion={ddVersion && ddVersion[0] !== '(' ? ddVersion : null}
-              draftIntel={draftIntel}
+              draftIntel={draftIntelWithMatrix}
+              onPrepareItemMatrixPlans={() => setItemMatrixPlans(buildItemMatrixPlans())}
               appUpdateStatusLine={appUpdateStatusLine(appUpdateStatus)}
               appUpdateBusy={appUpdateBusy}
               appUpdateAvailable={appUpdateStatus?.state === 'available'}

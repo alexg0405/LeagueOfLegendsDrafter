@@ -34,7 +34,7 @@ function ItemIcon({
   const inner = (
     <>
       {src ? (
-        <img className="h-7 w-7 shrink-0 border border-nexus-line/70 object-cover" src={src} alt={iconOnly ? item.name : ''} width={28} height={28} />
+        <img className="h-7 w-7 shrink-0 border border-nexus-line/70 object-cover" src={src} alt={iconOnly ? item.name : ''} width={28} height={28} loading="lazy" decoding="async" />
       ) : (
         <span className="h-7 w-7 shrink-0 border border-nexus-line/70 bg-nexus-surface-2" aria-hidden />
       )}

@@ -19,7 +19,14 @@ export {
   type TrainedEffectsStatus
 } from './trainedEffects'
 export { suggestPicks } from './suggestPicks'
-export { buildDraftIntel, championPoolPreferenceToComfort, type BuildDraftIntelArgs } from './draftIntel'
+export {
+  buildDraftIntel,
+  buildDraftItemMatrixPlans,
+  championPoolPreferenceToComfort,
+  DRAFT_INTEL_ITEM_MATRIX_PLAN_LIMIT,
+  DRAFT_INTEL_PREVIEW_PLAN_LIMIT,
+  type BuildDraftIntelArgs
+} from './draftIntel'
 export {
   buildAdaptiveItemPlan,
   championKitProfileFromTexts,

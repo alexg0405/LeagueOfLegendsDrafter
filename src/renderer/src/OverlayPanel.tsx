@@ -478,8 +478,11 @@ export function OverlayPanel() {
         ? s.myRole
         : null
   const topItemPlan = d.draftIntel?.matchupPlans[0] ?? null
-  const activeItemMatrixPlan = itemMatrixPlan ?? topItemPlan
-  const itemMatrixPlans = d.draftIntel?.matchupPlans.filter((plan) => plan.itemPlan?.matrixRows?.length) ?? []
+  const itemMatrixPlans = (d.draftIntel?.itemMatrixPlans?.length ? d.draftIntel.itemMatrixPlans : d.draftIntel?.matchupPlans ?? [])
+    .filter((plan) => plan.itemPlan?.matrixRows?.length)
+  const activeItemMatrixPlan = itemMatrixPlan
+    ? itemMatrixPlans.find((plan) => plan.championId === itemMatrixPlan.championId) ?? itemMatrixPlan
+    : itemMatrixPlans[0] ?? topItemPlan
 
   const enemySlotsWithInference = useMemo((): InferredOverlaySlot[] => {
     const rows = d.enemyRoleInference ?? []
@@ -864,6 +867,7 @@ export function OverlayPanel() {
             championId={activeItemMatrixPlan.championId}
             championImageUrl={championIconUrl}
             ddragonVersion={d.dataDragonVersion}
+            isPreparing={d.draftIntel?.itemMatrixPlans == null}
             onClose={() => {
               setItemMatrixOpen(false)
               setItemMatrixPlan(null)

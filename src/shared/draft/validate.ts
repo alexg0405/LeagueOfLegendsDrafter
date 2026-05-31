@@ -186,6 +186,9 @@ function isStringArray(x: unknown, max = 8): x is string[] {
   return Array.isArray(x) && x.length <= max && x.every((row) => typeof row === 'string')
 }
 
+const DRAFT_INTEL_MAX_PREVIEW_PLANS = 16
+const DRAFT_INTEL_MAX_MATRIX_PLANS = 40
+
 function isDraftItemPlan(x: unknown): x is DraftItemPlan {
   if (x == null || typeof x !== 'object') {
     return false
@@ -297,10 +300,7 @@ function isDraftIntel(x: unknown): x is DraftIntel {
   if (typeof c.winCondition !== 'string') {
     return false
   }
-  if (!Array.isArray(o.matchupPlans) || o.matchupPlans.length > 16) {
-    return false
-  }
-  for (const row of o.matchupPlans) {
+  const isMatchupPlan = (row: unknown): boolean => {
     if (row == null || typeof row !== 'object') {
       return false
     }
@@ -324,6 +324,20 @@ function isDraftIntel(x: unknown): x is DraftIntel {
       return false
     }
     if (r.itemPlan != null && !isDraftItemPlan(r.itemPlan)) {
+      return false
+    }
+    return true
+  }
+  if (!Array.isArray(o.matchupPlans) || o.matchupPlans.length > DRAFT_INTEL_MAX_PREVIEW_PLANS) {
+    return false
+  }
+  for (const row of o.matchupPlans) {
+    if (!isMatchupPlan(row)) {
+      return false
+    }
+  }
+  if (o.itemMatrixPlans != null) {
+    if (!Array.isArray(o.itemMatrixPlans) || o.itemMatrixPlans.length > DRAFT_INTEL_MAX_MATRIX_PLANS || o.itemMatrixPlans.some((row) => !isMatchupPlan(row))) {
       return false
     }
   }

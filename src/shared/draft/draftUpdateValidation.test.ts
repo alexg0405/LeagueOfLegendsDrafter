@@ -164,6 +164,13 @@ describe('DraftUpdate enemy role inference payload', () => {
         confidenceNotes: ['Current-patch Emerald+ public meta seed.']
       }
     }
+    const baseMatrixPlan = update.draftIntel!.matchupPlans[0]!
+    update.draftIntel!.itemMatrixPlans = Array.from({ length: 40 }, (_, idx) => ({
+      ...baseMatrixPlan,
+      championId: 1000 + idx,
+      championName: `Matrix Champ ${idx}`
+    }))
+
     const sanitized = sanitizeDraftUpdateForIpc(update)
     expect(isDraftUpdate(sanitized)).toBe(true)
     expect(sanitized.draftIntel?.matchupPlans[0]?.championName).toBe('Ezreal')
@@ -171,5 +178,8 @@ describe('DraftUpdate enemy role inference payload', () => {
     expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.matrixRows?.[0]?.goodInto).toContain('frontline')
     expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.defaultBuildSource).toBe('ugg')
     expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.matrixRows?.[0]?.enemyTargets?.[0]?.championName).toBe('Malphite')
+    expect(sanitized.draftIntel?.itemMatrixPlans).toHaveLength(40)
+    expect(sanitized.draftIntel?.itemMatrixPlans?.[39]?.championName).toBe('Matrix Champ 39')
+    expect(sanitized.draftIntel?.itemMatrixPlans?.[0]?.itemPlan?.matrixRows?.[0]?.enemyTargets?.[0]?.championName).toBe('Malphite')
   })
 })

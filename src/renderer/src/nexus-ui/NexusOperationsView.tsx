@@ -166,6 +166,7 @@ export type NexusOperationsViewProps = {
   suggestions: PickSuggestion[]
   ddragonVersion: string | null
   draftIntel?: DraftIntel | null
+  onPrepareItemMatrixPlans?: () => void
   appUpdateStatusLine: string
   appUpdateBusy: boolean
   appUpdateAvailable: boolean
@@ -205,6 +206,7 @@ export function NexusOperationsView({
   suggestions,
   ddragonVersion,
   draftIntel,
+  onPrepareItemMatrixPlans,
   appUpdateStatusLine,
   appUpdateBusy,
   appUpdateAvailable,
@@ -254,8 +256,11 @@ export function NexusOperationsView({
     })
   }
   const topPlan = draftIntel?.matchupPlans[0] ?? null
-  const activeItemMatrixPlan = itemMatrixPlan ?? topPlan
-  const itemMatrixPlans = draftIntel?.matchupPlans.filter((plan) => plan.itemPlan?.matrixRows?.length) ?? []
+  const itemMatrixPlans = (draftIntel?.itemMatrixPlans?.length ? draftIntel.itemMatrixPlans : draftIntel?.matchupPlans ?? [])
+    .filter((plan) => plan.itemPlan?.matrixRows?.length)
+  const activeItemMatrixPlan = itemMatrixPlan
+    ? itemMatrixPlans.find((plan) => plan.championId === itemMatrixPlan.championId) ?? itemMatrixPlan
+    : itemMatrixPlans[0] ?? topPlan
   const matrixChampionImageUrl = (id: number): string | null => {
     const key = championKeyById.get(id)
     return key && ddragonVersion ? ddragonChampionImageUrl(ddragonVersion, key) : null
@@ -328,6 +333,7 @@ export function NexusOperationsView({
             championId={activeItemMatrixPlan.championId}
             championImageUrl={matrixChampionImageUrl}
             ddragonVersion={ddragonVersion}
+            isPreparing={draftIntel?.itemMatrixPlans == null}
             onClose={() => {
               setItemMatrixOpen(false)
               setItemMatrixPlan(null)
@@ -495,6 +501,7 @@ export function NexusOperationsView({
                   className={btnPrimary + ' px-3 py-1.5 text-[10px]'}
                   disabled={!topPlan?.itemPlan?.matrixRows?.length}
                   onClick={() => {
+                    onPrepareItemMatrixPlans?.()
                     if (topPlan) {
                       setItemMatrixPlan(topPlan)
                       setItemMatrixOpen(true)
@@ -517,6 +524,7 @@ export function NexusOperationsView({
                     ddragonVersion={ddragonVersion}
                     limit={4}
                     onOpenMatrix={() => {
+                      onPrepareItemMatrixPlans?.()
                       setItemMatrixPlan(topPlan)
                       setItemMatrixOpen(true)
                     }}
@@ -852,6 +860,7 @@ export function NexusOperationsView({
                   ddragonVersion={ddragonVersion}
                   limit={3}
                   onOpenMatrix={() => {
+                    onPrepareItemMatrixPlans?.()
                     setItemMatrixPlan(matchupPlan)
                     setItemMatrixOpen(true)
                   }}

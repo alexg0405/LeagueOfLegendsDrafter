@@ -14,6 +14,7 @@ import type { ChampionSpellLite, ItemLite } from '../dataDragon'
 import type {
   ChampionPoolPreference,
   DraftIntel,
+  DraftMatchupPlan,
   DraftItemPlan,
   DraftRole,
   DraftSnapshot,
@@ -24,7 +25,8 @@ import type {
 } from './types'
 
 const ROLE_KEYS = ['top', 'jungle', 'middle', 'bottom', 'support'] as const
-const MATCHUP_PLAN_LIMIT = 40
+export const DRAFT_INTEL_PREVIEW_PLAN_LIMIT = 12
+export const DRAFT_INTEL_ITEM_MATRIX_PLAN_LIMIT = 40
 const PATCH_DATA_NOTE = 'Current-patch Emerald+ public meta seed; early-patch winrates can move as games accumulate.'
 
 type ChampionMeta = { tags: string[]; partype: string; passive?: ChampionSpellLite; spells?: ChampionSpellLite[] }
@@ -730,12 +732,13 @@ function matchupPlans(
   idToName: ReadonlyMap<number, string> | null,
   enemyRoleInference?: EnemyRoleInference[] | null,
   championMetaById?: ReadonlyMap<number, ChampionMeta> | null,
-  itemCatalog?: readonly ItemLite[] | null
-): DraftIntel['matchupPlans'] {
+  itemCatalog?: readonly ItemLite[] | null,
+  limit = DRAFT_INTEL_PREVIEW_PLAN_LIMIT
+): DraftMatchupPlan[] {
   const laneOpponent = likelyLaneOpponent(snapshot, myRole, enemyRoleInference)
   const laneOpponentId = laneOpponent?.championId ?? null
   const laneOpponentName = laneOpponentId != null ? laneOpponent?.championName ?? championName(laneOpponentId, idToName) : null
-  return suggestions.slice(0, MATCHUP_PLAN_LIMIT).map((s) => ({
+  return suggestions.slice(0, limit).map((s) => ({
     championId: s.championId,
     championName: s.championName,
     laneOpponentId,
@@ -747,6 +750,34 @@ function matchupPlans(
     gamePlan: planLine(s, myRole, ally, enemy, laneOpponent),
     itemPlan: itemPlan(s, myRole, ally, enemy, laneOpponent, championMetaById, itemCatalog)
   }))
+}
+
+export function buildDraftItemMatrixPlans({
+  snapshot,
+  myRole,
+  suggestions,
+  idToName,
+  championMetaById,
+  enemyRoleInference,
+  itemCatalog
+}: BuildDraftIntelArgs): DraftMatchupPlan[] {
+  if (!snapshot && suggestions.length === 0) {
+    return []
+  }
+  const ally = analyzeTeam(snapshot?.ally ?? [], idToName, championMetaById)
+  const enemy = analyzeTeam(snapshot?.enemy ?? [], idToName, championMetaById)
+  return matchupPlans(
+    suggestions,
+    snapshot,
+    myRole,
+    ally,
+    enemy,
+    idToName,
+    enemyRoleInference,
+    championMetaById,
+    itemCatalog,
+    DRAFT_INTEL_ITEM_MATRIX_PLAN_LIMIT
+  )
 }
 
 function duoLaneNote(snapshot: DraftSnapshot | null, myRole: DraftRole, idToName: ReadonlyMap<number, string> | null): string | null {

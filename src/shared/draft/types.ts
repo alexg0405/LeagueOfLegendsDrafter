@@ -126,6 +126,19 @@ export type DraftItemPlan = {
   threatSummary?: DraftItemThreat[]
 }
 
+export type DraftMatchupPlan = {
+  championId: number
+  championName: string
+  laneOpponentId: number | null
+  laneOpponentName: string | null
+  summonerSpells: string
+  startingItem: string
+  firstRecall: string
+  runeExport: string
+  gamePlan: string
+  itemPlan?: DraftItemPlan
+}
+
 export type DraftIntel = {
   banRecommendations: {
     championId: number
@@ -141,18 +154,8 @@ export type DraftIntel = {
     warnings: string[]
     winCondition: string
   }
-  matchupPlans: {
-    championId: number
-    championName: string
-    laneOpponentId: number | null
-    laneOpponentName: string | null
-    summonerSpells: string
-    startingItem: string
-    firstRecall: string
-    runeExport: string
-    gamePlan: string
-    itemPlan?: DraftItemPlan
-  }[]
+  matchupPlans: DraftMatchupPlan[]
+  itemMatrixPlans?: DraftMatchupPlan[]
   pickComparison: {
     championId: number
     championName: string

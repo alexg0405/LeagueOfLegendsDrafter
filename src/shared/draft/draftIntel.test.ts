@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { buildDraftIntel, championPoolPreferenceToComfort } from './draftIntel'
+import {
+  buildDraftIntel,
+  buildDraftItemMatrixPlans,
+  championPoolPreferenceToComfort,
+  DRAFT_INTEL_ITEM_MATRIX_PLAN_LIMIT,
+  DRAFT_INTEL_PREVIEW_PLAN_LIMIT
+} from './draftIntel'
 import type { DraftSnapshot, PickSuggestion } from './types'
 import type { ItemLite } from '../dataDragon'
 
@@ -176,6 +182,25 @@ describe('buildDraftIntel', () => {
     expect(plan?.bootChoice?.name).toMatch(/Mercury/)
     expect(plan?.matrixRows?.some((row) => row.tags.includes('anti-heal'))).toBe(true)
     expect(plan?.threatSummary?.map((row) => row.label)).toEqual(expect.arrayContaining(['Hard CC', 'Healing']))
+  })
+
+  it('keeps preview plans small while full item matrix plans cover lookup candidates', () => {
+    const suggestions = Array.from({ length: DRAFT_INTEL_ITEM_MATRIX_PLAN_LIMIT + 5 }, (_, idx) =>
+      suggestion(1000 + idx, `Champion ${idx}`)
+    )
+    const args = {
+      snapshot: snapshot(),
+      myRole: 'bottom' as const,
+      suggestions,
+      idToName: names
+    }
+    const intel = buildDraftIntel(args)
+    const matrixPlans = buildDraftItemMatrixPlans(args)
+
+    expect(intel?.matchupPlans).toHaveLength(DRAFT_INTEL_PREVIEW_PLAN_LIMIT)
+    expect(intel?.itemMatrixPlans).toBeUndefined()
+    expect(matrixPlans).toHaveLength(DRAFT_INTEL_ITEM_MATRIX_PLAN_LIMIT)
+    expect(matrixPlans[matrixPlans.length - 1]?.championName).toBe(`Champion ${DRAFT_INTEL_ITEM_MATRIX_PLAN_LIMIT - 1}`)
   })
 
   it('maps champion pool preferences to comfort weights', () => {

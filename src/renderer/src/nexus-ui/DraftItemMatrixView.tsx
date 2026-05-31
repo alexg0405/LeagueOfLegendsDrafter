@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type UIEvent } from 'react'
 import { ddragonItemImageUrl } from '@shared/dataDragon'
 import type { DraftIntel, DraftItemMatrixRow, DraftItemRef } from '@shared/draft'
 
@@ -21,7 +21,12 @@ type DraftItemMatrixViewProps = {
   onClose?: () => void
   maxRows?: number
   className?: string
+  isPreparing?: boolean
 }
+
+const MATRIX_ROW_HEIGHT = 58
+const MATRIX_ROW_OVERSCAN = 6
+const MATRIX_VIEWPORT_FALLBACK = 560
 
 function itemIds(rows: (DraftItemRef | null | undefined)[] | undefined): number[] {
   return (rows ?? []).flatMap((row) => (row?.itemId ? [row.itemId] : []))
@@ -38,8 +43,8 @@ function defaultIdsFor(itemPlan: DraftItemPlan): Set<number> {
   ])
 }
 
-function buildStatusFor(row: DraftItemMatrixRow, itemPlan: DraftItemPlan): { label: ItemMatrixRow['buildStatus']; isDefault: boolean } {
-  if (defaultIdsFor(itemPlan).has(row.itemId)) {
+function buildStatusFor(row: DraftItemMatrixRow, itemPlan: DraftItemPlan, defaultIds: ReadonlySet<number>): { label: ItemMatrixRow['buildStatus']; isDefault: boolean } {
+  if (defaultIds.has(row.itemId)) {
     return {
       label: itemPlan.defaultBuildSource === 'ugg' ? 'Default Build' : 'Adaptive Default',
       isDefault: true
@@ -51,6 +56,7 @@ function buildStatusFor(row: DraftItemMatrixRow, itemPlan: DraftItemPlan): { lab
 function matrixRows(itemPlan: DraftItemPlan | null | undefined): ItemMatrixRow[] {
   if (!itemPlan) return []
   const seen = new Set<number>()
+  const defaultIds = defaultIdsFor(itemPlan)
   return (itemPlan.matrixRows ?? [])
     .filter((row) => {
       if (seen.has(row.itemId)) return false
@@ -58,7 +64,7 @@ function matrixRows(itemPlan: DraftItemPlan | null | undefined): ItemMatrixRow[]
       return true
     })
     .map((row) => {
-      const status = buildStatusFor(row, itemPlan)
+      const status = buildStatusFor(row, itemPlan, defaultIds)
       return {
         ...row,
         buildStatus: status.label,
@@ -105,28 +111,100 @@ function CounterTargets({
   }
   if (targets.length > 0) {
     return (
-      <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
+      <span className="inline-flex min-w-0 items-center gap-1.5">
         {targets.map((target) => {
           const src = championImageUrl?.(target.championId) ?? null
           const title = `${target.championName}: ${target.reason} (${targetSourceLabel(target.source)})`
           return (
-            <span key={`${row.itemId}-${target.championId}-${target.reason}`} className="inline-flex items-center gap-1 text-nexus-muted/95" title={title}>
+            <span key={`${row.itemId}-${target.championId}-${target.reason}`} className="inline-flex items-center text-nexus-muted/95" title={title}>
               {src ? (
-                <img className="h-7 w-7 border border-nexus-line/70 object-cover" src={src} alt="" width={28} height={28} />
+                <img className="h-7 w-7 border border-nexus-line/70 object-cover" src={src} alt="" width={28} height={28} loading="lazy" decoding="async" />
               ) : (
                 <span className="inline-flex h-7 w-7 items-center justify-center border border-nexus-line/70 bg-nexus-bg text-[10px] text-nexus-muted">
                   {target.championName.slice(0, 2)}
                 </span>
               )}
-              <span className="text-[10px]">{target.reason}</span>
             </span>
           )
         })}
       </span>
     )
   }
-  return <span className="text-nexus-muted/90">{row.goodAgainst?.join(', ') || row.goodInto.join(', ') || 'Matchup dependent'}</span>
+  return <span className="block truncate text-nexus-muted/90">{row.goodAgainst?.join(', ') || row.goodInto.join(', ') || 'Matchup dependent'}</span>
 }
+
+const ChampionSelectorButton = memo(function ChampionSelectorButton({
+  plan,
+  active,
+  src,
+  onSelect
+}: {
+  plan: MatchupPlan
+  active: boolean
+  src: string | null
+  onSelect: (plan: MatchupPlan) => void
+}) {
+  return (
+    <button
+      type="button"
+      className={
+        active
+          ? 'nexus-focus inline-flex shrink-0 items-center gap-1.5 border border-nexus-lime/70 bg-nexus-lime/15 px-2 py-1 text-left font-mono text-[11px] text-nexus-lime'
+          : 'nexus-focus inline-flex shrink-0 items-center gap-1.5 border border-nexus-line/70 px-2 py-1 text-left font-mono text-[11px] text-nexus-muted hover:border-nexus-lime/45 hover:text-nexus-text'
+      }
+      onClick={() => onSelect(plan)}
+    >
+      {src ? <img className="h-6 w-6 border border-nexus-line/60 object-cover" src={src} alt="" width={24} height={24} loading="lazy" decoding="async" /> : null}
+      <span>{plan.championName}</span>
+    </button>
+  )
+})
+
+const MatrixBodyRow = memo(function MatrixBodyRow({
+  row,
+  rowNumber,
+  itemImageUrl,
+  championImageUrl
+}: {
+  row: ItemMatrixRow
+  rowNumber: number
+  itemImageUrl: string | null
+  championImageUrl?: (championId: number) => string | null
+}) {
+  const reason = cleanReason(row.reason)
+  const tags = shortTags(row)
+  return (
+    <tr className="odd:bg-nexus-lime/[0.035] hover:bg-nexus-lime/[0.08]" style={{ height: MATRIX_ROW_HEIGHT }}>
+      <td className="border-b border-nexus-line/45 px-2 py-1 tabular-nums text-nexus-muted">{rowNumber}</td>
+      <td className="border-b border-nexus-line/45 px-2 py-1">
+        <span className="inline-flex min-w-0 items-center gap-2">
+          {itemImageUrl ? (
+            <img className="h-8 w-8 shrink-0 border border-nexus-line/70 object-cover" src={itemImageUrl} alt="" width={32} height={32} loading="lazy" decoding="async" />
+          ) : (
+            <span className="h-8 w-8 shrink-0 border border-nexus-line/70 bg-nexus-bg" aria-hidden />
+          )}
+          <span className="min-w-0">
+            <span className="block max-w-[10rem] truncate text-nexus-text/95" title={row.name}>{row.name}</span>
+            <span className="block text-[10px] text-nexus-muted">{row.cost}g - {row.phase}</span>
+          </span>
+        </span>
+      </td>
+      <td className="border-b border-nexus-line/45 px-2 py-1 tabular-nums text-nexus-text/90">{row.score.toFixed(1)}</td>
+      <td className={row.buildDefault ? 'border-b border-nexus-line/45 px-2 py-1 text-nexus-lime/90' : 'border-b border-nexus-line/45 px-2 py-1 text-nexus-yellow/90'}>
+        {row.buildStatus}
+      </td>
+      <td className="border-b border-nexus-line/45 px-2 py-1">
+        <CounterTargets row={row} championImageUrl={championImageUrl} />
+      </td>
+      <td className="border-b border-nexus-line/45 px-2 py-1 text-nexus-text/80">
+        <span className="block truncate" title={reason}>{reason}</span>
+      </td>
+      <td className="border-b border-nexus-line/45 px-2 py-1 text-nexus-muted">
+        <span className="block truncate" title={tags}>{tags}</span>
+      </td>
+    </tr>
+  )
+})
 
 export function DraftItemMatrixView({
   plans,
@@ -138,24 +216,32 @@ export function DraftItemMatrixView({
   ddragonVersion,
   onClose,
   maxRows = 40,
-  className = ''
+  className = '',
+  isPreparing = false
 }: DraftItemMatrixViewProps) {
   const selectablePlans = useMemo(() => (plans ?? []).filter((plan) => plan.itemPlan?.matrixRows?.length), [plans])
   const initialChampionId = selectedChampionId ?? championId ?? selectablePlans[0]?.championId ?? null
   const [activeChampionId, setActiveChampionId] = useState<number | null>(initialChampionId)
   const [championQuery, setChampionQuery] = useState('')
+  const deferredChampionQuery = useDeferredValue(championQuery)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const [scrollState, setScrollState] = useState({ top: 0, height: MATRIX_VIEWPORT_FALLBACK })
 
   useEffect(() => {
     setActiveChampionId(selectedChampionId ?? championId ?? selectablePlans[0]?.championId ?? null)
   }, [championId, selectablePlans, selectedChampionId])
 
-  const activePlan = selectablePlans.find((plan) => plan.championId === activeChampionId) ?? selectablePlans[0] ?? null
+  const planByChampionId = useMemo(() => new Map(selectablePlans.map((plan) => [plan.championId, plan] as const)), [selectablePlans])
+  const activePlan = activeChampionId != null ? planByChampionId.get(activeChampionId) ?? selectablePlans[0] ?? null : selectablePlans[0] ?? null
   const activeItemPlan = activePlan?.itemPlan ?? itemPlan ?? null
   const activeChampionName = activePlan?.championName ?? championName ?? 'Suggested build'
   const rows = useMemo(() => matrixRows(activeItemPlan).slice(0, maxRows), [activeItemPlan, maxRows])
   const [filter, setFilter] = useState<'all' | 'default' | 'situational'>('all')
-  const visibleRows = rows.filter((row) => filter === 'all' || (filter === 'default' ? row.buildDefault : !row.buildDefault))
-  const normalizedChampionQuery = championQuery.trim().toLowerCase()
+  const visibleRows = useMemo(
+    () => rows.filter((row) => filter === 'all' || (filter === 'default' ? row.buildDefault : !row.buildDefault)),
+    [filter, rows]
+  )
+  const normalizedChampionQuery = deferredChampionQuery.trim().toLowerCase()
   const championMatches = useMemo(() => {
     if (!normalizedChampionQuery) {
       return selectablePlans
@@ -169,10 +255,55 @@ export function DraftItemMatrixView({
     const active = activePlan ? [activePlan] : []
     return [...active, ...selectablePlans.filter((plan) => plan.championId !== activePlan?.championId)].slice(0, 10)
   }, [activePlan, championMatches, normalizedChampionQuery, selectablePlans])
-  const selectPlan = (plan: MatchupPlan) => {
+  const selectPlan = useCallback((plan: MatchupPlan) => {
     setActiveChampionId(plan.championId)
     setChampionQuery('')
-  }
+  }, [])
+  const handleMatrixScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    const nextTop = event.currentTarget.scrollTop
+    const nextHeight = event.currentTarget.clientHeight || MATRIX_VIEWPORT_FALLBACK
+    setScrollState((prev) => (prev.top === nextTop && prev.height === nextHeight ? prev : { top: nextTop, height: nextHeight }))
+  }, [])
+  useEffect(() => {
+    const element = scrollRef.current
+    if (!element) {
+      return
+    }
+    setScrollState({ top: element.scrollTop, height: element.clientHeight || MATRIX_VIEWPORT_FALLBACK })
+    if (typeof ResizeObserver === 'undefined') {
+      return
+    }
+    const observer = new ResizeObserver(() => {
+      setScrollState((prev) => {
+        const nextHeight = element.clientHeight || MATRIX_VIEWPORT_FALLBACK
+        return prev.height === nextHeight ? prev : { ...prev, height: nextHeight }
+      })
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 })
+    setScrollState((prev) => ({ ...prev, top: 0 }))
+  }, [activePlan?.championId, filter])
+  const virtualRows = useMemo(() => {
+    const start = Math.max(0, Math.floor(scrollState.top / MATRIX_ROW_HEIGHT) - MATRIX_ROW_OVERSCAN)
+    const count = Math.ceil(scrollState.height / MATRIX_ROW_HEIGHT) + MATRIX_ROW_OVERSCAN * 2
+    const end = Math.min(visibleRows.length, start + count)
+    return {
+      start,
+      rows: visibleRows.slice(start, end),
+      topPad: start * MATRIX_ROW_HEIGHT,
+      bottomPad: Math.max(0, (visibleRows.length - end) * MATRIX_ROW_HEIGHT)
+    }
+  }, [scrollState.height, scrollState.top, visibleRows])
+  const itemImageUrls = useMemo(() => {
+    const urls = new Map<number, string | null>()
+    for (const row of virtualRows.rows) {
+      urls.set(row.itemId, ddragonVersion && ddragonVersion[0] !== '(' ? ddragonItemImageUrl(ddragonVersion, row.itemId) : null)
+    }
+    return urls
+  }, [ddragonVersion, virtualRows.rows])
 
   return (
     <section className={`border border-nexus-lime/45 bg-nexus-surface/95 shadow-[0_0_42px_rgba(29,212,168,0.18)] ${className}`}>
@@ -234,24 +365,23 @@ export function DraftItemMatrixView({
               {selectablePlans.length} builds
             </span>
           </div>
+          {isPreparing ? (
+            <div className="border border-nexus-line/60 bg-nexus-bg/45 px-2 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-muted">
+              Preparing full matrix...
+            </div>
+          ) : null}
           <div className="flex gap-1.5 overflow-x-auto">
             {visibleChampionMatches.map((plan) => {
               const src = championImageUrl?.(plan.championId) ?? null
               const active = plan.championId === activePlan?.championId
               return (
-                <button
+                <ChampionSelectorButton
                   key={`item-matrix-champion-${plan.championId}`}
-                  type="button"
-                  className={
-                    active
-                      ? 'nexus-focus inline-flex shrink-0 items-center gap-1.5 border border-nexus-lime/70 bg-nexus-lime/15 px-2 py-1 text-left font-mono text-[11px] text-nexus-lime'
-                      : 'nexus-focus inline-flex shrink-0 items-center gap-1.5 border border-nexus-line/70 px-2 py-1 text-left font-mono text-[11px] text-nexus-muted hover:border-nexus-lime/45 hover:text-nexus-text'
-                  }
-                  onClick={() => selectPlan(plan)}
-                >
-                  {src ? <img className="h-6 w-6 border border-nexus-line/60 object-cover" src={src} alt="" width={24} height={24} /> : null}
-                  <span>{plan.championName}</span>
-                </button>
+                  plan={plan}
+                  active={active}
+                  src={src}
+                  onSelect={selectPlan}
+                />
               )
             })}
             {visibleChampionMatches.length === 0 ? (
@@ -260,8 +390,17 @@ export function DraftItemMatrixView({
           </div>
         </div>
       ) : null}
-      <div className="max-h-[72vh] overflow-auto">
-        <table className="w-full min-w-[54rem] border-collapse text-left font-mono text-xs">
+      <div ref={scrollRef} className="max-h-[72vh] overflow-auto" onScroll={handleMatrixScroll}>
+        <table className="w-full min-w-[54rem] table-fixed border-collapse text-left font-mono text-xs">
+          <colgroup>
+            <col className="w-8" />
+            <col className="w-56" />
+            <col className="w-16" />
+            <col className="w-28" />
+            <col className="w-44" />
+            <col className="w-72" />
+            <col className="w-40" />
+          </colgroup>
           <thead className="sticky top-0 z-10 bg-nexus-surface-2 text-nexus-lime/85">
             <tr className="uppercase tracking-[0.14em]">
               <th className="border-b border-nexus-line/80 px-2 py-2">#</th>
@@ -281,36 +420,27 @@ export function DraftItemMatrixView({
                 </td>
               </tr>
             ) : (
-              visibleRows.map((row, idx) => {
-                const src = ddragonVersion && ddragonVersion[0] !== '(' ? ddragonItemImageUrl(ddragonVersion, row.itemId) : null
-                return (
-                  <tr key={`item-matrix-${row.itemId}`} className="odd:bg-nexus-lime/[0.035] hover:bg-nexus-lime/[0.08]">
-                    <td className="border-b border-nexus-line/45 px-2 py-2 tabular-nums text-nexus-muted">{idx + 1}</td>
-                    <td className="border-b border-nexus-line/45 px-2 py-2">
-                      <span className="inline-flex min-w-0 items-center gap-2">
-                        {src ? (
-                          <img className="h-8 w-8 shrink-0 border border-nexus-line/70 object-cover" src={src} alt="" width={32} height={32} />
-                        ) : (
-                          <span className="h-8 w-8 shrink-0 border border-nexus-line/70 bg-nexus-bg" aria-hidden />
-                        )}
-                        <span className="min-w-0">
-                          <span className="block truncate text-nexus-text/95">{row.name}</span>
-                          <span className="block text-[10px] text-nexus-muted">{row.cost}g - {row.phase}</span>
-                        </span>
-                      </span>
-                    </td>
-                    <td className="border-b border-nexus-line/45 px-2 py-2 tabular-nums text-nexus-text/90">{row.score.toFixed(1)}</td>
-                    <td className={row.buildDefault ? 'border-b border-nexus-line/45 px-2 py-2 text-nexus-lime/90' : 'border-b border-nexus-line/45 px-2 py-2 text-nexus-yellow/90'}>
-                      {row.buildStatus}
-                    </td>
-                    <td className="border-b border-nexus-line/45 px-2 py-2">
-                      <CounterTargets row={row} championImageUrl={championImageUrl} />
-                    </td>
-                    <td className="border-b border-nexus-line/45 px-2 py-2 text-nexus-text/80">{cleanReason(row.reason)}</td>
-                    <td className="border-b border-nexus-line/45 px-2 py-2 text-nexus-muted">{shortTags(row)}</td>
+              <>
+                {virtualRows.topPad > 0 ? (
+                  <tr aria-hidden style={{ height: virtualRows.topPad }}>
+                    <td colSpan={7} className="p-0" />
                   </tr>
-                )
-              })
+                ) : null}
+                {virtualRows.rows.map((row, idx) => (
+                  <MatrixBodyRow
+                    key={`item-matrix-${row.itemId}`}
+                    row={row}
+                    rowNumber={virtualRows.start + idx + 1}
+                    itemImageUrl={itemImageUrls.get(row.itemId) ?? null}
+                    championImageUrl={championImageUrl}
+                  />
+                ))}
+                {virtualRows.bottomPad > 0 ? (
+                  <tr aria-hidden style={{ height: virtualRows.bottomPad }}>
+                    <td colSpan={7} className="p-0" />
+                  </tr>
+                ) : null}
+              </>
             )}
           </tbody>
         </table>

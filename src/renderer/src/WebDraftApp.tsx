@@ -22,6 +22,7 @@ import {
   bestAllySlotsForSuggestion,
   bestEnemySlotsForSuggestion,
   buildDraftIntel,
+  buildDraftItemMatrixPlans,
   championIdsForMyPool,
   championPoolPreferenceToComfort,
   ENGINE_V1_LABEL,
@@ -82,6 +83,19 @@ const WEB_PLAYER_POOL_IMPORT_WIP_MESSAGE =
   'Riot mastery import is temporarily WIP. Manual My Champs weights still work below.'
 const WEB_VISION_SCREENSHOT_WIP_MESSAGE =
   'Screenshot autofill is temporarily WIP. Type champions manually for now.'
+
+function scheduleIdleWork(work: () => void): () => void {
+  const idleWindow = window as Window & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number
+    cancelIdleCallback?: (handle: number) => void
+  }
+  if (typeof idleWindow.requestIdleCallback === 'function') {
+    const handle = idleWindow.requestIdleCallback(work, { timeout: 1200 })
+    return () => idleWindow.cancelIdleCallback?.(handle)
+  }
+  const handle = window.setTimeout(work, 80)
+  return () => window.clearTimeout(handle)
+}
 
 /** Solid dark fill + [color-scheme:dark] so native selects/inputs do not render as light system panels. */
 const webFieldClass =
@@ -1030,6 +1044,7 @@ export function WebDraftApp() {
   const [poolTrashActive, setPoolTrashActive] = useState(false)
   const [itemMatrixOpen, setItemMatrixOpen] = useState(false)
   const [itemMatrixPlan, setItemMatrixPlan] = useState<DraftIntel['matchupPlans'][number] | null>(null)
+  const [itemMatrixPlans, setItemMatrixPlans] = useState<DraftIntel['itemMatrixPlans'] | null>(null)
   const firstChampInputRef = useRef<HTMLInputElement | null>(null)
   const listboxId = useId()
   const [webRoute, setWebRoute] = useState<WebRoute>(() => readWebRoute())
@@ -1337,6 +1352,68 @@ export function WebDraftApp() {
     championPoolPreferenceMap,
     liveDataRevision
   ])
+  const buildItemMatrixPlans = useCallback(() => buildDraftItemMatrixPlans({
+    snapshot,
+    myRole: role,
+    suggestions,
+    idToName: nameById,
+    championMetaById,
+    enemyRoleInference,
+    patchLabel,
+    dataDragonVersion: ddragonVersion,
+    championPoolPreferences: championPoolPreferenceMap,
+    itemCatalog: items
+  }), [
+    snapshot,
+    role,
+    suggestions,
+    nameById,
+    championMetaById,
+    enemyRoleInference,
+    patchLabel,
+    ddragonVersion,
+    championPoolPreferenceMap,
+    items,
+    liveDataRevision
+  ])
+
+  useEffect(() => {
+    if (!draftIntel) {
+      setItemMatrixPlans(null)
+      return
+    }
+    setItemMatrixPlans(null)
+    let cancelled = false
+    const cancelIdle = scheduleIdleWork(() => {
+      const plans = buildItemMatrixPlans()
+      if (!cancelled) {
+        setItemMatrixPlans(plans)
+      }
+    })
+    return () => {
+      cancelled = true
+      cancelIdle()
+    }
+  }, [draftIntel, buildItemMatrixPlans])
+
+  const ensureItemMatrixPlans = useCallback(() => {
+    if (itemMatrixPlans != null) {
+      return itemMatrixPlans
+    }
+    const plans = buildItemMatrixPlans()
+    setItemMatrixPlans(plans)
+    return plans
+  }, [buildItemMatrixPlans, itemMatrixPlans])
+
+  const draftIntelWithMatrix = useMemo(() => {
+    if (!draftIntel) {
+      return draftIntel
+    }
+    return {
+      ...draftIntel,
+      itemMatrixPlans: itemMatrixPlans ?? undefined
+    }
+  }, [draftIntel, itemMatrixPlans])
   const hasLockedDraftContext = useMemo(() => {
     return [...snapshot.ally, ...snapshot.enemy].some((slot) => slot.championId != null && slot.championId > 0)
   }, [snapshot])
@@ -1412,9 +1489,12 @@ export function WebDraftApp() {
     }
   }, [suggestions, role, ddragonVersion])
 
-  const topMatchupPlan = draftIntel?.matchupPlans[0] ?? null
-  const activeItemMatrixPlan = itemMatrixPlan ?? topMatchupPlan
-  const itemMatrixPlans = draftIntel?.matchupPlans.filter((plan) => plan.itemPlan?.matrixRows?.length) ?? []
+  const topMatchupPlan = draftIntelWithMatrix?.matchupPlans[0] ?? null
+  const itemMatrixPlansForView = (draftIntelWithMatrix?.itemMatrixPlans?.length ? draftIntelWithMatrix.itemMatrixPlans : draftIntelWithMatrix?.matchupPlans ?? [])
+    .filter((plan) => plan.itemPlan?.matrixRows?.length)
+  const activeItemMatrixPlan = itemMatrixPlan
+    ? itemMatrixPlansForView.find((plan) => plan.championId === itemMatrixPlan.championId) ?? itemMatrixPlan
+    : itemMatrixPlansForView[0] ?? topMatchupPlan
   const matrixChampionImageUrl = useCallback((id: number): string | null => {
     const champion = champions.find((row) => row.id === id)
     return champion && ddragonVersion ? ddragonChampionImageUrl(ddragonVersion, champion.key) : null
@@ -1712,13 +1792,14 @@ export function WebDraftApp() {
           />
           <DraftItemMatrixView
             className="relative z-10 max-h-[92vh] w-full max-w-6xl overflow-hidden"
-            plans={itemMatrixPlans}
+            plans={itemMatrixPlansForView}
             selectedChampionId={activeItemMatrixPlan.championId}
             itemPlan={activeItemMatrixPlan.itemPlan}
             championName={activeItemMatrixPlan.championName}
             championId={activeItemMatrixPlan.championId}
             championImageUrl={matrixChampionImageUrl}
             ddragonVersion={ddragonVersion}
+            isPreparing={itemMatrixPlans == null}
             onClose={() => {
               setItemMatrixOpen(false)
               setItemMatrixPlan(null)
@@ -2231,6 +2312,7 @@ export function WebDraftApp() {
                           className="nexus-focus border border-nexus-line/70 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/90 hover:border-nexus-lime/50 disabled:opacity-45"
                           disabled={!topMatchupPlan.itemPlan?.matrixRows?.length}
                           onClick={() => {
+                            ensureItemMatrixPlans()
                             setItemMatrixPlan(topMatchupPlan)
                             setItemMatrixOpen(true)
                           }}
@@ -2248,6 +2330,7 @@ export function WebDraftApp() {
                         ddragonVersion={ddragonVersion}
                         limit={4}
                         onOpenMatrix={() => {
+                          ensureItemMatrixPlans()
                           setItemMatrixPlan(topMatchupPlan)
                           setItemMatrixOpen(true)
                         }}
@@ -2292,6 +2375,7 @@ export function WebDraftApp() {
                       type="button"
                       onClick={() => {
                         if (topMatchupPlan) {
+                          ensureItemMatrixPlans()
                           setItemMatrixPlan(topMatchupPlan)
                           setItemMatrixOpen(true)
                         }
@@ -2322,10 +2406,11 @@ export function WebDraftApp() {
                         enemyRoleInference={enemyRoleInference}
                         matchupPlan={
                           hasLockedDraftContext
-                            ? draftIntel?.matchupPlans.find((plan) => plan.championId === suggestion.championId) ?? null
+                            ? draftIntelWithMatrix?.matchupPlans.find((plan) => plan.championId === suggestion.championId) ?? null
                             : null
                         }
                         onOpenItemMatrix={(plan) => {
+                          ensureItemMatrixPlans()
                           setItemMatrixPlan(plan)
                           setItemMatrixOpen(true)
                         }}

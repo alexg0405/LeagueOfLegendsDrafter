@@ -257,6 +257,29 @@ function sanitizeDraftIntel(intel: DraftUpdate['draftIntel']): DraftIntel | null
     return null
   }
   const i = intel as DraftIntel
+  const sanitizeMatchupPlans = (rows: unknown, max: number): DraftIntel['matchupPlans'] =>
+    Array.isArray(rows)
+      ? rows
+          .filter((row) => row != null && typeof row === 'object')
+          .map((row) => {
+            const r = row as DraftIntel['matchupPlans'][number]
+            return {
+              championId: finiteOr(r.championId, 0),
+              championName: text(r.championName, 'Champion'),
+              laneOpponentId: r.laneOpponentId == null || finiteOr(r.laneOpponentId, 0) <= 0 ? null : finiteOr(r.laneOpponentId, 0),
+              laneOpponentName: nullableText(r.laneOpponentName),
+              summonerSpells: text(r.summonerSpells),
+              startingItem: text(r.startingItem),
+              firstRecall: text(r.firstRecall),
+              runeExport: text(r.runeExport),
+              gamePlan: text(r.gamePlan),
+              itemPlan: sanitizeDraftItemPlan(r.itemPlan)
+            }
+          })
+          .filter((row) => row.championId > 0)
+          .slice(0, max)
+      : []
+  const itemMatrixPlans = sanitizeMatchupPlans(i.itemMatrixPlans, 40)
   return {
     banRecommendations: Array.isArray(i.banRecommendations)
       ? i.banRecommendations
@@ -278,24 +301,8 @@ function sanitizeDraftIntel(intel: DraftUpdate['draftIntel']): DraftIntel | null
       warnings: Array.isArray(i.compIdentity?.warnings) ? i.compIdentity.warnings.filter((x): x is string => typeof x === 'string').slice(0, 8) : [],
       winCondition: text(i.compIdentity?.winCondition)
     },
-    matchupPlans: Array.isArray(i.matchupPlans)
-      ? i.matchupPlans
-          .filter((row) => row != null && typeof row === 'object')
-          .map((row) => ({
-            championId: finiteOr(row.championId, 0),
-            championName: text(row.championName, 'Champion'),
-            laneOpponentId: row.laneOpponentId == null || finiteOr(row.laneOpponentId, 0) <= 0 ? null : finiteOr(row.laneOpponentId, 0),
-            laneOpponentName: nullableText(row.laneOpponentName),
-            summonerSpells: text(row.summonerSpells),
-            startingItem: text(row.startingItem),
-            firstRecall: text(row.firstRecall),
-            runeExport: text(row.runeExport),
-            gamePlan: text(row.gamePlan),
-            itemPlan: sanitizeDraftItemPlan(row.itemPlan)
-          }))
-          .filter((row) => row.championId > 0)
-          .slice(0, 8)
-      : [],
+    matchupPlans: sanitizeMatchupPlans(i.matchupPlans, 16),
+    itemMatrixPlans: itemMatrixPlans.length ? itemMatrixPlans : undefined,
     pickComparison: Array.isArray(i.pickComparison)
       ? i.pickComparison
           .filter((row) => row != null && typeof row === 'object')

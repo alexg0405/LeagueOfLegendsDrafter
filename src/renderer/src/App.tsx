@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react'
+import { ParticleWordLoader } from './ParticleWordLoader'
 
 const IS_WEB_BUILD = import.meta.env.VITE_NEXUS_WEB === '1'
 const WebDraftApp = IS_WEB_BUILD
@@ -9,11 +10,7 @@ const DesktopApp = IS_WEB_BUILD
   : lazy(() => import('./DesktopApp').then((mod) => ({ default: mod.DesktopApp })))
 
 function AppLoading() {
-  return (
-    <div className="min-h-screen bg-nexus-bg px-6 py-5 font-mono text-sm text-nexus-muted">
-      Loading Nexus Draft...
-    </div>
-  )
+  return <ParticleWordLoader />
 }
 
 export function App() {

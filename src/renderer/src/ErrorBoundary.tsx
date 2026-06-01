@@ -28,7 +28,7 @@ export class ErrorBoundary extends Component<Props, State> {
           className="boot-error"
           style={{ padding: 24, maxWidth: 640, color: '#f85149', lineHeight: 1.5, background: '#060f0c', minHeight: '100vh' }}
         >
-          <h1 style={{ color: '#e6edf3', fontSize: '1.1rem', margin: '0 0 8px' }}>League Drafter — UI error</h1>
+          <h1 style={{ color: '#e6edf3', fontSize: '1.1rem', margin: '0 0 8px' }}>Nexus Draft - UI error</h1>
           <pre className="nexus-allow-select" style={{ whiteSpace: 'pre-wrap', fontSize: 12, color: '#c9d1d9' }}>
             {this.state.err.message}
           </pre>

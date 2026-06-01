@@ -3,6 +3,12 @@ import type { AppUpdateCheckResult, AppUpdateStatus } from '../shared/appUpdate'
 import type { PlayerChampionPoolRequest, PlayerChampionPoolResponse } from '../shared/draft'
 import type { OverlayEnginePrefsPatch } from '../shared/draft/types'
 import type { LcuChampSelectResult } from '../shared/draft/lcuTypes'
+import type {
+  LcuDiagnosticResult,
+  OverlayShortcutStatusResult,
+  OverlayStatusResult,
+  OverlayToggleResult
+} from '../shared/desktopInterop'
 
 const api = {
   listCaptureSources: () =>
@@ -47,6 +53,7 @@ const api = {
   },
 
   lcuFetch: () => ipcRenderer.invoke('lcu:fetch') as Promise<LcuChampSelectResult>,
+  getLcuDiagnostics: () => ipcRenderer.invoke('lcu:diagnostics') as Promise<LcuDiagnosticResult>,
   getLivePublicData: () =>
     ipcRenderer.invoke('publicMeta:getLive') as Promise<
       | { ok: true; manifest: unknown; metaSeed: unknown; synergySeed: unknown }
@@ -76,7 +83,10 @@ const api = {
     }
   },
 
-  toggleOverlay: () => ipcRenderer.invoke('overlay:toggle') as Promise<{ visible: boolean }>,
+  toggleOverlay: () => ipcRenderer.invoke('overlay:toggle') as Promise<OverlayToggleResult>,
+  getOverlayStatus: () => ipcRenderer.invoke('overlay:status') as Promise<OverlayStatusResult>,
+  getOverlayShortcutStatus: () =>
+    ipcRenderer.invoke('overlay:shortcutsStatus') as Promise<OverlayShortcutStatusResult>,
   setOverlayProjectionMode: (open: boolean) =>
     ipcRenderer.invoke('overlay:setProjectionMode', open) as Promise<{ ok: boolean; open: boolean }>,
   closeApp: () => ipcRenderer.invoke('app:close') as Promise<{ ok: true }>,

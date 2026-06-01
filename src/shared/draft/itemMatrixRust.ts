@@ -3,6 +3,11 @@ import { championThreatOverrideRows } from './championThreatOverrides'
 import type { BuildDraftIntelArgs } from './draftIntel'
 import type { DraftItemMatrixRow, DraftMatchupPlan } from './types'
 
+export type ItemMatrixSerializeOptions = {
+  focusChampionId?: number | null
+  limit?: number
+}
+
 export type RustItemMatrixInput = {
   snapshot: BuildDraftIntelArgs['snapshot']
   myRole: BuildDraftIntelArgs['myRole']
@@ -13,6 +18,8 @@ export type RustItemMatrixInput = {
   itemCatalog: NonNullable<BuildDraftIntelArgs['itemCatalog']>
   uggSeed: typeof uggSeed
   championThreatOverrides: ReturnType<typeof championThreatOverrideRows>
+  focusChampionId?: number | null
+  limit?: number
 }
 
 export type ComparableMatrixPlan = {
@@ -29,17 +36,48 @@ export type ComparableMatrixPlan = {
   }[]
 }
 
-export function serializeItemMatrixInput(args: BuildDraftIntelArgs): RustItemMatrixInput {
+function focusedChampionMeta(
+  args: BuildDraftIntelArgs,
+  options?: ItemMatrixSerializeOptions
+): RustItemMatrixInput['championMetaById'] {
+  const meta = args.championMetaById
+  if (!meta) {
+    return []
+  }
+  const relevantIds = new Set<number>()
+  for (const slot of [...(args.snapshot?.ally ?? []), ...(args.snapshot?.enemy ?? [])]) {
+    if (slot.championId != null && slot.championId > 0) {
+      relevantIds.add(slot.championId)
+    }
+  }
+  const suggestionLimit = Math.max(1, Math.min(40, Math.trunc(options?.limit ?? 40)))
+  const suggestionRows = options?.focusChampionId
+    ? args.suggestions.filter((row) => row.championId === options.focusChampionId)
+    : args.suggestions.slice(0, suggestionLimit)
+  for (const row of suggestionRows) {
+    relevantIds.add(row.championId)
+  }
+  return Array.from(meta.entries())
+    .filter(([id]) => relevantIds.has(id))
+    .map(([id, meta]) => ({ id, meta }))
+}
+
+export function serializeItemMatrixInput(
+  args: BuildDraftIntelArgs,
+  options?: ItemMatrixSerializeOptions
+): RustItemMatrixInput {
   return {
     snapshot: args.snapshot,
     myRole: args.myRole,
     suggestions: args.suggestions,
     idToName: Array.from(args.idToName?.entries() ?? []).map(([id, name]) => ({ id, name })),
-    championMetaById: Array.from(args.championMetaById?.entries() ?? []).map(([id, meta]) => ({ id, meta })),
+    championMetaById: focusedChampionMeta(args, options),
     enemyRoleInference: args.enemyRoleInference ?? [],
     itemCatalog: args.itemCatalog ?? [],
     uggSeed,
-    championThreatOverrides: championThreatOverrideRows()
+    championThreatOverrides: championThreatOverrideRows(),
+    focusChampionId: options?.focusChampionId ?? null,
+    limit: options?.limit
   }
 }
 

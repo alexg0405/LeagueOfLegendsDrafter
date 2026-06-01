@@ -21,7 +21,6 @@ import {
 import {
   bestAllySlotsForSuggestion,
   bestEnemySlotsForSuggestion,
-  buildDraftIntel,
   championIdsForMyPool,
   championPoolPreferenceToComfort,
   ENGINE_V1_LABEL,
@@ -60,7 +59,8 @@ import {
   refreshLivePublicData,
   type LivePublicDataRefreshStatus
 } from './livePublicDataClient'
-import { buildDraftItemMatrixPlansAsync } from './itemMatrix/itemMatrixClient'
+import { buildDraftIntelAsync } from './draftIntel/draftIntelClient'
+import { buildDraftItemMatrixPlansAsync, type ItemMatrixRequestOptions } from './itemMatrix/itemMatrixClient'
 import { suggestPicksAsync } from './recommend/recommendClient'
 
 const ROLES: Exclude<DraftRole, 'unknown'>[] = ['top', 'jungle', 'middle', 'bottom', 'support']
@@ -94,6 +94,20 @@ function scheduleIdleWork(work: () => void): () => void {
   }
   const handle = window.setTimeout(work, 80)
   return () => window.clearTimeout(handle)
+}
+
+function mergeItemMatrixPlans(
+  current: DraftIntel['itemMatrixPlans'] | null,
+  incoming: DraftIntel['itemMatrixPlans']
+): DraftIntel['itemMatrixPlans'] {
+  const byChampion = new Map<number, NonNullable<DraftIntel['itemMatrixPlans']>[number]>()
+  for (const plan of current ?? []) {
+    byChampion.set(plan.championId, plan)
+  }
+  for (const plan of incoming ?? []) {
+    byChampion.set(plan.championId, plan)
+  }
+  return Array.from(byChampion.values())
 }
 
 /** Solid dark fill + [color-scheme:dark] so native selects/inputs do not render as light system panels. */
@@ -1044,6 +1058,8 @@ export function WebDraftApp() {
   const [itemMatrixOpen, setItemMatrixOpen] = useState(false)
   const [itemMatrixPlan, setItemMatrixPlan] = useState<DraftIntel['matchupPlans'][number] | null>(null)
   const [itemMatrixPlans, setItemMatrixPlans] = useState<DraftIntel['itemMatrixPlans'] | null>(null)
+  const [itemMatrixStatus, setItemMatrixStatus] = useState<'idle' | 'preparing' | 'ready' | 'error'>('idle')
+  const [itemMatrixError, setItemMatrixError] = useState<string | null>(null)
   const itemMatrixRequestRef = useRef(0)
   const firstChampInputRef = useRef<HTMLInputElement | null>(null)
   const listboxId = useId()
@@ -1347,8 +1363,7 @@ export function WebDraftApp() {
   const suggestions = suggestionResult.suggestions
   const patchLabel = suggestionResult.patchLabel
 
-  const draftIntel = useMemo(() => {
-    return buildDraftIntel({
+  const draftIntelArgs = useMemo(() => ({
       snapshot,
       myRole: role,
       suggestions,
@@ -1358,22 +1373,36 @@ export function WebDraftApp() {
       patchLabel,
       dataDragonVersion: ddragonVersion,
       championPoolPreferences: championPoolPreferenceMap,
-      itemCatalog: items
+      itemCatalog: items,
+      includeItemPlans: true
+    }),
+    [
+      snapshot,
+      role,
+      suggestions,
+      nameById,
+      championMetaById,
+      enemyRoleInference,
+      patchLabel,
+      ddragonVersion,
+      items,
+      championPoolPreferenceMap,
+      liveDataRevision
+    ]
+  )
+  const [draftIntel, setDraftIntel] = useState<DraftIntel | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void buildDraftIntelAsync(draftIntelArgs).then((rustIntel) => {
+      if (!cancelled) {
+        setDraftIntel(rustIntel)
+      }
     })
-  }, [
-    snapshot,
-    role,
-    suggestions,
-    nameById,
-    championMetaById,
-    enemyRoleInference,
-    patchLabel,
-    ddragonVersion,
-    items,
-    championPoolPreferenceMap,
-    liveDataRevision
-  ])
-  const buildItemMatrixPlans = useCallback(() => buildDraftItemMatrixPlansAsync({
+    return () => {
+      cancelled = true
+    }
+  }, [draftIntelArgs])
+  const buildItemMatrixPlans = useCallback((options?: ItemMatrixRequestOptions) => buildDraftItemMatrixPlansAsync({
     snapshot,
     myRole: role,
     suggestions,
@@ -1384,7 +1413,7 @@ export function WebDraftApp() {
     dataDragonVersion: ddragonVersion,
     championPoolPreferences: championPoolPreferenceMap,
     itemCatalog: items
-  }), [
+  }, options), [
     snapshot,
     role,
     suggestions,
@@ -1402,15 +1431,26 @@ export function WebDraftApp() {
     if (!draftIntel) {
       itemMatrixRequestRef.current += 1
       setItemMatrixPlans(null)
+      setItemMatrixStatus('idle')
+      setItemMatrixError(null)
       return
     }
-    setItemMatrixPlans(null)
+    setItemMatrixStatus((prev) => (prev === 'ready' ? 'ready' : 'idle'))
+    setItemMatrixError(null)
     let cancelled = false
     const requestId = ++itemMatrixRequestRef.current
     const cancelIdle = scheduleIdleWork(() => {
-      void buildItemMatrixPlans().then((plans) => {
+      setItemMatrixStatus('preparing')
+      void buildItemMatrixPlans().then((result) => {
         if (!cancelled && itemMatrixRequestRef.current === requestId) {
-          setItemMatrixPlans(plans)
+          if (result.status === 'ready') {
+            setItemMatrixPlans(result.plans)
+            setItemMatrixStatus('ready')
+            setItemMatrixError(null)
+          } else {
+            setItemMatrixStatus('error')
+            setItemMatrixError(result.error ?? 'Item matrix could not be prepared.')
+          }
         }
       })
     })
@@ -1420,24 +1460,49 @@ export function WebDraftApp() {
     }
   }, [draftIntel, buildItemMatrixPlans])
 
-  const ensureItemMatrixPlans = useCallback(() => {
-    if (itemMatrixPlans != null) {
+  const ensureItemMatrixPlans = useCallback((focusChampionId?: number | null) => {
+    const focusedPlanReady = focusChampionId != null && (itemMatrixPlans ?? []).some((plan) => plan.championId === focusChampionId && plan.itemPlan?.matrixRows?.length)
+    if (focusedPlanReady || (focusChampionId == null && itemMatrixStatus === 'ready' && itemMatrixPlans != null)) {
       return
     }
+    setItemMatrixStatus('preparing')
+    setItemMatrixError(null)
     const requestId = ++itemMatrixRequestRef.current
-    void buildItemMatrixPlans().then((plans) => {
+    void buildItemMatrixPlans(focusChampionId ? { focusChampionId, limit: 1 } : undefined).then((result) => {
       if (itemMatrixRequestRef.current === requestId) {
-        setItemMatrixPlans(plans)
+        if (result.status === 'ready') {
+          setItemMatrixPlans((prev) => (focusChampionId ? mergeItemMatrixPlans(prev, result.plans) : result.plans))
+          setItemMatrixStatus('ready')
+          setItemMatrixError(null)
+          if (focusChampionId) {
+            window.setTimeout(() => {
+              void buildItemMatrixPlans().then((fullResult) => {
+                if (fullResult.status === 'ready') {
+                  setItemMatrixPlans(fullResult.plans)
+                }
+              })
+            }, 0)
+          }
+        } else {
+          setItemMatrixStatus('error')
+          setItemMatrixError(result.error ?? 'Item matrix could not be prepared.')
+        }
       }
     })
-  }, [buildItemMatrixPlans, itemMatrixPlans])
+  }, [buildItemMatrixPlans, itemMatrixPlans, itemMatrixStatus])
 
   const draftIntelWithMatrix = useMemo(() => {
     if (!draftIntel) {
       return draftIntel
     }
+    const itemPlanByChampion = new Map((itemMatrixPlans ?? []).map((plan) => [plan.championId, plan.itemPlan]))
     return {
       ...draftIntel,
+      matchupPlans: draftIntel.matchupPlans.map((plan) =>
+        itemPlanByChampion.has(plan.championId)
+          ? { ...plan, itemPlan: itemPlanByChampion.get(plan.championId) }
+          : plan
+      ),
       itemMatrixPlans: itemMatrixPlans ?? undefined
     }
   }, [draftIntel, itemMatrixPlans])
@@ -1806,7 +1871,7 @@ export function WebDraftApp() {
     <div className="min-h-screen overflow-hidden [color-scheme:dark] bg-[radial-gradient(circle_at_20%_0%,rgba(35,213,176,0.14),transparent_32%),radial-gradient(circle_at_80%_10%,rgba(83,166,255,0.1),transparent_28%),linear-gradient(180deg,var(--nexus-bg),#03100c)] text-nexus-text font-body antialiased flex flex-col">
       <div className="nexus-noise fixed inset-0 pointer-events-none opacity-60" aria-hidden />
       <div className="pointer-events-none fixed inset-x-0 top-0 h-px bg-nexus-lime/70 shadow-[0_0_24px_rgba(35,213,176,0.7)]" aria-hidden />
-      {itemMatrixOpen && activeItemMatrixPlan?.itemPlan ? (
+      {itemMatrixOpen && activeItemMatrixPlan ? (
         <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/70 p-3 sm:p-5">
           <button
             type="button"
@@ -1821,12 +1886,13 @@ export function WebDraftApp() {
             className="relative z-10 max-h-[92vh] w-full max-w-6xl overflow-hidden"
             plans={itemMatrixPlansForView}
             selectedChampionId={activeItemMatrixPlan.championId}
-            itemPlan={activeItemMatrixPlan.itemPlan}
+            itemPlan={activeItemMatrixPlan.itemPlan ?? null}
             championName={activeItemMatrixPlan.championName}
             championId={activeItemMatrixPlan.championId}
             championImageUrl={matrixChampionImageUrl}
             ddragonVersion={ddragonVersion}
-            isPreparing={itemMatrixPlans == null}
+            isPreparing={itemMatrixStatus === 'preparing'}
+            error={itemMatrixStatus === 'error' ? itemMatrixError : null}
             onClose={() => {
               setItemMatrixOpen(false)
               setItemMatrixPlan(null)
@@ -2329,9 +2395,9 @@ export function WebDraftApp() {
                         <button
                           type="button"
                           className="nexus-focus border border-nexus-line/70 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/90 hover:border-nexus-lime/50 disabled:opacity-45"
-                          disabled={!topMatchupPlan.itemPlan?.matrixRows?.length}
+                          disabled={!topMatchupPlan}
                           onClick={() => {
-                            ensureItemMatrixPlans()
+                            ensureItemMatrixPlans(topMatchupPlan.championId)
                             setItemMatrixPlan(topMatchupPlan)
                             setItemMatrixOpen(true)
                           }}
@@ -2349,11 +2415,17 @@ export function WebDraftApp() {
                         ddragonVersion={ddragonVersion}
                         limit={4}
                         onOpenMatrix={() => {
-                          ensureItemMatrixPlans()
+                          ensureItemMatrixPlans(topMatchupPlan.championId)
                           setItemMatrixPlan(topMatchupPlan)
                           setItemMatrixOpen(true)
                         }}
                       />
+                      {!topMatchupPlan.itemPlan && itemMatrixStatus === 'preparing' ? (
+                        <p className="m-0 mt-2 text-nexus-muted">Preparing items...</p>
+                      ) : null}
+                      {!topMatchupPlan.itemPlan && itemMatrixStatus === 'error' ? (
+                        <p className="m-0 mt-2 text-nexus-red/80">{itemMatrixError ?? 'Item matrix could not be prepared.'}</p>
+                      ) : null}
                     </div>
                   )}
                   <details className="rounded-md border border-white/[0.08] bg-nexus-bg/35 px-2 py-2 text-nexus-muted">
@@ -2394,12 +2466,12 @@ export function WebDraftApp() {
                       type="button"
                       onClick={() => {
                         if (topMatchupPlan) {
-                          ensureItemMatrixPlans()
+                          ensureItemMatrixPlans(topMatchupPlan.championId)
                           setItemMatrixPlan(topMatchupPlan)
                           setItemMatrixOpen(true)
                         }
                       }}
-                      disabled={!topMatchupPlan?.itemPlan?.matrixRows?.length}
+                      disabled={!topMatchupPlan}
                       className="nexus-focus inline-flex border border-nexus-line/70 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-nexus-lime/90 hover:border-nexus-lime/50 hover:bg-nexus-lime/10 disabled:opacity-45"
                     >
                       Item matrix
@@ -2429,7 +2501,7 @@ export function WebDraftApp() {
                             : null
                         }
                         onOpenItemMatrix={(plan) => {
-                          ensureItemMatrixPlans()
+                          ensureItemMatrixPlans(plan.championId)
                           setItemMatrixPlan(plan)
                           setItemMatrixOpen(true)
                         }}

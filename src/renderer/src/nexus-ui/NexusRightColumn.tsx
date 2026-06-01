@@ -111,7 +111,7 @@ export function NexusRightColumn({
           className="font-mono text-xs text-nexus-muted leading-relaxed"
           variants={item}
         >
-          Riot and League of Legends are trademarks of Riot Games, Inc. Nexus//Draft is an independent tool.
+          Riot and League of Legends are trademarks of Riot Games, Inc. Nexus Draft is an independent tool.
         </motion.p>
 
         <div className="flex items-center justify-center gap-1 pt-1 opacity-40" aria-hidden>

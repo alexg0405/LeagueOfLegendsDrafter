@@ -88,7 +88,7 @@ export function DraftItemPlanBlock({
       <div className="mt-2 grid gap-1.5 border border-nexus-line/60 bg-nexus-bg/30 p-2 text-nexus-muted/90">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[10px] uppercase tracking-[0.14em] text-nexus-lime/80">Build</span>
-          {onOpenMatrix && matrixRows.length > 0 ? (
+          {onOpenMatrix ? (
             <button
               type="button"
               className="nexus-focus border border-nexus-line/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/90 hover:border-nexus-lime/50"

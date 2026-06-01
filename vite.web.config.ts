@@ -7,7 +7,8 @@ export default defineConfig({
   root: 'src/renderer',
   base: './',
   define: {
-    'import.meta.env.VITE_NEXUS_WEB': JSON.stringify('1')
+    'import.meta.env.VITE_NEXUS_WEB': JSON.stringify('1'),
+    'import.meta.env.VITE_NEXUS_TAURI': JSON.stringify('0')
   },
   resolve: {
     alias: {
@@ -18,20 +19,23 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon.png', 'favicon.ico'],
       manifest: {
         name: 'Nexus Draft',
         short_name: 'Nexus Draft',
-        description: 'League of Legends draft assistant — web lab',
+        description: 'League of Legends draft assistant',
         theme_color: '#060f0c',
         background_color: '#060f0c',
         display: 'standalone',
         start_url: './',
         scope: './',
-        icons: [{ src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }]
+        icons: [
+          { src: 'favicon.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: 'favicon.ico', sizes: '256x256', type: 'image/x-icon', purpose: 'any' }
+        ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,svg}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/downloads\//, /^\/data\//, /^\/api\//, /\/[^/?]+\.[^/]+$/],
         globIgnores: ['**/api/**']

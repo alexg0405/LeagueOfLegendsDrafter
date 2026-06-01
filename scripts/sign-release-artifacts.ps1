@@ -4,7 +4,9 @@ param(
   [string]$CertificateProfileName = $env:AZURE_SIGNING_CERTIFICATE_PROFILE_NAME,
   [string]$SignToolPath = $env:SIGNTOOL_PATH,
   [string]$DlibPath = $env:AZURE_CODESIGNING_DLIB_PATH,
-  [string]$Version = $env:NEXUS_DRAFT_SIGN_VERSION
+  [string]$Version = $env:NEXUS_DRAFT_SIGN_VERSION,
+  [switch]$IncludeTauri,
+  [switch]$TauriOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -151,19 +153,38 @@ if (-not (Test-Path -LiteralPath $releaseDir)) {
   throw "Release directory not found: $releaseDir. Run npm run dist:win first."
 }
 
-$artifactNames = @(
-  "Nexus-Draft-Setup-$Version.exe",
-  "Nexus-Draft-Portable-$Version.exe"
-)
+function Add-ReleaseArtifact {
+  param(
+    [string]$Name,
+    [bool]$Required
+  )
 
-$artifacts = foreach ($artifactName in $artifactNames) {
-  $artifactPath = Join-Path $releaseDir $artifactName
-  if (-not (Test-Path -LiteralPath $artifactPath)) {
+  $artifactPath = Join-Path $releaseDir $Name
+  if (Test-Path -LiteralPath $artifactPath) {
+    return Get-Item -LiteralPath $artifactPath
+  }
+
+  if ($Required) {
     throw "Expected release artifact is missing: $artifactPath"
   }
 
-  Get-Item -LiteralPath $artifactPath
+  return $null
 }
+
+$artifacts = @()
+
+if (-not $TauriOnly) {
+  $artifacts += Add-ReleaseArtifact -Name "Nexus-Draft-Setup-$Version.exe" -Required $true
+  $artifacts += Add-ReleaseArtifact -Name "Nexus-Draft-Portable-$Version.exe" -Required $true
+}
+
+if ($IncludeTauri -or $TauriOnly) {
+  $artifacts += Add-ReleaseArtifact -Name 'NexusDraft.exe' -Required $TauriOnly
+  $artifacts += Add-ReleaseArtifact -Name "Nexus-Draft-Tauri-Portable-$Version.exe" -Required $false
+  $artifacts += Add-ReleaseArtifact -Name "Nexus-Draft-Tauri-Setup-$Version.exe" -Required $false
+}
+
+$artifacts = $artifacts | Where-Object { $_ } | Sort-Object FullName -Unique
 
 if ($artifacts.Count -eq 0) {
   throw "No Nexus Draft release .exe artifacts found in $releaseDir."
@@ -208,19 +229,21 @@ try {
     Write-Host "$($artifact.Name): $($signature.Status)"
   }
 
-  $setupArtifact = Join-Path $releaseDir "Nexus-Draft-Setup-$Version.exe"
-  $blockmapPath = "$setupArtifact.blockmap"
-  $latestYmlPath = Join-Path $releaseDir 'latest.yml'
-  $appBuilder = Resolve-AppBuilder
+  if (-not $TauriOnly) {
+    $setupArtifact = Join-Path $releaseDir "Nexus-Draft-Setup-$Version.exe"
+    $blockmapPath = "$setupArtifact.blockmap"
+    $latestYmlPath = Join-Path $releaseDir 'latest.yml'
+    $appBuilder = Resolve-AppBuilder
 
-  Write-Host "Regenerating blockmap for $(Split-Path $setupArtifact -Leaf)..."
-  & $appBuilder blockmap --input=$setupArtifact --output=$blockmapPath
-  if ($LASTEXITCODE -ne 0) {
-    throw "app-builder blockmap failed with exit code $LASTEXITCODE."
+    Write-Host "Regenerating blockmap for $(Split-Path $setupArtifact -Leaf)..."
+    & $appBuilder blockmap --input=$setupArtifact --output=$blockmapPath
+    if ($LASTEXITCODE -ne 0) {
+      throw "app-builder blockmap failed with exit code $LASTEXITCODE."
+    }
+
+    Write-Host "Updating latest.yml hash/size for signed installer..."
+    Update-LatestYml -LatestYmlPath $latestYmlPath -ArtifactPath $setupArtifact
   }
-
-  Write-Host "Updating latest.yml hash/size for signed installer..."
-  Update-LatestYml -LatestYmlPath $latestYmlPath -ArtifactPath $setupArtifact
 }
 finally {
   Remove-Item -LiteralPath $metadataPath -Force -ErrorAction SilentlyContinue

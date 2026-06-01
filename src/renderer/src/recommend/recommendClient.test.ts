@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { suggestPicksAsync } from './recommendClient'
 
 describe('suggestPicksAsync', () => {
-  it('falls back to TypeScript when browser Worker is unavailable', async () => {
+  it('returns a safe empty result when browser Worker is unavailable', async () => {
     const result = await suggestPicksAsync({
       myRole: 'bottom',
       snapshot: null,

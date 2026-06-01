@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import type { AppUpdateStatus } from '@shared/appUpdate'
+import type { LcuDiagnosticResult, OverlayShortcutStatusResult } from '@shared/desktopInterop'
 import { getLatestDDragonVersion, loadChampionMaps, loadItemMaps, type ChampionLite, type ItemLite } from '@shared/dataDragon'
 import {
   applyChampionNames,
-  buildDraftIntel,
   championIdsForMyPool,
   championPoolPreferenceToComfort,
   compileTrainedEffects,
@@ -48,7 +48,9 @@ import {
   type LivePublicDataRefreshStatus
 } from './livePublicDataClient'
 import { copyBottomStatusStrip, copyDraftSource } from './nexus-ui/nexusCopy'
-import { buildDraftItemMatrixPlansAsync } from './itemMatrix/itemMatrixClient'
+import { copyLcuStatusLine, displayLcuError, lcuUiStatus } from './lcuStatusCopy'
+import { buildDraftIntelAsync } from './draftIntel/draftIntelClient'
+import { buildDraftItemMatrixPlansAsync, type ItemMatrixRequestOptions } from './itemMatrix/itemMatrixClient'
 import { suggestPicksAsync } from './recommend/recommendClient'
 
 const ROLES: DraftRole[] = ['top', 'jungle', 'middle', 'bottom', 'support']
@@ -77,6 +79,20 @@ function scheduleIdleWork(work: () => void): () => void {
   }
   const handle = window.setTimeout(work, 80)
   return () => window.clearTimeout(handle)
+}
+
+function mergeItemMatrixPlans(
+  current: DraftIntel['itemMatrixPlans'] | null,
+  incoming: DraftIntel['itemMatrixPlans']
+): DraftIntel['itemMatrixPlans'] {
+  const byChampion = new Map<number, NonNullable<DraftIntel['itemMatrixPlans']>[number]>()
+  for (const plan of current ?? []) {
+    byChampion.set(plan.championId, plan)
+  }
+  for (const plan of incoming ?? []) {
+    byChampion.set(plan.championId, plan)
+  }
+  return Array.from(byChampion.values())
 }
 
 type ChampionPoolPrefs = Record<string, ChampionPoolPreference>
@@ -243,49 +259,6 @@ const defaultOverlayEnginePrefs: OverlayEnginePrefs = {
   deltaListModeOverride: null
 }
 
-function lcuUiStatus(lcu: LcuChampSelectResult | null): NonNullable<DraftUpdate['lcuStatus']> {
-  if (lcu == null) {
-    return 'unknown'
-  }
-  if (lcu.lcuReachable) {
-    return 'ready'
-  }
-  return 'waiting'
-}
-
-function isBenignLcuWaitingError(error: string | null): boolean {
-  if (!error) {
-    return true
-  }
-  return /lockfile not found|econnrefused|econnreset|socket|timeout|connect/i.test(error)
-}
-
-function copyLcuStatusLine(lcu: LcuChampSelectResult | null): string {
-  if (lcu == null) {
-    return 'Waiting for League client status...'
-  }
-  if (lcu.lcuReachable) {
-    return lcu.snapshot ? 'League client ready; draft data is live.' : 'League client ready; waiting for champ select.'
-  }
-  if (lcu.lockfileFound && isBenignLcuWaitingError(lcu.error)) {
-    return 'League client detected; waiting for it to finish loading.'
-  }
-  if (!lcu.lockfileFound && isBenignLcuWaitingError(lcu.error)) {
-    return 'Waiting for League client to start.'
-  }
-  return 'League client detected; waiting for a clean LCU response.'
-}
-
-function displayLcuError(lcu: LcuChampSelectResult | null): string | null {
-  if (!lcu?.error) {
-    return null
-  }
-  if (!lcu.lcuReachable && isBenignLcuWaitingError(lcu.error)) {
-    return null
-  }
-  return lcu.error
-}
-
 function appUpdateStatusLine(status: AppUpdateStatus | null): string {
   if (!status) {
     return 'Update checker ready.'
@@ -303,6 +276,7 @@ export function MainShell() {
   const [nameById, setNameById] = useState(() => new Map<number, string>())
 
   const [lcu, setLcu] = useState<LcuChampSelectResult | null>(null)
+  const [lcuDiagnostics, setLcuDiagnostics] = useState<LcuDiagnosticResult | null>(null)
   const [useManual, setUseManual] = useState(false)
   const [manual, setManual] = useState<ManualPicks>(emptyManual)
 
@@ -329,6 +303,9 @@ export function MainShell() {
   const [liveDataStatus, setLiveDataStatus] = useState<LivePublicDataRefreshStatus | null>(null)
   const [appUpdateStatus, setAppUpdateStatus] = useState<AppUpdateStatus | null>(null)
   const [appUpdateBusy, setAppUpdateBusy] = useState(false)
+  const [overlayStatusLine, setOverlayStatusLine] = useState<string | null>(null)
+  const [overlayError, setOverlayError] = useState<string | null>(null)
+  const [overlayShortcuts, setOverlayShortcuts] = useState<OverlayShortcutStatusResult | null>(null)
 
   const effectiveMyRole: DraftRole = useMemo(() => {
     if (lcu?.snapshot?.myRole && lcu.snapshot.myRole !== 'unknown') {
@@ -597,8 +574,7 @@ export function MainShell() {
     return activeSnapshot ? inferEnemyRoleAssignments(activeSnapshot) : null
   }, [activeSnapshot, liveDataRevision])
 
-  const draftIntel = useMemo(() => {
-    return buildDraftIntel({
+  const draftIntelArgs = useMemo(() => ({
       snapshot: activeSnapshot,
       myRole: roleForSuggestions,
       suggestions,
@@ -608,25 +584,41 @@ export function MainShell() {
       patchLabel,
       dataDragonVersion: ddVersion,
       championPoolPreferences: championPoolPreferenceMap,
-      itemCatalog: items
+      itemCatalog: items,
+      includeItemPlans: true
+    }),
+    [
+      activeSnapshot,
+      roleForSuggestions,
+      suggestions,
+      nameById,
+      championMetaById,
+      enemyRoleInference,
+      patchLabel,
+      ddVersion,
+      items,
+      championPoolPreferenceMap,
+      liveDataRevision
+    ]
+  )
+  const [draftIntel, setDraftIntel] = useState<DraftIntel | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void buildDraftIntelAsync(draftIntelArgs).then((rustIntel) => {
+      if (!cancelled) {
+        setDraftIntel(rustIntel)
+      }
     })
-  }, [
-    activeSnapshot,
-    roleForSuggestions,
-    suggestions,
-    nameById,
-    championMetaById,
-    enemyRoleInference,
-    patchLabel,
-    ddVersion,
-    items,
-    championPoolPreferenceMap,
-    liveDataRevision
-  ])
+    return () => {
+      cancelled = true
+    }
+  }, [draftIntelArgs])
 
   const [itemMatrixPlans, setItemMatrixPlans] = useState<DraftIntel['itemMatrixPlans'] | null>(null)
+  const [itemMatrixStatus, setItemMatrixStatus] = useState<'idle' | 'preparing' | 'ready' | 'error'>('idle')
+  const [itemMatrixError, setItemMatrixError] = useState<string | null>(null)
   const itemMatrixRequestRef = useRef(0)
-  const buildItemMatrixPlans = useCallback(() => buildDraftItemMatrixPlansAsync({
+  const buildItemMatrixPlans = useCallback((options?: ItemMatrixRequestOptions) => buildDraftItemMatrixPlansAsync({
     snapshot: activeSnapshot,
     myRole: roleForSuggestions,
     suggestions,
@@ -637,7 +629,7 @@ export function MainShell() {
     dataDragonVersion: ddVersion,
     championPoolPreferences: championPoolPreferenceMap,
     itemCatalog: items
-  }), [
+  }, options), [
     activeSnapshot,
     roleForSuggestions,
     suggestions,
@@ -651,11 +643,29 @@ export function MainShell() {
     liveDataRevision
   ])
 
-  const prepareItemMatrixPlans = useCallback(() => {
+  const prepareItemMatrixPlans = useCallback((focusChampionId?: number | null) => {
+    setItemMatrixStatus((prev) => (prev === 'ready' ? 'ready' : 'idle'))
+    setItemMatrixError(null)
     const requestId = ++itemMatrixRequestRef.current
-    void buildItemMatrixPlans().then((plans) => {
+    void buildItemMatrixPlans(focusChampionId ? { focusChampionId, limit: 1 } : undefined).then((result) => {
       if (itemMatrixRequestRef.current === requestId) {
-        setItemMatrixPlans(plans)
+        if (result.status === 'ready') {
+          setItemMatrixPlans((prev) => (focusChampionId ? mergeItemMatrixPlans(prev, result.plans) : result.plans))
+          setItemMatrixStatus('ready')
+          setItemMatrixError(null)
+          if (focusChampionId) {
+            window.setTimeout(() => {
+              void buildItemMatrixPlans().then((fullResult) => {
+                if (fullResult.status === 'ready') {
+                  setItemMatrixPlans(fullResult.plans)
+                }
+              })
+            }, 0)
+          }
+        } else {
+          setItemMatrixStatus('error')
+          setItemMatrixError(result.error ?? 'Item matrix could not be prepared.')
+        }
       }
     })
   }, [buildItemMatrixPlans])
@@ -664,15 +674,26 @@ export function MainShell() {
     if (!draftIntel) {
       itemMatrixRequestRef.current += 1
       setItemMatrixPlans(null)
+      setItemMatrixStatus('idle')
+      setItemMatrixError(null)
       return
     }
-    setItemMatrixPlans(null)
+    setItemMatrixStatus('preparing')
+    setItemMatrixError(null)
     let cancelled = false
     const requestId = ++itemMatrixRequestRef.current
     const cancelIdle = scheduleIdleWork(() => {
-      void buildItemMatrixPlans().then((plans) => {
+      setItemMatrixStatus('preparing')
+      void buildItemMatrixPlans().then((result) => {
         if (!cancelled && itemMatrixRequestRef.current === requestId) {
-          setItemMatrixPlans(plans)
+          if (result.status === 'ready') {
+            setItemMatrixPlans(result.plans)
+            setItemMatrixStatus('ready')
+            setItemMatrixError(null)
+          } else {
+            setItemMatrixStatus('error')
+            setItemMatrixError(result.error ?? 'Item matrix could not be prepared.')
+          }
         }
       })
     })
@@ -686,8 +707,14 @@ export function MainShell() {
     if (!draftIntel) {
       return draftIntel
     }
+    const itemPlanByChampion = new Map((itemMatrixPlans ?? []).map((plan) => [plan.championId, plan.itemPlan]))
     return {
       ...draftIntel,
+      matchupPlans: draftIntel.matchupPlans.map((plan) =>
+        itemPlanByChampion.has(plan.championId)
+          ? { ...plan, itemPlan: itemPlanByChampion.get(plan.championId) }
+          : plan
+      ),
       itemMatrixPlans: itemMatrixPlans ?? undefined
     }
   }, [draftIntel, itemMatrixPlans])
@@ -729,7 +756,7 @@ export function MainShell() {
   }, [activeSnapshot?.bans, nameById])
 
   const lcuStatus = lcuUiStatus(lcu)
-  const lcuStatusLine = copyLcuStatusLine(lcu)
+  const lcuStatusLine = copyLcuStatusLine(lcu, lcuDiagnostics)
   const lcuError = displayLcuError(lcu)
 
   useEffect(() => {
@@ -777,6 +804,62 @@ export function MainShell() {
     return window.drafter.onLcuChampSelect((r) => {
       setLcu(r)
     })
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    let inFlight = false
+    const refresh = async () => {
+      if (inFlight) {
+        return
+      }
+      inFlight = true
+      try {
+        const diagnostics = await window.drafter.getLcuDiagnostics()
+        if (!cancelled) {
+          setLcuDiagnostics(diagnostics)
+        }
+      } catch {
+        if (!cancelled) {
+          setLcuDiagnostics(null)
+        }
+      } finally {
+        inFlight = false
+      }
+    }
+    void refresh()
+    const timer = window.setInterval(() => {
+      void refresh()
+    }, 8000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const status = await window.drafter.getOverlayShortcutStatus()
+        if (!cancelled) {
+          setOverlayShortcuts(status)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setOverlayShortcuts({
+            ok: false,
+            registered: [],
+            failed: ['Insert', 'F9', 'F10'],
+            error: error instanceof Error ? error.message : String(error)
+          })
+        }
+      }
+    }
+    void refresh()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -869,6 +952,28 @@ export function MainShell() {
     await window.drafter.quitAndInstallAppUpdate()
   }, [])
 
+  const handleToggleOverlay = useCallback(async () => {
+    setOverlayError(null)
+    setOverlayStatusLine('Opening overlay...')
+    try {
+      const result = await window.drafter.toggleOverlay()
+      if (!result.ok) {
+        const error = result.error ?? 'Overlay did not open.'
+        setOverlayError(error)
+        setOverlayStatusLine('Overlay failed.')
+        return
+      }
+      setOverlayStatusLine(result.visible ? 'Overlay is open.' : 'Overlay is hidden.')
+      const status = await window.drafter.getOverlayStatus().catch(() => null)
+      if (status?.ok && status.exists) {
+        setOverlayStatusLine(status.visible ? 'Overlay is open.' : 'Overlay exists but is hidden.')
+      }
+    } catch (error) {
+      setOverlayError(error instanceof Error ? error.message : String(error))
+      setOverlayStatusLine('Overlay failed.')
+    }
+  }, [])
+
   useEffect(() => {
     void (async () => {
       try {
@@ -951,7 +1056,7 @@ export function MainShell() {
     onSecondary:
       nexusNav === 'operations'
         ? () => {
-            void window.drafter.toggleOverlay()
+            void handleToggleOverlay()
           }
         : undefined,
     statusLine: copyBottomStatusStrip({
@@ -1011,6 +1116,8 @@ export function MainShell() {
               ddragonVersion={ddVersion && ddVersion[0] !== '(' ? ddVersion : null}
               draftIntel={draftIntelWithMatrix}
               onPrepareItemMatrixPlans={prepareItemMatrixPlans}
+              itemMatrixStatus={itemMatrixStatus}
+              itemMatrixError={itemMatrixError}
               appUpdateStatusLine={appUpdateStatusLine(appUpdateStatus)}
               appUpdateBusy={appUpdateBusy}
               appUpdateAvailable={appUpdateStatus?.state === 'available'}
@@ -1020,6 +1127,9 @@ export function MainShell() {
               onInstallAppUpdate={installAppUpdate}
               playerPoolProfile={playerPoolProfile}
               playerPoolStatus={playerPoolStatus}
+              overlayStatusLine={overlayStatusLine}
+              overlayError={overlayError}
+              overlayShortcutStatus={overlayShortcuts}
               playerPoolBusy={playerPoolBusy}
               recommendationPoolMode={recommendationPoolMode}
               onRecommendationPoolMode={setRecommendationPoolMode}
@@ -1036,9 +1146,7 @@ export function MainShell() {
                   return next
                 })
               }}
-              onToggleOverlay={async () => {
-                await window.drafter.toggleOverlay()
-              }}
+              onToggleOverlay={handleToggleOverlay}
             />
           </NexusRoutePanel>
         )}

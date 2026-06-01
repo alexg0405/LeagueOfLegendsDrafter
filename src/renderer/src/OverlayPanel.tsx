@@ -3,7 +3,6 @@ import type { ReactNode } from 'react'
 import { ddragonChampionImageUrl } from '@shared/dataDragon'
 import {
   ALLY_SYNERGY_BONUS,
-  buildEngineState,
   buildOverlayChampionSearchPool,
   compileTrainedEffects,
   formatRuneTipNote,
@@ -19,14 +18,15 @@ import {
   resolveChampionName,
   shrunkLaneRate,
   trainedSynergyDelta,
-  v1ComponentScores,
   type CompiledTrainedEffects,
   type DraftUpdate,
   type DraftRole,
   type RoleProbabilityMap,
+  type RustChampionScore,
   type OverlayEnginePrefsPatch,
   type RiotPlatform
 } from '@shared/draft'
+import { scoreChampionAsync } from './recommend/championScoreClient'
 import { DraftItemPlanBlock as OverlayItemPlan } from './nexus-ui/DraftItemPlanBlock'
 import { DraftItemMatrixView } from './nexus-ui/DraftItemMatrixView'
 import {
@@ -584,25 +584,34 @@ export function OverlayPanel() {
     setLookupQuery(c.name)
   }, [nameMatches, lookupId])
 
-  const engineState = useMemo(() => {
-    if (!s || !poolRole) {
-      return null
+  const [lookupScores, setLookupScores] = useState<RustChampionScore | null>(null)
+  useEffect(() => {
+    if (lookupId == null || !s || !poolRole) {
+      setLookupScores(null)
+      return
     }
-    return buildEngineState(s, poolRole, {
-      bans: s.bans ?? null,
-      myPickOrder: s.myPickOrder ?? null,
-      dataDragonVersion: d.dataDragonVersion,
-      patch: d.dataDragonVersion && d.dataDragonVersion[0] !== '(' ? d.dataDragonVersion : 'bundled'
+    let cancelled = false
+    void scoreChampionAsync(
+      {
+        myRole: poolRole,
+        snapshot: s,
+        idToName: nameByIdLookup,
+        maxResults: 1,
+        dataDragonVersion: d.dataDragonVersion,
+        monteCarloSamples: 0,
+        championMetaById,
+        trainedEffects
+      },
+      lookupId
+    ).then((score) => {
+      if (!cancelled) {
+        setLookupScores(score)
+      }
     })
-  }, [s, d.dataDragonVersion, poolRole])
-
-  const lookupScores = useMemo(() => {
-    if (lookupId == null || !engineState || !poolRole) {
-      return null
+    return () => {
+      cancelled = true
     }
-    const poolKey = poolRole as keyof typeof ROLE_CHAMPION_POOL
-    return v1ComponentScores(lookupId, poolKey, engineState, nameByIdLookup, null, trainedEffects, championMetaById)
-  }, [lookupId, engineState, poolRole, trainedEffects, nameByIdLookup, championMetaById])
+  }, [lookupId, s, poolRole, nameByIdLookup, d.dataDragonVersion, championMetaById, trainedEffects])
 
   const lookupBuild = useMemo(() => {
     if (lookupId == null || !poolRole) {
@@ -617,7 +626,7 @@ export function OverlayPanel() {
       <div className="nexus-noise absolute inset-0 opacity-[0.35] pointer-events-none z-0" aria-hidden />
       <div
         className="nexus-overlay-drag relative z-10 flex items-center flex-wrap gap-x-2 gap-y-1 border-b border-nexus-line bg-nexus-surface-2 px-3 py-2.5"
-        title="Nexus//Draft overlay — drag to move"
+        title="Nexus Draft overlay - drag to move"
       >
         <span className="font-display font-bold text-base sm:text-lg tracking-[0.15em] text-nexus-lime">NEXUS//DRAFT</span>
         <span className="font-mono font-bold text-xs text-nexus-muted uppercase">overlay</span>
@@ -847,7 +856,7 @@ export function OverlayPanel() {
         </div>
       )}
 
-      {itemMatrixOpen && activeItemMatrixPlan?.itemPlan && (
+      {itemMatrixOpen && activeItemMatrixPlan && (
         <div className="nexus-overlay-nodrag nexus-matrix-stage absolute inset-0 z-40 flex items-center justify-center p-5 pointer-events-auto">
           <button
             type="button"
@@ -862,7 +871,7 @@ export function OverlayPanel() {
             className="relative h-full w-full overflow-hidden"
             plans={itemMatrixPlans}
             selectedChampionId={activeItemMatrixPlan.championId}
-            itemPlan={activeItemMatrixPlan.itemPlan}
+            itemPlan={activeItemMatrixPlan.itemPlan ?? null}
             championName={activeItemMatrixPlan.championName}
             championId={activeItemMatrixPlan.championId}
             championImageUrl={championIconUrl}
@@ -1184,7 +1193,7 @@ export function OverlayPanel() {
                   setItemMatrixOpen(true)
                 }
               }}
-              disabled={!topItemPlan?.itemPlan?.matrixRows?.length}
+              disabled={!topItemPlan}
               aria-expanded={itemMatrixOpen}
             >
               Items

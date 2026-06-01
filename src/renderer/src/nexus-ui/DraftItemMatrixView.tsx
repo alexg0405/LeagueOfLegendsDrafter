@@ -2,7 +2,7 @@ import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useSta
 import { canonicalItemName, ddragonItemImageUrl } from '@shared/dataDragon'
 import type { DraftIntel, DraftItemMatrixRow, DraftItemRef } from '@shared/draft'
 
-type MatchupPlan = DraftIntel['matchupPlans'][number]
+export type MatchupPlan = DraftIntel['matchupPlans'][number]
 type DraftItemPlan = NonNullable<MatchupPlan['itemPlan']>
 
 type ItemMatrixRow = DraftItemMatrixRow & {
@@ -22,11 +22,18 @@ type DraftItemMatrixViewProps = {
   maxRows?: number
   className?: string
   isPreparing?: boolean
+  error?: string | null
 }
 
 const MATRIX_ROW_HEIGHT = 58
-const MATRIX_ROW_OVERSCAN = 6
+const MATRIX_ROW_OVERSCAN = 4
 const MATRIX_VIEWPORT_FALLBACK = 560
+const COUNTER_TARGET_LIMIT = 5
+const TARGET_SOURCE_WEIGHT: Record<NonNullable<DraftItemMatrixRow['enemyTargets']>[number]['source'], number> = {
+  defaultBuild: 0,
+  teamThreat: 1,
+  kit: 2
+}
 
 function itemIds(rows: (DraftItemRef | null | undefined)[] | undefined): number[] {
   return (rows ?? []).flatMap((row) => (row?.itemId ? [row.itemId] : []))
@@ -77,6 +84,35 @@ function matrixRows(itemPlan: DraftItemPlan | null | undefined): ItemMatrixRow[]
     .sort((a, b) => Number(b.buildDefault) - Number(a.buildDefault) || b.score - a.score || a.name.localeCompare(b.name))
 }
 
+export function dedupeMatchupPlansForMatrix(plans: MatchupPlan[] | undefined): MatchupPlan[] {
+  const byChampionId = new Map<number, MatchupPlan>()
+  for (const plan of plans ?? []) {
+    const rowCount = plan.itemPlan?.matrixRows?.length ?? 0
+    if (rowCount <= 0) {
+      continue
+    }
+    const previous = byChampionId.get(plan.championId)
+    const previousRowCount = previous?.itemPlan?.matrixRows?.length ?? 0
+    if (!previous || rowCount > previousRowCount) {
+      byChampionId.set(plan.championId, plan)
+    }
+  }
+  return Array.from(byChampionId.values())
+}
+
+export function dedupeEnemyTargetsForMatrix(
+  targets: DraftItemMatrixRow['enemyTargets'] | null | undefined
+): NonNullable<DraftItemMatrixRow['enemyTargets']> {
+  const byChampionId = new Map<number, NonNullable<DraftItemMatrixRow['enemyTargets']>[number]>()
+  for (const target of targets ?? []) {
+    const previous = byChampionId.get(target.championId)
+    if (!previous || TARGET_SOURCE_WEIGHT[target.source] < TARGET_SOURCE_WEIGHT[previous.source]) {
+      byChampionId.set(target.championId, target)
+    }
+  }
+  return Array.from(byChampionId.values())
+}
+
 function shortTags(row: DraftItemMatrixRow): string {
   const tags = row.tags.filter((tag) =>
     ['anti-heal', 'anti-shield', 'anti-tank', 'anti-burst', 'anti-cc', 'armor', 'mr', 'ap', 'ad', 'sustain', 'magic-pen', 'armor-pen'].includes(tag)
@@ -108,18 +144,20 @@ function CounterTargets({
   row: ItemMatrixRow
   championImageUrl?: (championId: number) => string | null
 }) {
-  const targets = row.enemyTargets ?? []
+  const targets = dedupeEnemyTargetsForMatrix(row.enemyTargets)
   if (row.buildDefault) {
     return <span className="text-nexus-muted/90">Default path</span>
   }
   if (targets.length > 0) {
+    const visibleTargets = targets.slice(0, COUNTER_TARGET_LIMIT)
+    const hiddenCount = targets.length - visibleTargets.length
     return (
-      <span className="inline-flex min-w-0 items-center gap-1.5">
-        {targets.map((target) => {
+      <span className="inline-flex min-w-0 max-w-full items-center gap-1 overflow-hidden whitespace-nowrap">
+        {visibleTargets.map((target) => {
           const src = championImageUrl?.(target.championId) ?? null
           const title = `${target.championName}: ${target.reason} (${targetSourceLabel(target.source)})`
           return (
-            <span key={`${row.itemId}-${target.championId}-${target.reason}`} className="inline-flex items-center text-nexus-muted/95" title={title}>
+            <span key={`${row.itemId}-${target.championId}`} className="inline-flex shrink-0 items-center text-nexus-muted/95" title={title}>
               {src ? (
                 <img className="h-7 w-7 border border-nexus-line/70 object-cover" src={src} alt="" width={28} height={28} loading="lazy" decoding="async" />
               ) : (
@@ -130,6 +168,11 @@ function CounterTargets({
             </span>
           )
         })}
+        {hiddenCount > 0 ? (
+          <span className="inline-flex h-7 min-w-7 shrink-0 items-center justify-center border border-nexus-line/70 bg-nexus-bg px-1 text-[10px] text-nexus-muted" title={`${hiddenCount} more counter targets`}>
+            +{hiddenCount}
+          </span>
+        ) : null}
       </span>
     )
   }
@@ -220,9 +263,10 @@ export function DraftItemMatrixView({
   onClose,
   maxRows = 40,
   className = '',
-  isPreparing = false
+  isPreparing = false,
+  error = null
 }: DraftItemMatrixViewProps) {
-  const selectablePlans = useMemo(() => (plans ?? []).filter((plan) => plan.itemPlan?.matrixRows?.length), [plans])
+  const selectablePlans = useMemo(() => dedupeMatchupPlansForMatrix(plans), [plans])
   const initialChampionId = selectedChampionId ?? championId ?? selectablePlans[0]?.championId ?? null
   const [activeChampionId, setActiveChampionId] = useState<number | null>(initialChampionId)
   const [championQuery, setChampionQuery] = useState('')
@@ -309,9 +353,9 @@ export function DraftItemMatrixView({
   }, [ddragonVersion, virtualRows.rows])
 
   return (
-    <section className={`border border-nexus-lime/45 bg-nexus-surface/95 shadow-[0_0_42px_rgba(29,212,168,0.18)] ${className}`}>
+    <section className={`flex min-h-0 flex-col border border-nexus-lime/45 bg-nexus-surface/95 shadow-[0_0_42px_rgba(29,212,168,0.18)] ${className}`}>
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-nexus-lime/35 bg-nexus-surface-2/95 px-3 py-2.5">
-        <div className="min-w-0">
+        <div className="min-w-0 cursor-move select-none nexus-overlay-drag nexus-window-drag" data-tauri-drag-region>
           <p className="m-0 font-mono text-[10px] uppercase tracking-[0.22em] text-nexus-lime/75">item matrix</p>
           <h2 className="m-0 truncate font-display text-lg uppercase tracking-[0.12em] text-nexus-text">{activeChampionName}</h2>
         </div>
@@ -341,6 +385,11 @@ export function DraftItemMatrixView({
           )}
         </div>
       </header>
+      {(isPreparing || error) ? (
+        <div className={`border-b border-nexus-line/70 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] ${error ? 'bg-nexus-red/10 text-nexus-red/85' : 'bg-nexus-bg/70 text-nexus-muted'}`}>
+          {error ? `Item matrix unavailable: ${error}` : 'Preparing items...'}
+        </div>
+      ) : null}
       {selectablePlans.length > 1 ? (
         <div className="grid gap-2 border-b border-nexus-line/70 bg-nexus-bg/70 px-3 py-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -368,11 +417,6 @@ export function DraftItemMatrixView({
               {selectablePlans.length} builds
             </span>
           </div>
-          {isPreparing ? (
-            <div className="border border-nexus-line/60 bg-nexus-bg/45 px-2 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-muted">
-              Preparing full matrix...
-            </div>
-          ) : null}
           <div className="nexus-matrix-scroll flex gap-1.5 overflow-x-auto pb-1">
             {visibleChampionMatches.map((plan) => {
               const src = championImageUrl?.(plan.championId) ?? null
@@ -393,7 +437,7 @@ export function DraftItemMatrixView({
           </div>
         </div>
       ) : null}
-      <div ref={scrollRef} className="nexus-matrix-scroll max-h-[72vh] overflow-auto" onScroll={handleMatrixScroll}>
+      <div ref={scrollRef} className="nexus-matrix-scroll min-h-0 flex-1 overflow-auto" onScroll={handleMatrixScroll}>
         <table className="w-full min-w-[54rem] table-fixed border-collapse text-left font-mono text-xs">
           <colgroup>
             <col className="w-8" />
@@ -419,7 +463,11 @@ export function DraftItemMatrixView({
             {visibleRows.length === 0 ? (
               <tr>
                 <td className="px-3 py-5 text-nexus-muted" colSpan={7}>
-                  No item matrix available for this pick yet.
+                  {isPreparing
+                    ? 'Preparing item matrix for this pick...'
+                    : error
+                      ? 'The item matrix could not be prepared. Try changing the draft or reopening the matrix.'
+                      : 'No item matrix available for this pick yet.'}
                 </td>
               </tr>
             ) : (

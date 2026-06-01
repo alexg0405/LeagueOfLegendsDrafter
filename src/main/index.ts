@@ -12,6 +12,15 @@ import {
 } from 'electron'
 import { existsSync } from 'node:fs'
 
+const APP_DISPLAY_NAME = 'Nexus Draft'
+const APP_USER_MODEL_ID = 'dev.nexusdraft.app'
+const APP_PROCESS_NAME = 'NexusDraft'
+process.title = APP_PROCESS_NAME
+app.setName(APP_DISPLAY_NAME)
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_USER_MODEL_ID)
+}
+
 {
   // Game/window capture on Windows often kills the GPU process; default to software like many capture UIs.
   const allowGpu = process.env['LEAGUE_DRAFTER_ALLOW_GPU'] === '1'
@@ -34,7 +43,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { loadLocalEnv, loadLocalEnvWhenReady } from './loadLocalEnv'
 import { setupAppUpdater } from './appUpdater'
-import { fetchChampSelectSession } from './lcuClient'
+import { fetchChampSelectSession, getLcuDiagnostics } from './lcuClient'
 import { fetchLivePublicDataPayload } from './livePublicDataFetcher'
 import { getPlayerChampionPool } from './riotPlayerChampionPool'
 import { getCaptureSourceId, setCaptureSourceId } from './settingsStore'
@@ -96,7 +105,7 @@ function wirePreloadErrorLogging(w: BrowserWindow, label: string) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error(`[drafter] ${label} preload-error:`, _preloadPath, err)
     void dialog.showErrorBox(
-      'League Drafter — preload failed',
+      'Nexus Draft - preload failed',
       `The script that exposes "window.drafter" did not run.\n\n${msg}\n\n` +
         `Path: ${_preloadPath}\n\n` +
         `From the project folder run: npm run dev (builds out/preload) or npm run build.`
@@ -168,6 +177,22 @@ let mainWindow: BrowserWindow | null = null
 let overlayWindow: BrowserWindow | null = null
 let overlayCompactBounds: Rectangle | null = null
 let overlayProjectionOpen = false
+let registeredOverlayShortcuts: string[] = []
+let failedOverlayShortcuts: string[] = []
+
+function overlayStatusResult() {
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    return { ok: true as const, exists: false, visible: false }
+  }
+  return {
+    ok: true as const,
+    exists: true,
+    visible: overlayWindow.isVisible(),
+    focused: overlayWindow.isFocused(),
+    title: overlayWindow.getTitle(),
+    bounds: overlayWindow.getBounds()
+  }
+}
 
 function applyOverlayPriority(win: BrowserWindow) {
   win.setAlwaysOnTop(true, 'screen-saver')
@@ -234,7 +259,7 @@ function devRendererBase(): string {
 }
 
 function fallbackDevHtml(): string {
-  return `<!doctype html><html><head><meta charset="utf-8"><title>League Drafter</title>
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Nexus Draft</title>
   <style>body{font-family:system-ui;padding:24px;background:#060f0c;color:#e8f3ee;max-width:560px}</style>
   </head><body>
   <h1>Dev server URL missing</h1>
@@ -252,7 +277,7 @@ function createMainWindow() {
     autoHideMenuBar: true,
     resizable: false,
     maximizable: false,
-    title: 'Nexus//Draft',
+    title: APP_DISPLAY_NAME,
     backgroundColor: '#060f0c',
     icon: windowIconPath(),
     webPreferences: defaultWebPreferences()
@@ -270,7 +295,7 @@ function createMainWindow() {
       if (isDev) {
         void mainWindow?.webContents.openDevTools({ mode: 'detach' })
         void dialog.showErrorBox(
-          'League Drafter — page failed to load',
+          'Nexus Draft - page failed to load',
           `The UI could not be loaded (Vite may not be running, or a firewall blocked localhost).\n\n${desc} (${String(
             code
           )})\n${failedUrl}\n\nFrom the project folder run: npm run dev`
@@ -313,6 +338,7 @@ function createOverlayWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
   const overlayH = Math.max(320, Math.floor(height * 0.62))
   overlayWindow = new BrowserWindow({
+    title: 'Nexus Draft Overlay',
     width: OVERLAY_WIDTH,
     height: overlayH,
     x: width - OVERLAY_WIDTH - 16,
@@ -351,7 +377,7 @@ function createOverlayWindow() {
       if (isDev) {
         void overlayWindow?.webContents.openDevTools({ mode: 'detach' })
         void dialog.showErrorBox(
-          'League Drafter — overlay failed to load',
+          'Nexus Draft - overlay failed to load',
           `${String(desc)} (${String(code)})\n${failedUrl}\n\nRun: npm run dev (same dev server as the main window).`
         )
       }
@@ -392,6 +418,7 @@ function createOverlayWindow() {
 }
 
 function toggleOverlayWindow() {
+  let created = false
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     if (overlayWindow.isVisible()) {
       overlayWindow.hide()
@@ -401,6 +428,13 @@ function toggleOverlayWindow() {
     }
   } else {
     createOverlayWindow()
+    created = true
+  }
+  return {
+    ok: true as const,
+    visible: overlayWindow && !overlayWindow.isDestroyed() ? overlayWindow.isVisible() : false,
+    created,
+    route: 'overlay' as const
   }
 }
 
@@ -415,7 +449,7 @@ app.whenReady().then(() => {
   const preloadFile = absolutePreloadPath()
   if (!existsSync(preloadFile)) {
     void dialog.showErrorBox(
-      'League Drafter — missing preload',
+      'Nexus Draft - missing preload',
       `Expected preload at:\n${preloadFile}\n\n` +
         'Run: npm run dev\n' +
         '(or npm run build, then start via electron-vite’s output — not a bare "electron" on stale files).'
@@ -516,6 +550,9 @@ app.whenReady().then(() => {
   ipcMain.handle('lcu:fetch', async () => {
     return fetchChampSelectSession()
   })
+  ipcMain.handle('lcu:diagnostics', () => {
+    return getLcuDiagnostics()
+  })
   ipcMain.handle('publicMeta:getLive', async () => {
     return fetchLivePublicDataPayload()
   })
@@ -531,8 +568,17 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('overlay:toggle', () => {
-    toggleOverlayWindow()
-    return { visible: overlayWindow && !overlayWindow.isDestroyed() ? overlayWindow.isVisible() : false }
+    return toggleOverlayWindow()
+  })
+  ipcMain.handle('overlay:status', () => {
+    return overlayStatusResult()
+  })
+  ipcMain.handle('overlay:shortcutsStatus', () => {
+    return {
+      ok: failedOverlayShortcuts.length === 0,
+      registered: registeredOverlayShortcuts,
+      failed: failedOverlayShortcuts
+    }
   })
   ipcMain.handle('overlay:setProjectionMode', (_event, open: unknown) => {
     return setOverlayProjectionMode(open === true)
@@ -573,6 +619,8 @@ app.whenReady().then(() => {
   lcuTimer.unref()
 
   const shortcuts = ['Insert', 'F9', 'F10'] as const
+  registeredOverlayShortcuts = []
+  failedOverlayShortcuts = []
   for (const accelerator of shortcuts) {
     if (globalShortcut.isRegistered(accelerator)) {
       globalShortcut.unregister(accelerator)
@@ -581,10 +629,12 @@ app.whenReady().then(() => {
       toggleOverlayWindow()
     })
     if (ok) {
+      registeredOverlayShortcuts.push(accelerator)
       if (isDev) {
         console.log(`[drafter] globalShortcut ok: ${accelerator}`)
       }
     } else {
+      failedOverlayShortcuts.push(accelerator)
       console.error(
         `[drafter] globalShortcut FAILED: ${accelerator} (try another app using that key, or use F9 / F10 / in-app button)`
       )

@@ -82,6 +82,33 @@ function suggestion(): PickSuggestion {
 }
 
 describe('Rust item matrix parity', () => {
+  it('serializes focused requests with only relevant champion metadata', () => {
+    const input = serializeItemMatrixInput(
+      {
+        snapshot: snapshot(),
+        myRole: 'bottom',
+        suggestions: [suggestion(), { ...suggestion(), championId: 21, championName: 'Miss Fortune' }],
+        idToName: names,
+        championMetaById: new Map([
+          [18, { tags: ['Marksman'], partype: 'Mana', spells: [] }],
+          [21, { tags: ['Marksman'], partype: 'Mana', spells: [] }],
+          [51, { tags: ['Marksman'], partype: 'Mana', spells: [] }],
+          [54, { tags: ['Tank'], partype: 'Mana', spells: [] }],
+          [99, { tags: ['Mage'], partype: 'Mana', spells: [] }],
+          [267, { tags: ['Support'], partype: 'Mana', spells: [] }],
+          [999, { tags: ['Mage'], partype: 'Mana', spells: [] }]
+        ]),
+        enemyRoleInference: null,
+        itemCatalog
+      },
+      { focusChampionId: 18, limit: 1 }
+    )
+
+    expect(input.focusChampionId).toBe(18)
+    expect(input.limit).toBe(1)
+    expect(input.championMetaById.map((row) => row.id).sort((a, b) => a - b)).toEqual([18, 51, 54, 99, 267])
+  })
+
   it('matches TypeScript default build ids and enemy-target shape for a representative bottom plan', () => {
     initSync({ module: readFileSync(new URL('../../renderer/src/wasm/nexus-draft-core/nexus_draft_core_bg.wasm', import.meta.url)) })
     const args = {

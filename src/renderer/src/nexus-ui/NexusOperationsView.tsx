@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useState, type DragEvent as ReactDragEvent, type ReactNode } from 'react'
 import { ddragonChampionImageUrl, type ChampionLite } from '@shared/dataDragon'
+import type { OverlayShortcutStatusResult } from '@shared/desktopInterop'
 import {
   RIOT_PLATFORMS,
   formatRuneTipNote,
@@ -166,7 +167,9 @@ export type NexusOperationsViewProps = {
   suggestions: PickSuggestion[]
   ddragonVersion: string | null
   draftIntel?: DraftIntel | null
-  onPrepareItemMatrixPlans?: () => void
+  onPrepareItemMatrixPlans?: (championId?: number | null) => void
+  itemMatrixStatus?: 'idle' | 'preparing' | 'ready' | 'error'
+  itemMatrixError?: string | null
   appUpdateStatusLine: string
   appUpdateBusy: boolean
   appUpdateAvailable: boolean
@@ -176,6 +179,9 @@ export type NexusOperationsViewProps = {
   onInstallAppUpdate: () => void
   playerPoolProfile: PlayerChampionPoolProfile | null
   playerPoolStatus: string | null
+  overlayStatusLine?: string | null
+  overlayError?: string | null
+  overlayShortcutStatus?: OverlayShortcutStatusResult | null
   playerPoolBusy: boolean
   recommendationPoolMode: RecommendationPoolMode
   onRecommendationPoolMode: (mode: RecommendationPoolMode) => void
@@ -207,6 +213,8 @@ export function NexusOperationsView({
   ddragonVersion,
   draftIntel,
   onPrepareItemMatrixPlans,
+  itemMatrixStatus = 'idle',
+  itemMatrixError = null,
   appUpdateStatusLine,
   appUpdateBusy,
   appUpdateAvailable,
@@ -216,6 +224,9 @@ export function NexusOperationsView({
   onInstallAppUpdate,
   playerPoolProfile,
   playerPoolStatus,
+  overlayStatusLine,
+  overlayError,
+  overlayShortcutStatus,
   playerPoolBusy,
   recommendationPoolMode,
   onRecommendationPoolMode,
@@ -313,7 +324,7 @@ export function NexusOperationsView({
 
   return (
     <div className="w-full max-w-4xl mx-auto px-3 sm:px-5 lg:px-6 py-2 sm:py-3 pb-10 text-nexus-text nexus-ops-scroll">
-      {itemMatrixOpen && activeItemMatrixPlan?.itemPlan ? (
+      {itemMatrixOpen && activeItemMatrixPlan ? (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4">
           <button
             type="button"
@@ -328,12 +339,13 @@ export function NexusOperationsView({
             className="relative z-10 max-h-[92vh] w-full max-w-6xl overflow-hidden"
             plans={itemMatrixPlans}
             selectedChampionId={activeItemMatrixPlan.championId}
-            itemPlan={activeItemMatrixPlan.itemPlan}
+            itemPlan={activeItemMatrixPlan.itemPlan ?? null}
             championName={activeItemMatrixPlan.championName}
             championId={activeItemMatrixPlan.championId}
             championImageUrl={matrixChampionImageUrl}
             ddragonVersion={ddragonVersion}
-            isPreparing={draftIntel?.itemMatrixPlans == null}
+            isPreparing={itemMatrixStatus === 'preparing'}
+            error={itemMatrixStatus === 'error' ? itemMatrixError : null}
             onClose={() => {
               setItemMatrixOpen(false)
               setItemMatrixPlan(null)
@@ -499,10 +511,10 @@ export function NexusOperationsView({
                 <button
                   type="button"
                   className={btnPrimary + ' px-3 py-1.5 text-[10px]'}
-                  disabled={!topPlan?.itemPlan?.matrixRows?.length}
+                  disabled={!topPlan}
                   onClick={() => {
-                    onPrepareItemMatrixPlans?.()
                     if (topPlan) {
+                      onPrepareItemMatrixPlans?.(topPlan.championId)
                       setItemMatrixPlan(topPlan)
                       setItemMatrixOpen(true)
                     }
@@ -524,11 +536,17 @@ export function NexusOperationsView({
                     ddragonVersion={ddragonVersion}
                     limit={4}
                     onOpenMatrix={() => {
-                      onPrepareItemMatrixPlans?.()
+                      onPrepareItemMatrixPlans?.(topPlan.championId)
                       setItemMatrixPlan(topPlan)
                       setItemMatrixOpen(true)
                     }}
                   />
+                  {!topPlan.itemPlan && itemMatrixStatus === 'preparing' ? (
+                    <p className="m-0 mt-2 text-nexus-muted">Preparing items...</p>
+                  ) : null}
+                  {!topPlan.itemPlan && itemMatrixStatus === 'error' ? (
+                    <p className="m-0 mt-2 text-nexus-red/80">{itemMatrixError ?? 'Item matrix could not be prepared.'}</p>
+                  ) : null}
                 </div>
               ) : (
                 <p className="m-0 text-nexus-muted">No pick plan yet.</p>
@@ -743,49 +761,61 @@ export function NexusOperationsView({
         open={openSectionIds.has('MD_01')}
         onToggle={() => toggleSection('MD_01')}
       >
-        <div className="flex flex-wrap items-end gap-x-4 gap-y-3 mb-4 border-b border-nexus-line/50 pb-4">
-          <label className="flex flex-col gap-1.5 min-w-0">
-            <span className="font-mono text-[10px] sm:text-xs text-nexus-lime/85 uppercase tracking-[0.12em]">
-              Monte Carlo rollouts
-            </span>
-            <input
-              type="number"
-              min={0}
-              max={maxSuggestMcRollouts}
-              step={1}
-              className={inField + ' w-[6.5rem] tabular-nums'}
-              value={suggestMcRollouts}
-              onChange={(e) => {
-                const v = Number(e.target.value)
-                if (Number.isFinite(v)) {
-                  onSuggestMcRollouts(v)
-                }
-              }}
-            />
-          </label>
-          <label className="flex flex-col gap-1.5 min-w-0">
-            <span className="font-mono text-[10px] sm:text-xs text-nexus-lime/85 uppercase tracking-[0.12em]">
-              Delta list
-            </span>
-            <select
-              className={inField + ' w-[11rem]'}
-              value={suggestDeltaListMode}
-              onChange={(e) => onSuggestDeltaListMode(e.target.value === 'worst' ? 'worst' : 'best')}
-            >
-              <option value="best">Best in context first</option>
-              <option value="worst">Worst in context first</option>
-            </select>
-          </label>
-          <p className={`${textMuted} text-xs sm:text-sm max-w-xl m-0 flex-1 min-w-0 leading-relaxed`}>
-            0 = fast V1. Higher rollouts react more as picks lock; max {maxSuggestMcRollouts}.
+        <div className="mb-4 grid gap-3 border-b border-nexus-line/50 pb-4">
+          <div className="grid gap-3 sm:grid-cols-[minmax(8rem,10rem)_minmax(12rem,15rem)_minmax(0,1fr)] sm:items-end">
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="font-mono text-[10px] sm:text-xs text-nexus-lime/85 uppercase tracking-[0.12em]">
+                Rollouts
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={maxSuggestMcRollouts}
+                step={1}
+                className={inField + ' max-w-none tabular-nums'}
+                value={suggestMcRollouts}
+                onChange={(e) => {
+                  const v = Number(e.target.value)
+                  if (Number.isFinite(v)) {
+                    onSuggestMcRollouts(v)
+                  }
+                }}
+              />
+            </label>
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="font-mono text-[10px] sm:text-xs text-nexus-lime/85 uppercase tracking-[0.12em]">
+                Delta sort
+              </span>
+              <select
+                className={inField + ' max-w-none'}
+                value={suggestDeltaListMode}
+                onChange={(e) => onSuggestDeltaListMode(e.target.value === 'worst' ? 'worst' : 'best')}
+              >
+                <option value="best">Best in context first</option>
+                <option value="worst">Worst in context first</option>
+              </select>
+            </label>
+            <div className="min-w-0 border border-nexus-line/60 bg-nexus-bg/35 px-3 py-2 font-mono text-xs leading-relaxed text-nexus-muted">
+              <span className="block uppercase tracking-[0.12em] text-nexus-lime/80">
+                {suggestMcRollouts > 0 ? `V1 + ${suggestMcRollouts} rollout(s)` : 'Fast V1'}
+              </span>
+              <span className="block truncate" title={`Max ${maxSuggestMcRollouts} rollouts. Higher values react more as picks lock.`}>
+                Max {maxSuggestMcRollouts}. Higher values react more as picks lock.
+              </span>
+            </div>
+          </div>
+          <p className={`${textMuted} m-0 max-w-3xl font-mono text-xs sm:text-sm leading-relaxed`}>
+            {modelDescription}
           </p>
         </div>
-        <p className={`${textMuted} text-sm sm:text-base leading-relaxed mb-4`}>
-          {modelDescription}
-        </p>
-        <p className="font-mono text-xs text-nexus-lime/80 mb-3">
-          {suggestDeltaListMode === 'worst' ? 'Lowest lobby delta first' : 'Highest lobby delta first'}
-        </p>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="m-0 font-mono text-xs uppercase tracking-[0.12em] text-nexus-lime/80">
+            {suggestDeltaListMode === 'worst' ? 'Lowest lobby delta first' : 'Highest lobby delta first'}
+          </p>
+          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-muted">
+            {suggestions.length ? `${suggestions.length} picks` : 'No picks yet'}
+          </span>
+        </div>
         <ol className="list-decimal pl-4 sm:pl-5 space-y-3 font-mono text-sm text-nexus-text/90 max-w-3xl">
           {suggestions.length === 0 && (
             <li className="list-none -ml-4 sm:-ml-5 text-nexus-muted pl-0">
@@ -860,7 +890,7 @@ export function NexusOperationsView({
                   ddragonVersion={ddragonVersion}
                   limit={3}
                   onOpenMatrix={() => {
-                    onPrepareItemMatrixPlans?.()
+                    onPrepareItemMatrixPlans?.(matchupPlan.championId)
                     setItemMatrixPlan(matchupPlan)
                     setItemMatrixOpen(true)
                   }}
@@ -882,11 +912,28 @@ export function NexusOperationsView({
         onToggle={() => toggleSection('OV_01')}
       >
         <p className={`${textMuted} text-sm mb-3`}>
-          <kbd className="px-1 border border-nexus-line/70 bg-nexus-bg text-nexus-text/90">Insert</kbd>,{' '}
-          <kbd className="px-1 border border-nexus-line/70 bg-nexus-bg text-nexus-text/90">F9</kbd>, or{' '}
-          <kbd className="px-1 border border-nexus-line/70 bg-nexus-bg text-nexus-text/90">F10</kbd> — show or hide
-          the small window. Full-screen or borderless League works best.
+          {overlayShortcutStatus?.registered.length ? (
+            <>
+              {overlayShortcutStatus.registered.map((shortcut, idx) => (
+                <span key={`overlay-shortcut-${shortcut}`}>
+                  {idx > 0 ? (idx === overlayShortcutStatus.registered.length - 1 ? ' or ' : ', ') : null}
+                  <kbd className="px-1 border border-nexus-line/70 bg-nexus-bg text-nexus-text/90">{shortcut}</kbd>
+                </span>
+              ))}{' '}
+              - show or hide the small window.
+            </>
+          ) : (
+            <>Use the button below to show or hide the small window.</>
+          )}{' '}
+          Full-screen or borderless League works best.
         </p>
+        {overlayShortcutStatus?.failed.length ? (
+          <p className={`${textMuted} text-xs mb-3`}>
+            Shortcuts unavailable: {overlayShortcutStatus.failed.join(', ')}.
+          </p>
+        ) : null}
+        {overlayStatusLine ? <p className={`${textBody} mb-2`}>{overlayStatusLine}</p> : null}
+        {overlayError ? <p className={`${errText} mb-2`}>{overlayError}</p> : null}
         <button type="button" className={btnPrimary} onClick={onToggleOverlay}>
           Toggle overlay
         </button>

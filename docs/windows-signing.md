@@ -39,6 +39,36 @@ npm run dist:win:signed
 
 This builds the app and signs the Windows installer/portable artifacts. Timestamping is enabled through Microsoft's Artifact Signing timestamp service so signatures remain valid after the short-lived signing certificate expires.
 
+## Tauri Rust EXE Build
+
+The Rust desktop migration builds side-by-side with Electron. Use this when you want the real Rust-backed `NexusDraft.exe` process instead of an Electron process:
+
+```powershell
+npm run tauri:dist
+```
+
+This stages:
+
+- `release\NexusDraft.exe`
+- `release\Nexus-Draft-Tauri-Portable-3.11.0.exe`
+- `release\Nexus-Draft-Tauri-Setup-3.11.0.exe`
+
+For quick Rust desktop fixes, build only the portable EXE:
+
+```powershell
+npm run tauri:portable
+```
+
+This stages `release\NexusDraft.exe` and `release\Nexus-Draft-Tauri-Portable-3.11.0.exe` without rebuilding the installer.
+
+If disk space is tight after a successful build, use:
+
+```powershell
+npm run tauri:dist:clean
+```
+
+That stages the same artifacts, then removes the generated Rust `target` directory.
+
 ## Local Azure CLI Signing
 
 If you can sign in locally with an Azure account that has the `Artifact Signing Certificate Profile Signer` role, you can avoid service-principal secrets and sign the built release artifacts with SignTool.
@@ -83,11 +113,25 @@ npm run dist:win:azcli
 
 This path uses the same Artifact Signing account/profile defaults and the East US endpoint. It signs the generated release installer and portable `.exe` files after `electron-builder` packages them.
 
+To sign only the Tauri/Rust artifacts after `npm run tauri:dist`:
+
+```powershell
+npm run release:sign:tauri:azcli
+```
+
+To sign both Electron and Tauri artifacts in the same release directory:
+
+```powershell
+npm run release:sign:all:azcli
+```
+
 ## Verify
 
 ```powershell
 Get-AuthenticodeSignature .\release\Nexus-Draft-Setup-3.11.0.exe
 Get-AuthenticodeSignature .\release\Nexus-Draft-Portable-3.11.0.exe
+Get-AuthenticodeSignature .\release\NexusDraft.exe
+Get-AuthenticodeSignature .\release\Nexus-Draft-Tauri-Setup-3.11.0.exe
 ```
 
-Both should report `Status : Valid` and the signer should match `Alexander Guo`.
+Every artifact you sign should report `Status : Valid` and the signer should match `Alexander Guo`.

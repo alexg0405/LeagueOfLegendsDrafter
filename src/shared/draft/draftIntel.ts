@@ -42,6 +42,7 @@ export type BuildDraftIntelArgs = {
   dataDragonVersion?: string | null
   championPoolPreferences?: ReadonlyMap<number, ChampionPoolPreference> | null
   itemCatalog?: readonly ItemLite[] | null
+  includeItemPlans?: boolean
 }
 
 type SlotRead = {
@@ -733,6 +734,7 @@ function matchupPlans(
   enemyRoleInference?: EnemyRoleInference[] | null,
   championMetaById?: ReadonlyMap<number, ChampionMeta> | null,
   itemCatalog?: readonly ItemLite[] | null,
+  includeItemPlans = true,
   limit = DRAFT_INTEL_PREVIEW_PLAN_LIMIT
 ): DraftMatchupPlan[] {
   const laneOpponent = likelyLaneOpponent(snapshot, myRole, enemyRoleInference)
@@ -748,7 +750,7 @@ function matchupPlans(
     firstRecall: firstRecall(s, myRole, enemy),
     runeExport: runeExport(s.runes),
     gamePlan: planLine(s, myRole, ally, enemy, laneOpponent),
-    itemPlan: itemPlan(s, myRole, ally, enemy, laneOpponent, championMetaById, itemCatalog)
+    itemPlan: includeItemPlans ? itemPlan(s, myRole, ally, enemy, laneOpponent, championMetaById, itemCatalog) : undefined
   }))
 }
 
@@ -776,6 +778,7 @@ export function buildDraftItemMatrixPlans({
     enemyRoleInference,
     championMetaById,
     itemCatalog,
+    true,
     DRAFT_INTEL_ITEM_MATRIX_PLAN_LIMIT
   )
 }
@@ -875,7 +878,8 @@ export function buildDraftIntel({
   enemyRoleInference,
   patchLabel,
   dataDragonVersion,
-  itemCatalog
+  itemCatalog,
+  includeItemPlans = true
 }: BuildDraftIntelArgs): DraftIntel | null {
   if (!snapshot && suggestions.length === 0) {
     return null
@@ -887,7 +891,18 @@ export function buildDraftIntel({
     (note): note is string => Boolean(note)
   )
   const bans = banRecommendations(snapshot, myRole, idToName, enemyRoleInference)
-  const plans = matchupPlans(suggestions, snapshot, myRole, ally, enemy, idToName, enemyRoleInference, championMetaById, itemCatalog)
+  const plans = matchupPlans(
+    suggestions,
+    snapshot,
+    myRole,
+    ally,
+    enemy,
+    idToName,
+    enemyRoleInference,
+    championMetaById,
+    itemCatalog,
+    includeItemPlans
+  )
   const compIdentity: DraftIntel['compIdentity'] = {
     ally: identityLabels(ally, 'ally'),
     enemy: identityLabels(enemy, 'enemy'),

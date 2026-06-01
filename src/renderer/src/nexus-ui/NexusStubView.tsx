@@ -69,7 +69,7 @@ export function NexusStubView() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.28, duration: 0.15 }}
         >
-          Nexus//Draft is not affiliated with Riot Games.
+          Nexus Draft is not affiliated with Riot Games.
         </motion.p>
       </div>
     </div>

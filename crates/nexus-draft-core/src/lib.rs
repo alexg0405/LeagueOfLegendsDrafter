@@ -26,14 +26,50 @@ pub fn build_item_matrix_plans_json(input_json: &str) -> String {
 #[wasm_bindgen]
 pub fn recommend_picks_json(input_json: &str) -> String {
     match serde_json::from_str::<RustRecommendInput>(input_json) {
-        Ok(input) => serde_json::to_string(&input.fallback).unwrap_or_else(|err| {
+        Ok(input) => serde_json::to_string(&recommend_picks(&input)).unwrap_or_else(|err| {
             serde_json::json!({
+                "ok": false,
                 "error": format!("nexus-draft-core recommend serialization failed: {err}")
             })
             .to_string()
         }),
         Err(err) => serde_json::json!({
+            "ok": false,
             "error": format!("nexus-draft-core recommend input failed: {err}")
+        })
+        .to_string(),
+    }
+}
+
+#[wasm_bindgen]
+pub fn score_champion_json(input_json: &str) -> String {
+    match serde_json::from_str::<RustChampionScoreInput>(input_json) {
+        Ok(input) => serde_json::to_string(&score_champion(&input)).unwrap_or_else(|err| {
+            serde_json::json!({
+                "ok": false,
+                "error": format!("nexus-draft-core score serialization failed: {err}")
+            })
+            .to_string()
+        }),
+        Err(err) => serde_json::json!({
+            "ok": false,
+            "error": format!("nexus-draft-core score input failed: {err}")
+        })
+        .to_string(),
+    }
+}
+
+#[wasm_bindgen]
+pub fn build_draft_intel_json(input_json: &str) -> String {
+    match serde_json::from_str::<RustDraftIntelInput>(input_json) {
+        Ok(input) => serde_json::to_string(&build_draft_intel(&input)).unwrap_or_else(|err| {
+            serde_json::json!({
+                "error": format!("nexus-draft-core draft intel serialization failed: {err}")
+            })
+            .to_string()
+        }),
+        Err(err) => serde_json::json!({
+            "error": format!("nexus-draft-core draft intel input failed: {err}")
         })
         .to_string(),
     }
@@ -51,20 +87,253 @@ pub struct RustItemMatrixInput {
     item_catalog: Vec<ItemLite>,
     ugg_seed: UggSeed,
     champion_threat_overrides: Vec<ThreatOverrideRow>,
+    #[serde(default)]
+    focus_champion_id: Option<i32>,
+    #[serde(default)]
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RustDraftIntelInput {
+    snapshot: Option<DraftSnapshot>,
+    my_role: String,
+    suggestions: Vec<PickSuggestion>,
+    id_to_name: Vec<NameEntry>,
+    champion_meta_by_id: Vec<ChampionMetaEntry>,
+    #[serde(default)]
+    enemy_role_inference: Vec<EnemyRoleInference>,
+    #[serde(default)]
+    item_catalog: Vec<ItemLite>,
+    #[serde(default)]
+    ugg_seed: UggSeed,
+    champion_threat_overrides: Vec<ThreatOverrideRow>,
+    #[serde(default)]
+    public_base_stats: Vec<PublicBaseStatEntry>,
+    #[serde(default)]
+    patch_label: Option<String>,
+    #[serde(default)]
+    data_dragon_version: Option<String>,
+    #[serde(default = "default_include_item_plans")]
+    include_item_plans: bool,
+}
+
+fn default_include_item_plans() -> bool {
+    true
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RustRecommendInput {
+    snapshot: Option<DraftSnapshot>,
+    my_role: String,
+    #[serde(default = "default_recommend_max_results")]
+    max_results: usize,
     #[serde(default)]
-    fallback: Vec<PickSuggestionOut>,
+    #[allow(dead_code)]
+    data_dragon_version: Option<String>,
+    #[serde(default)]
+    monte_carlo_samples: i32,
+    #[serde(default = "default_recommend_seed")]
+    rng_seed: u32,
+    #[serde(default = "default_sort_by")]
+    sort_by: String,
+    #[serde(default = "default_delta_list_mode")]
+    delta_list_mode: String,
+    #[serde(default)]
+    id_to_name: Vec<NameEntry>,
+    #[serde(default)]
+    champion_meta_by_id: Vec<ChampionMetaEntry>,
+    #[serde(default)]
+    comfort_by_champion_id: Vec<NumberEntry>,
+    #[serde(default)]
+    candidate_champion_ids: Option<Vec<i32>>,
+    #[serde(default)]
+    role_champion_pools: Vec<RoleChampionPoolEntry>,
+    #[serde(default)]
+    public_candidate_ids: Vec<RoleChampionPoolEntry>,
+    #[serde(default)]
+    public_base_rates: Vec<PublicBaseRateEntry>,
+    #[serde(default)]
+    public_lane_rates: Vec<PublicLaneRateEntry>,
+    #[serde(default)]
+    matchup_bonuses: Vec<MatchupBonusEntry>,
+    #[serde(default)]
+    ally_synergy_bonuses: Vec<AllySynergyEntry>,
+    #[serde(default)]
+    trained_base_rates: Vec<TrainedBaseEntry>,
+    #[serde(default)]
+    trained_lane_rates: Vec<TrainedLaneEntry>,
+    #[serde(default)]
+    trained_synergy_deltas: Vec<TrainedSynergyEntry>,
+    #[serde(default)]
+    has_trained_data: bool,
+    #[serde(default)]
+    enemy_role_inference: Vec<RustRecommendEnemyInference>,
+    #[serde(default)]
+    champion_threat_overrides: Vec<ThreatOverrideRow>,
+    #[serde(default)]
+    hard_counters_by_name: Vec<HardCounterEntry>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RustChampionScoreInput {
+    #[serde(flatten)]
+    recommend: RustRecommendInput,
+    champion_id: i32,
+}
+
+fn default_recommend_max_results() -> usize {
+    12
+}
+
+fn default_recommend_seed() -> u32 {
+    0x9e37_79b1
+}
+
+fn default_sort_by() -> String {
+    "score".to_string()
+}
+
+fn default_delta_list_mode() -> String {
+    "best".to_string()
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NumberEntry {
+    id: i32,
+    value: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RoleChampionPoolEntry {
+    role: String,
+    champion_ids: Vec<i32>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PublicBaseRateEntry {
+    role: String,
+    champion_id: i32,
+    rate: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PublicBaseStatEntry {
+    role: String,
+    champion_id: i32,
+    win_rate: f64,
+    #[serde(default)]
+    pick_rate: Option<f64>,
+    #[serde(default)]
+    ban_rate: Option<f64>,
+    games: f64,
+    source_avg_win_rate: f64,
+    #[serde(default)]
+    candidate: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PublicLaneRateEntry {
+    role: String,
+    candidate_id: i32,
+    enemy_id: i32,
+    rate: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MatchupBonusEntry {
+    candidate_id: i32,
+    enemy_id: i32,
+    bonus: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AllySynergyEntry {
+    left_id: i32,
+    right_id: i32,
+    bonus: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TrainedBaseEntry {
+    role: String,
+    champion_id: i32,
+    logit: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TrainedLaneEntry {
+    role: String,
+    ally_id: i32,
+    enemy_id: i32,
+    logit: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TrainedSynergyEntry {
+    ally_role: String,
+    partner_role: String,
+    ally_id: i32,
+    partner_id: i32,
+    delta: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RustRecommendEnemyInference {
+    enemy_index: usize,
+    role_probabilities: HashMap<String, f64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HardCounterEntry {
+    champion_key: String,
+    counter_keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RustRecommendOutput {
+    ok: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    rows: Vec<PickSuggestionOut>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    patch_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unsupported_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RustChampionScoreOutput {
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    score: Option<ComponentScores>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    patch_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PickSuggestionOut {
     champion_id: i32,
-    champion_name: String,
     score: f64,
     #[serde(default)]
     reasons: Vec<String>,
@@ -84,10 +353,6 @@ struct PickSuggestionOut {
     lookahead_risk: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     detail: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    runes: Option<RuneLoadoutHint>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    build_profile: Option<ChampionBuildProfile>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -242,7 +507,7 @@ struct ItemLite {
     consume_on_full: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 struct UggSeed {
     #[allow(dead_code)]
     patch: Option<String>,
@@ -412,6 +677,52 @@ struct DraftMatchupPlan {
     item_plan: Option<DraftItemPlan>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DraftIntelOut {
+    ban_recommendations: Vec<BanRecommendation>,
+    comp_identity: CompIdentity,
+    matchup_plans: Vec<DraftMatchupPlan>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    item_matrix_plans: Option<Vec<DraftMatchupPlan>>,
+    pick_comparison: Vec<PickComparison>,
+    loading_brief: Vec<String>,
+    confidence_notes: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BanRecommendation {
+    champion_id: i32,
+    champion_name: String,
+    role: String,
+    score: f64,
+    reason: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CompIdentity {
+    ally: Vec<String>,
+    enemy: Vec<String>,
+    missing: Vec<String>,
+    warnings: Vec<String>,
+    win_condition: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PickComparison {
+    champion_id: i32,
+    champion_name: String,
+    score: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    est_win: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    delta: Option<f64>,
+    summary: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DraftItemPlan {
@@ -521,7 +832,77 @@ fn build_item_matrix_plans(input: &RustItemMatrixInput) -> Vec<DraftMatchupPlan>
         .unwrap_or(&[]);
     let ally = analyze_team(ally_slots, &id_to_name, &meta_by_id, &overrides);
     let enemy = analyze_team(enemy_slots, &id_to_name, &meta_by_id, &overrides);
+    let mut suggestions = input.suggestions.clone();
+    if let Some(focus_id) = input.focus_champion_id {
+        suggestions.sort_by_key(|row| if row.champion_id == focus_id { 0 } else { 1 });
+    }
+    let limit = input.limit.unwrap_or(MATRIX_PLAN_LIMIT).clamp(1, MATRIX_PLAN_LIMIT);
     matchup_plans(
+        &suggestions,
+        input.snapshot.as_ref(),
+        &input.my_role,
+        &ally,
+        &enemy,
+        &id_to_name,
+        &meta_by_id,
+        &input.enemy_role_inference,
+        &input.item_catalog,
+        &input.ugg_seed,
+        &overrides,
+        true,
+        limit,
+    )
+}
+
+fn build_draft_intel(input: &RustDraftIntelInput) -> Option<DraftIntelOut> {
+    if input.snapshot.is_none() && input.suggestions.is_empty() {
+        return None;
+    }
+    let id_to_name: HashMap<i32, String> = input
+        .id_to_name
+        .iter()
+        .map(|row| (row.id, row.name.clone()))
+        .collect();
+    let meta_by_id: HashMap<i32, ChampionMeta> = input
+        .champion_meta_by_id
+        .iter()
+        .map(|row| (row.id, row.meta.clone()))
+        .collect();
+    let overrides: HashMap<String, ThreatOverrideRow> = input
+        .champion_threat_overrides
+        .iter()
+        .map(|row| (row.key.clone(), row.clone()))
+        .collect();
+    let ally_slots = input
+        .snapshot
+        .as_ref()
+        .map(|s| s.ally.as_slice())
+        .unwrap_or(&[]);
+    let enemy_slots = input
+        .snapshot
+        .as_ref()
+        .map(|s| s.enemy.as_slice())
+        .unwrap_or(&[]);
+    let ally = analyze_team(ally_slots, &id_to_name, &meta_by_id, &overrides);
+    let enemy = analyze_team(enemy_slots, &id_to_name, &meta_by_id, &overrides);
+    let (missing, base_warnings) = ally_missing_and_warnings(&ally, &enemy, &input.my_role);
+    let mut warnings = base_warnings;
+    warnings.extend(draft_setup_notes(
+        input.snapshot.as_ref(),
+        &input.my_role,
+        &enemy,
+        &id_to_name,
+        &overrides,
+    ));
+    warnings.truncate(6);
+    let comp_identity = CompIdentity {
+        ally: identity_labels(&ally, "ally"),
+        enemy: identity_labels(&enemy, "enemy"),
+        missing,
+        warnings,
+        win_condition: win_condition(&ally, &enemy, &input.my_role),
+    };
+    let plans = matchup_plans(
         &input.suggestions,
         input.snapshot.as_ref(),
         &input.my_role,
@@ -533,8 +914,2063 @@ fn build_item_matrix_plans(input: &RustItemMatrixInput) -> Vec<DraftMatchupPlan>
         &input.item_catalog,
         &input.ugg_seed,
         &overrides,
-        MATRIX_PLAN_LIMIT,
-    )
+        input.include_item_plans,
+        12,
+    );
+    let loading_brief = loading_brief(input.snapshot.as_ref(), &ally, &comp_identity, &plans);
+    let confidence_notes = confidence_notes(
+        input.snapshot.as_ref(),
+        &input.enemy_role_inference,
+        input.patch_label.as_deref(),
+        input.data_dragon_version.as_deref(),
+    );
+    Some(DraftIntelOut {
+        ban_recommendations: ban_recommendations(
+            input.snapshot.as_ref(),
+            &input.my_role,
+            &id_to_name,
+            &input.enemy_role_inference,
+            &input.public_base_stats,
+        ),
+        comp_identity,
+        matchup_plans: plans,
+        item_matrix_plans: None,
+        pick_comparison: Vec::new(),
+        loading_brief,
+        confidence_notes,
+    })
+}
+
+fn role_label(role: &str) -> &'static str {
+    match normalize_role_key(role).unwrap_or("unknown") {
+        "top" => "Top",
+        "jungle" => "Jungle",
+        "middle" => "Mid",
+        "bottom" => "Bot",
+        "support" => "Support",
+        _ => "Role",
+    }
+}
+
+fn role_key_or_original<'a>(role: &'a str) -> &'a str {
+    match normalize_role_key(role) {
+        Some(key) => key,
+        None => role,
+    }
+}
+
+fn identity_labels(team: &TeamRead, side: &str) -> Vec<String> {
+    let mut labels = Vec::new();
+    if team.frontline >= 2.0 && team.scaling >= 2.0 {
+        labels.push("front-to-back".to_string());
+    }
+    if team.poke >= 3.0 {
+        labels.push("poke/siege".to_string());
+    }
+    if team.dive >= 3.0 {
+        labels.push("dive".to_string());
+    }
+    if team.pick >= 3.0 {
+        labels.push("pick".to_string());
+    }
+    if team.scaling >= 3.0 {
+        labels.push("scaling".to_string());
+    }
+    if team.assassins >= 2.0 {
+        labels.push("burst".to_string());
+    }
+    if team.supports >= 2.0 || (side == "ally" && team.sustain >= 2.0) {
+        labels.push("protect/counter-engage".to_string());
+    }
+    if labels.is_empty() && !team.slots.is_empty() {
+        labels.push("balanced".to_string());
+    }
+    labels.truncate(4);
+    labels
+}
+
+fn ally_missing_and_warnings(ally: &TeamRead, enemy: &TeamRead, my_role: &str) -> (Vec<String>, Vec<String>) {
+    let mut missing = Vec::new();
+    let mut warnings = Vec::new();
+    let magic = ally.ap + ally.hybrid * 0.5;
+    let physical = ally.ad + ally.hybrid * 0.5;
+    if ally.slots.len() >= 3 && magic < 1.0 {
+        missing.push("magic damage".to_string());
+    }
+    if ally.slots.len() >= 3 && physical < 1.0 {
+        missing.push("physical DPS".to_string());
+    }
+    if ally.slots.len() >= 3 && ally.frontline < 1.0 {
+        missing.push("frontline".to_string());
+    }
+    if ally.slots.len() >= 3 && ally.engage < 1.0 {
+        missing.push("reliable engage".to_string());
+    }
+    if enemy.assassins >= 2.0 {
+        warnings.push("Enemy has multiple backline threats; value peel, Exhaust, Stopwatch, or defensive boots.".to_string());
+    }
+    if enemy.poke >= 3.0 {
+        warnings.push("Enemy poke is high; avoid slow drafts with no engage or sustain.".to_string());
+    }
+    if enemy.frontline >= 3.0 {
+        warnings.push("Enemy frontline is heavy; prioritize sustained DPS and anti-tank patterns.".to_string());
+    }
+    if enemy.ap + enemy.hybrid * 0.5 >= 4.0 {
+        warnings.push("Enemy damage leans AP; early MR and Cleanse/Mercs can matter.".to_string());
+    }
+    if enemy.ad + enemy.hybrid * 0.5 >= 4.0 {
+        warnings.push("Enemy damage leans AD; armor and anti-burst setup gain value.".to_string());
+    }
+    let role = role_key_or_original(my_role);
+    if (role == "bottom" || role == "middle") && enemy.pick >= 3.0 {
+        warnings.push("High pick threat; track fog before sidelaning and respect support/jungle roam timers.".to_string());
+    }
+    warnings.truncate(5);
+    (missing, warnings)
+}
+
+fn win_condition(ally: &TeamRead, enemy: &TeamRead, my_role: &str) -> String {
+    let ally_labels = identity_labels(ally, "ally");
+    if ally.slots.is_empty() {
+        return format!(
+            "Draft for {} agency: pick comfort, avoid one-damage comps, and keep bans on high-playrate counters.",
+            role_label(my_role)
+        );
+    }
+    if ally_labels.iter().any(|label| label == "front-to-back") {
+        return "Play front-to-back: protect carries, fight around objective setup, and punish divers after cooldowns are spent.".to_string();
+    }
+    if ally_labels.iter().any(|label| label == "poke/siege") {
+        return "Play for vision first, chip before objectives, then disengage unless the poke creates a numbers edge.".to_string();
+    }
+    if ally_labels.iter().any(|label| label == "dive") {
+        return "Play to stack waves, force flanks, and commit together; split engages make the comp much weaker.".to_string();
+    }
+    if ally_labels.iter().any(|label| label == "pick") {
+        return "Play through fog and first move; convert catches into dragons, Herald, or turret tempo.".to_string();
+    }
+    if enemy.scaling >= 3.0 && ally.dive >= 2.0 {
+        return "Enemy scales well, so use early skirmishes and side pressure before their carries reach two items.".to_string();
+    }
+    "Keep the comp flexible: cover damage mix, draft at least one reliable engage tool, and play around your strongest lane.".to_string()
+}
+
+fn unavailable_champion_ids(snapshot: Option<&DraftSnapshot>) -> HashSet<i32> {
+    let mut out = HashSet::new();
+    let Some(snapshot) = snapshot else {
+        return out;
+    };
+    for slot in snapshot.ally.iter().chain(snapshot.enemy.iter()) {
+        if let Some(id) = slot.champion_id {
+            if id > 0 {
+                out.insert(id);
+            }
+        }
+    }
+    if let Some(bans) = &snapshot.bans {
+        for id in bans {
+            if *id > 0 {
+                out.insert(*id);
+            }
+        }
+    }
+    out
+}
+
+fn role_weights(my_role: &str, enemy_role_inference: &[EnemyRoleInference]) -> HashMap<String, f64> {
+    let mut weights: HashMap<String, f64> = ROLE_KEYS
+        .iter()
+        .map(|role| (role.to_string(), 0.55))
+        .collect();
+    if let Some(role) = normalize_role_key(my_role) {
+        *weights.entry(role.to_string()).or_insert(0.55) += 0.45;
+    }
+    for row in enemy_role_inference {
+        let role = normalize_role_key(&row.inferred_role).unwrap_or(&row.inferred_role);
+        if ROLE_KEYS.iter().any(|key| key == &role) {
+            *weights.entry(role.to_string()).or_insert(0.55) += 0.2 * row.confidence;
+        }
+    }
+    weights
+}
+
+fn ban_score(row: &PublicBaseStatEntry, weight: f64) -> f64 {
+    let wr_lift = (row.win_rate - row.source_avg_win_rate) * 120.0;
+    let pick = row.pick_rate.unwrap_or(0.0) * 36.0;
+    let ban = row.ban_rate.unwrap_or(0.0) * 24.0;
+    let games = row.games.max(10.0).log10() * 0.9;
+    let candidate = if row.candidate { 0.8 } else { 0.0 };
+    ((45.0 + wr_lift + pick + ban + games + candidate) * weight * 10.0).round() / 10.0
+}
+
+fn ban_recommendations(
+    snapshot: Option<&DraftSnapshot>,
+    my_role: &str,
+    id_to_name: &HashMap<i32, String>,
+    enemy_role_inference: &[EnemyRoleInference],
+    rows: &[PublicBaseStatEntry],
+) -> Vec<BanRecommendation> {
+    let unavailable = unavailable_champion_ids(snapshot);
+    let weights = role_weights(my_role, enemy_role_inference);
+    let mut best: HashMap<i32, BanRecommendation> = HashMap::new();
+    for row in rows {
+        let Some(role) = normalize_role_key(&row.role) else {
+            continue;
+        };
+        if unavailable.contains(&row.champion_id) {
+            continue;
+        }
+        let weight = *weights.get(role).unwrap_or(&0.55);
+        let score = ban_score(row, weight);
+        let mut parts = vec![format!(
+            "{} {:.1}% WR",
+            role_label(role),
+            row.win_rate * 100.0
+        )];
+        if let Some(pick_rate) = row.pick_rate {
+            parts.push(format!("{:.1}% pick", pick_rate * 100.0));
+        }
+        if let Some(ban_rate) = row.ban_rate {
+            parts.push(format!("{:.1}% ban", ban_rate * 100.0));
+        }
+        let rec = BanRecommendation {
+            champion_id: row.champion_id,
+            champion_name: champion_name(row.champion_id, id_to_name),
+            role: role.to_string(),
+            score,
+            reason: parts.join(" / "),
+        };
+        match best.get(&row.champion_id) {
+            Some(current) if current.score >= rec.score => {}
+            _ => {
+                best.insert(row.champion_id, rec);
+            }
+        }
+    }
+    let mut out: Vec<BanRecommendation> = best.into_values().collect();
+    out.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| a.champion_name.cmp(&b.champion_name))
+    });
+    out.truncate(5);
+    out
+}
+
+fn draft_setup_notes(
+    snapshot: Option<&DraftSnapshot>,
+    my_role: &str,
+    enemy: &TeamRead,
+    id_to_name: &HashMap<i32, String>,
+    overrides: &HashMap<String, ThreatOverrideRow>,
+) -> Vec<String> {
+    let mut notes = Vec::new();
+    let Some(snapshot) = snapshot else {
+        return notes;
+    };
+    let role = role_key_or_original(my_role);
+    if role == "bottom" || role == "support" {
+        let partner_role = if role == "bottom" { "support" } else { "bottom" };
+        if let Some(partner) = snapshot
+            .ally
+            .iter()
+            .find(|slot| role_key_or_original(&slot.role) == partner_role && slot.champion_id.unwrap_or(0) > 0)
+        {
+            let id = partner.champion_id.unwrap_or(0);
+            let name = partner
+                .champion_name
+                .clone()
+                .unwrap_or_else(|| champion_name(id, id_to_name));
+            let classes = classes_for_name(&name, overrides);
+            if classes.iter().any(|class| class == "tank") {
+                notes.push(format!("Bot pairing: {name} gives engage; contest level 2 and crash waves before roaming."));
+            } else if classes.iter().any(|class| class == "support") {
+                notes.push(format!("Bot pairing: {name} suggests peel/sustain; trade around shields and keep river vision early."));
+            } else {
+                notes.push(format!("Bot pairing: {name} is locked; sync wave goals before choosing an aggressive summoner."));
+            }
+        } else {
+            notes.push("Bot pairing: partner not locked yet; prefer flexible setup until the 2v2 is known.".to_string());
+        }
+    }
+    if role == "jungle" {
+        let volatile_lane = snapshot
+            .ally
+            .iter()
+            .find(|slot| role_key_or_original(&slot.role) != "jungle" && slot.champion_id.unwrap_or(0) > 0)
+            .map(|slot| role_key_or_original(&slot.role).to_string())
+            .unwrap_or_else(|| "middle".to_string());
+        notes.push(format!("Jungle setup: path with a purpose toward {volatile_lane} unless enemy jungle reveals a punishable start."));
+    } else if let Some(enemy_jungle) = snapshot
+        .enemy
+        .iter()
+        .find(|slot| role_key_or_original(&slot.role) == "jungle" && slot.champion_id.unwrap_or(0) > 0)
+    {
+        let id = enemy_jungle.champion_id.unwrap_or(0);
+        let name = enemy_jungle
+            .champion_name
+            .clone()
+            .unwrap_or_else(|| champion_name(id, id_to_name));
+        notes.push(format!("Jungle tracking: enemy {name} is shown; ward for their first gank side before trading hard."));
+    } else if enemy.dive >= 3.0 {
+        notes.push("Jungle tracking: enemy comp wants dives; thin waves before cannon crashes and ping missing support/jungle.".to_string());
+    }
+    notes
+}
+
+fn loading_brief(
+    _snapshot: Option<&DraftSnapshot>,
+    ally: &TeamRead,
+    comp: &CompIdentity,
+    plans: &[DraftMatchupPlan],
+) -> Vec<String> {
+    let mut lines = vec![format!("Win condition: {}", comp.win_condition)];
+    if let Some(plan) = plans.first() {
+        let lane = plan
+            .lane_opponent_name
+            .as_ref()
+            .map(|name| format!(" vs {name}"))
+            .unwrap_or_default();
+        lines.push(format!(
+            "Top pick plan: {}{} - {}; {}",
+            plan.champion_name, lane, plan.summoner_spells, plan.starting_item
+        ));
+        if let Some(item_plan) = &plan.item_plan {
+            if let Some(angle) = item_plan.situational.first().or(Some(&item_plan.boots)) {
+                lines.push(format!("Item angle: {angle}"));
+            }
+        }
+    }
+    if let Some(warn) = comp.warnings.first() {
+        lines.push(format!("Danger: {warn}"));
+    }
+    if ally.slots.len() >= 3 && !comp.missing.is_empty() {
+        lines.push(format!("Draft gap: missing {}.", comp.missing.join(", ")));
+    }
+    lines.truncate(5);
+    lines
+}
+
+fn confidence_notes(
+    snapshot: Option<&DraftSnapshot>,
+    enemy_role_inference: &[EnemyRoleInference],
+    patch_label: Option<&str>,
+    data_dragon_version: Option<&str>,
+) -> Vec<String> {
+    let mut notes = Vec::new();
+    notes.push(format!(
+        "Patch-aware public stats plus {}.",
+        patch_label.unwrap_or("engine-v1")
+    ));
+    notes.push(match data_dragon_version {
+        Some(version) => format!("Champion metadata from Riot Data Dragon {version}."),
+        None => "Champion metadata is bundled until Riot Data Dragon loads.".to_string(),
+    });
+    let inferred = enemy_role_inference
+        .iter()
+        .filter(|row| row.confidence_label != "uncertain")
+        .count();
+    let locked = snapshot
+        .map(|s| {
+            s.enemy
+                .iter()
+                .filter(|slot| slot.champion_id.unwrap_or(0) > 0)
+                .count()
+        })
+        .unwrap_or(0);
+    notes.push(if locked > 0 {
+        format!("Enemy role inference: {inferred}/{locked} locked enemies have likely or flex role reads.")
+    } else {
+        "Enemy role inference will activate when enemy champions are locked or hovered.".to_string()
+    });
+    notes
+}
+
+const ROLE_KEYS: [&str; 5] = ["top", "jungle", "middle", "bottom", "support"];
+
+#[derive(Debug, Clone)]
+struct RecommendTables {
+    id_to_name: HashMap<i32, String>,
+    meta_by_id: HashMap<i32, ChampionMeta>,
+    comfort_by_id: HashMap<i32, f64>,
+    role_pools: HashMap<String, Vec<i32>>,
+    public_candidates: HashMap<String, Vec<i32>>,
+    public_base_rates: HashMap<(String, i32), f64>,
+    public_lane_rates: HashMap<(String, i32, i32), f64>,
+    matchup_bonuses: HashMap<(i32, i32), f64>,
+    ally_synergy: HashMap<(i32, i32), f64>,
+    trained_base: HashMap<(String, i32), f64>,
+    trained_lane: HashMap<(String, i32, i32), f64>,
+    trained_synergy: HashMap<(String, String, i32, i32), f64>,
+    enemy_posteriors: HashMap<usize, HashMap<String, f64>>,
+    overrides: HashMap<String, ThreatOverrideRow>,
+    hard_counters: HashMap<String, Vec<String>>,
+}
+
+#[derive(Debug, Clone)]
+struct RecommendState {
+    snapshot: DraftSnapshot,
+    my_role: String,
+    bans: Vec<i32>,
+    unavailable: HashSet<i32>,
+    my_pick_order: Option<i32>,
+    locked_champion_picks: i32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ComponentScores {
+    base: f64,
+    ally: f64,
+    enemy: f64,
+    #[allow(dead_code)]
+    comfort: f64,
+    comp: f64,
+    ally_adj: f64,
+    enemy_adj: f64,
+    comp_adj: f64,
+    comfort_adj: f64,
+    blind_p: f64,
+    context_combined: f64,
+    combined: f64,
+}
+
+#[derive(Debug, Clone)]
+struct RecommendRowWork {
+    champion_id: i32,
+    comp: ComponentScores,
+    ev: Option<f64>,
+    risk: Option<f64>,
+    mc_weight: Option<f64>,
+}
+
+fn recommend_picks(input: &RustRecommendInput) -> RustRecommendOutput {
+    let Some(snapshot) = input.snapshot.clone() else {
+        return RustRecommendOutput {
+            ok: true,
+            rows: Vec::new(),
+            patch_label: Some("engine-v1".to_string()),
+            unsupported_reason: None,
+            error: None,
+        };
+    };
+    let role = normalize_role_key(&input.my_role);
+    if role.is_none() {
+        return RustRecommendOutput {
+            ok: true,
+            rows: Vec::new(),
+            patch_label: Some("engine-v1".to_string()),
+            unsupported_reason: None,
+            error: None,
+        };
+    }
+    let state = recommend_state(snapshot, &input.my_role);
+    let tables = recommend_tables(input);
+    let rows = recommend_rows(input, &state, &tables);
+    let n_mc = recommend_mc_count(input.monte_carlo_samples);
+    RustRecommendOutput {
+        ok: true,
+        rows,
+        patch_label: Some(recommend_patch_label(n_mc, input.has_trained_data)),
+        unsupported_reason: None,
+        error: None,
+    }
+}
+
+fn score_champion(input: &RustChampionScoreInput) -> RustChampionScoreOutput {
+    let Some(snapshot) = input.recommend.snapshot.clone() else {
+        return RustChampionScoreOutput {
+            ok: false,
+            score: None,
+            patch_label: Some("engine-v1".to_string()),
+            error: Some("No draft snapshot available".to_string()),
+        };
+    };
+    let Some(pool_key) = normalize_role_key(&input.recommend.my_role) else {
+        return RustChampionScoreOutput {
+            ok: false,
+            score: None,
+            patch_label: Some("engine-v1".to_string()),
+            error: Some("Unknown role cannot be scored".to_string()),
+        };
+    };
+    let state = recommend_state(snapshot, &input.recommend.my_role);
+    let tables = recommend_tables(&input.recommend);
+    RustChampionScoreOutput {
+        ok: true,
+        score: Some(v1_component_scores(input.champion_id, pool_key, &state, &tables)),
+        patch_label: Some(recommend_patch_label(
+            recommend_mc_count(input.recommend.monte_carlo_samples),
+            input.recommend.has_trained_data,
+        )),
+        error: None,
+    }
+}
+
+fn recommend_patch_label(n_mc: usize, has_trained_data: bool) -> String {
+    let base = if n_mc > 0 {
+        format!("engine-v1+mc({n_mc})")
+    } else {
+        "engine-v1".to_string()
+    };
+    if has_trained_data {
+        format!("{base}+trained")
+    } else {
+        base
+    }
+}
+
+fn recommend_tables(input: &RustRecommendInput) -> RecommendTables {
+    let id_to_name = input
+        .id_to_name
+        .iter()
+        .map(|row| (row.id, row.name.clone()))
+        .collect();
+    let meta_by_id = input
+        .champion_meta_by_id
+        .iter()
+        .map(|row| (row.id, row.meta.clone()))
+        .collect();
+    let comfort_by_id = input
+        .comfort_by_champion_id
+        .iter()
+        .filter(|row| row.id > 0 && row.value.is_finite())
+        .map(|row| (row.id, row.value))
+        .collect();
+    let role_pools = input
+        .role_champion_pools
+        .iter()
+        .map(|row| (row.role.clone(), unique_ids(&row.champion_ids)))
+        .collect();
+    let public_candidates = input
+        .public_candidate_ids
+        .iter()
+        .map(|row| (row.role.clone(), unique_ids(&row.champion_ids)))
+        .collect();
+    let public_base_rates = input
+        .public_base_rates
+        .iter()
+        .filter(|row| row.rate.is_finite())
+        .map(|row| ((row.role.clone(), row.champion_id), row.rate))
+        .collect();
+    let public_lane_rates = input
+        .public_lane_rates
+        .iter()
+        .filter(|row| row.rate.is_finite())
+        .map(|row| ((row.role.clone(), row.candidate_id, row.enemy_id), row.rate))
+        .collect();
+    let matchup_bonuses = input
+        .matchup_bonuses
+        .iter()
+        .filter(|row| row.bonus.is_finite())
+        .map(|row| ((row.candidate_id, row.enemy_id), row.bonus))
+        .collect();
+    let mut ally_synergy = HashMap::new();
+    for row in &input.ally_synergy_bonuses {
+        if row.bonus.is_finite() {
+            ally_synergy.insert((row.left_id, row.right_id), row.bonus);
+        }
+    }
+    let trained_base = input
+        .trained_base_rates
+        .iter()
+        .filter(|row| row.logit.is_finite())
+        .map(|row| ((row.role.clone(), row.champion_id), row.logit))
+        .collect();
+    let trained_lane = input
+        .trained_lane_rates
+        .iter()
+        .filter(|row| row.logit.is_finite())
+        .map(|row| ((row.role.clone(), row.ally_id, row.enemy_id), row.logit))
+        .collect();
+    let trained_synergy = input
+        .trained_synergy_deltas
+        .iter()
+        .filter(|row| row.delta.is_finite())
+        .map(|row| {
+            (
+                (
+                    row.ally_role.clone(),
+                    row.partner_role.clone(),
+                    row.ally_id,
+                    row.partner_id,
+                ),
+                row.delta,
+            )
+        })
+        .collect();
+    let mut enemy_posteriors: HashMap<usize, HashMap<String, f64>> = input
+        .enemy_role_inference
+        .iter()
+        .map(|row| (row.enemy_index, row.role_probabilities.clone()))
+        .collect();
+    if enemy_posteriors.is_empty() {
+        if let Some(snapshot) = input.snapshot.as_ref() {
+            enemy_posteriors = infer_recommend_enemy_posteriors(snapshot, &role_pools, &public_candidates);
+        }
+    }
+    let overrides = input
+        .champion_threat_overrides
+        .iter()
+        .map(|row| (row.key.clone(), row.clone()))
+        .collect();
+    let hard_counters = input
+        .hard_counters_by_name
+        .iter()
+        .map(|row| (row.champion_key.clone(), row.counter_keys.clone()))
+        .collect();
+    RecommendTables {
+        id_to_name,
+        meta_by_id,
+        comfort_by_id,
+        role_pools,
+        public_candidates,
+        public_base_rates,
+        public_lane_rates,
+        matchup_bonuses,
+        ally_synergy,
+        trained_base,
+        trained_lane,
+        trained_synergy,
+        enemy_posteriors,
+        overrides,
+        hard_counters,
+    }
+}
+
+fn locked_recommend_enemies(snapshot: &DraftSnapshot) -> Vec<(usize, i32, String)> {
+    snapshot
+        .enemy
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, slot)| {
+            slot.champion_id
+                .filter(|id| *id > 0)
+                .map(|id| (idx, id, slot.role.clone()))
+        })
+        .collect()
+}
+
+fn role_pool_has(
+    role: &str,
+    champion_id: i32,
+    role_pools: &HashMap<String, Vec<i32>>,
+    public_candidates: &HashMap<String, Vec<i32>>,
+) -> bool {
+    role_pools
+        .get(role)
+        .map(|ids| ids.contains(&champion_id))
+        .unwrap_or(false)
+        || public_candidates
+            .get(role)
+            .map(|ids| ids.contains(&champion_id))
+            .unwrap_or(false)
+}
+
+fn recommend_role_likelihood(
+    champion_id: i32,
+    role: &str,
+    role_pools: &HashMap<String, Vec<i32>>,
+    public_candidates: &HashMap<String, Vec<i32>>,
+) -> f64 {
+    if public_candidates
+        .get(role)
+        .map(|ids| ids.contains(&champion_id))
+        .unwrap_or(false)
+    {
+        return 0.26;
+    }
+    if role_pool_has(role, champion_id, role_pools, public_candidates) {
+        0.22
+    } else {
+        0.015
+    }
+}
+
+fn recommend_slot_role_prior(slot_role: &str, role: &str) -> f64 {
+    match normalize_role_key(slot_role) {
+        None => 1.0,
+        Some(slot_key) if slot_key == role => 20.0,
+        Some(_) => 0.3,
+    }
+}
+
+fn recommend_assignment_score(
+    champion_id: i32,
+    slot_role: &str,
+    role: &str,
+    role_pools: &HashMap<String, Vec<i32>>,
+    public_candidates: &HashMap<String, Vec<i32>>,
+) -> f64 {
+    let mut likelihood = recommend_role_likelihood(champion_id, role, role_pools, public_candidates);
+    if normalize_role_key(slot_role) == Some(role) {
+        likelihood = likelihood.max(0.08);
+    }
+    likelihood * recommend_slot_role_prior(slot_role, role)
+}
+
+fn empty_recommend_posterior() -> HashMap<String, f64> {
+    ROLE_KEYS
+        .iter()
+        .map(|role| (role.to_string(), 0.0))
+        .collect()
+}
+
+fn one_hot_recommend_posterior(role: &str) -> HashMap<String, f64> {
+    ROLE_KEYS
+        .iter()
+        .map(|candidate| {
+            (
+                candidate.to_string(),
+                if *candidate == role { 1.0 } else { 0.0 },
+            )
+        })
+        .collect()
+}
+
+fn normalize_recommend_posterior(row: &HashMap<String, f64>) -> HashMap<String, f64> {
+    let total: f64 = ROLE_KEYS
+        .iter()
+        .map(|role| row.get(*role).copied().unwrap_or(0.0))
+        .sum();
+    if !total.is_finite() || total <= 0.0 {
+        return ROLE_KEYS
+            .iter()
+            .map(|role| (role.to_string(), 0.2))
+            .collect();
+    }
+    ROLE_KEYS
+        .iter()
+        .map(|role| {
+            (
+                role.to_string(),
+                row.get(*role).copied().unwrap_or(0.0) / total,
+            )
+        })
+        .collect()
+}
+
+fn infer_recommend_enemy_posteriors(
+    snapshot: &DraftSnapshot,
+    role_pools: &HashMap<String, Vec<i32>>,
+    public_candidates: &HashMap<String, Vec<i32>>,
+) -> HashMap<usize, HashMap<String, f64>> {
+    let locked = locked_recommend_enemies(snapshot);
+    let mut out = HashMap::new();
+    if locked.is_empty() {
+        return out;
+    }
+
+    let mut assigned_roles = HashSet::new();
+    let has_known_unique_assignments = locked.iter().all(|(_, _, slot_role)| {
+        let Some(role) = normalize_role_key(slot_role) else {
+            return false;
+        };
+        assigned_roles.insert(role)
+    });
+    if has_known_unique_assignments {
+        for (idx, _, slot_role) in locked {
+            if let Some(role) = normalize_role_key(&slot_role) {
+                out.insert(idx, one_hot_recommend_posterior(role));
+            }
+        }
+        return out;
+    }
+
+    fn recur(
+        i: usize,
+        score: f64,
+        locked: &[(usize, i32, String)],
+        role_pools: &HashMap<String, Vec<i32>>,
+        public_candidates: &HashMap<String, Vec<i32>>,
+        used: &mut HashSet<&'static str>,
+        role_by_idx: &mut HashMap<usize, &'static str>,
+        assignments: &mut Vec<(HashMap<usize, &'static str>, f64)>,
+    ) {
+        if i >= locked.len() {
+            assignments.push((role_by_idx.clone(), score));
+            return;
+        }
+        let (idx, champion_id, slot_role) = &locked[i];
+        for role in ROLE_KEYS {
+            if used.contains(role) {
+                continue;
+            }
+            let next_score = score
+                * recommend_assignment_score(
+                    *champion_id,
+                    slot_role,
+                    role,
+                    role_pools,
+                    public_candidates,
+                );
+            if !next_score.is_finite() || next_score <= 0.0 {
+                continue;
+            }
+            used.insert(role);
+            role_by_idx.insert(*idx, role);
+            recur(
+                i + 1,
+                next_score,
+                locked,
+                role_pools,
+                public_candidates,
+                used,
+                role_by_idx,
+                assignments,
+            );
+            role_by_idx.remove(idx);
+            used.remove(role);
+        }
+    }
+
+    let mut assignments = Vec::new();
+    recur(
+        0,
+        1.0,
+        &locked,
+        role_pools,
+        public_candidates,
+        &mut HashSet::new(),
+        &mut HashMap::new(),
+        &mut assignments,
+    );
+
+    let total: f64 = assignments.iter().map(|(_, score)| *score).sum();
+    if total <= 0.0 {
+        for (idx, champion_id, slot_role) in locked {
+            let mut row = empty_recommend_posterior();
+            for role in ROLE_KEYS {
+                row.insert(
+                    role.to_string(),
+                    recommend_assignment_score(
+                        champion_id,
+                        &slot_role,
+                        role,
+                        role_pools,
+                        public_candidates,
+                    ),
+                );
+            }
+            out.insert(idx, normalize_recommend_posterior(&row));
+        }
+        return out;
+    }
+
+    for (idx, _, _) in &locked {
+        out.insert(*idx, empty_recommend_posterior());
+    }
+    for (assignment, score) in assignments {
+        let weight = score / total;
+        for (idx, role) in assignment {
+            if let Some(row) = out.get_mut(&idx) {
+                let entry = row.entry(role.to_string()).or_insert(0.0);
+                *entry += weight;
+            }
+        }
+    }
+    out.into_iter()
+        .map(|(idx, row)| (idx, normalize_recommend_posterior(&row)))
+        .collect()
+}
+
+fn recommend_state(snapshot: DraftSnapshot, my_role: &str) -> RecommendState {
+    let bans = unique_ids(snapshot.bans.as_deref().unwrap_or(&[]));
+    let mut unavailable: HashSet<i32> = bans.iter().copied().collect();
+    let mut locked = 0;
+    for slot in snapshot.ally.iter().chain(snapshot.enemy.iter()) {
+        if let Some(id) = slot.champion_id.filter(|id| *id > 0) {
+            unavailable.insert(id);
+            locked += 1;
+        }
+    }
+    let my_pick_order = snapshot.my_pick_order;
+    RecommendState {
+        snapshot,
+        my_role: my_role.to_string(),
+        bans,
+        unavailable,
+        my_pick_order,
+        locked_champion_picks: locked,
+    }
+}
+
+fn recommend_rows(
+    input: &RustRecommendInput,
+    state: &RecommendState,
+    tables: &RecommendTables,
+) -> Vec<PickSuggestionOut> {
+    let Some(pool_key) = normalize_role_key(&state.my_role) else {
+        return Vec::new();
+    };
+    let candidate_filter = input
+        .candidate_champion_ids
+        .as_ref()
+        .map(|ids| ids.iter().copied().filter(|id| *id > 0).collect::<HashSet<_>>());
+    let pinned_local_pick_id = local_locked_pick_id(&state.snapshot, &state.my_role);
+    let mut legal = Vec::new();
+    push_unique(&mut legal, tables.role_pools.get(pool_key).map(Vec::as_slice).unwrap_or(&[]));
+    push_unique(
+        &mut legal,
+        tables
+            .public_candidates
+            .get(pool_key)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]),
+    );
+    let mut pool = Vec::new();
+    for champion_id in legal {
+        if let Some(filter) = &candidate_filter {
+            if !filter.contains(&champion_id) {
+                continue;
+            }
+        }
+        let allow_pinned = candidate_filter.is_none() && Some(champion_id) == pinned_local_pick_id;
+        if !state.unavailable.contains(&champion_id) || allow_pinned {
+            pool.push(champion_id);
+        }
+    }
+    if candidate_filter.is_none() {
+        if let Some(id) = pinned_local_pick_id.filter(|id| *id > 0) {
+            if !pool.contains(&id) {
+                pool.push(id);
+            }
+        }
+    }
+
+    let n_mc = recommend_mc_count(input.monte_carlo_samples);
+    let use_mc = n_mc > 0;
+    let mut rand = Mulberry32::new(input.rng_seed);
+    let role_pools = if use_mc {
+        Some(build_recommend_role_pool_cache(tables))
+    } else {
+        None
+    };
+    let local_cell = state.snapshot.local_player_cell_id;
+    let context_ready = has_board_context(&state.snapshot, &state.my_role, local_cell);
+    let lane_opp = inferred_lane_opponent_id(&state.snapshot, &state.my_role, tables);
+    let mut rows = Vec::new();
+    for champion_id in pool {
+        let comp = v1_component_scores(champion_id, pool_key, state, tables);
+        if !use_mc {
+            rows.push(RecommendRowWork {
+                champion_id,
+                comp,
+                ev: None,
+                risk: None,
+                mc_weight: None,
+            });
+            continue;
+        }
+        let s0 = clone_with_my_pick(&state.snapshot, &state.my_role, local_cell, champion_id);
+        let mut sample_mean = 0.0;
+        let mut sample_m2 = 0.0;
+        for i in 0..n_mc {
+            let done = complete_draft_randomly(
+                &s0,
+                &state.bans,
+                &mut rand,
+                role_pools.as_ref().expect("role pools exist when MC is active"),
+            );
+            let mut next_state = recommend_state(done, &state.my_role);
+            next_state.locked_champion_picks = 10;
+            let x = v1_component_scores(champion_id, pool_key, &next_state, tables).combined;
+            let n = (i + 1) as f64;
+            let delta = x - sample_mean;
+            sample_mean += delta / n;
+            sample_m2 += delta * (x - sample_mean);
+        }
+        let stdev = (sample_m2 / (n_mc.max(1) as f64)).sqrt();
+        let comfort = comfort_get(champion_id, tables);
+        let future_weight = monte_carlo_future_weight(&state.snapshot, &state.my_role, local_cell, tables);
+        let projected_mean = clamp01(comp.combined + (sample_mean - comp.combined) * future_weight);
+        let ev = clamp01(0.9 * projected_mean + 0.1 * comfort - 0.1 * stdev * future_weight);
+        rows.push(RecommendRowWork {
+            champion_id,
+            comp,
+            ev: Some(ev),
+            risk: Some(stdev),
+            mc_weight: Some(future_weight),
+        });
+    }
+
+    sort_recommend_rows(&mut rows, use_mc, &input.sort_by, context_ready);
+    let selected = select_recommend_rows(
+        &rows,
+        input.max_results,
+        &input.sort_by,
+        &input.delta_list_mode,
+        context_ready,
+        pinned_local_pick_id,
+    );
+    selected
+        .into_iter()
+        .map(|row| recommend_output_row(row, use_mc, context_ready, lane_opp, pinned_local_pick_id, state))
+        .collect()
+}
+
+fn recommend_output_row(
+    row: RecommendRowWork,
+    use_mc: bool,
+    context_ready: bool,
+    lane_opp: Option<i32>,
+    pinned_local_pick_id: Option<i32>,
+    state: &RecommendState,
+) -> PickSuggestionOut {
+    let comp = row.comp;
+    let p_score = row.ev.unwrap_or(comp.combined);
+    let base_win_rate = context_ready.then_some(round3(comp.base));
+    let context_win_rate = context_ready.then_some(round3(comp.context_combined));
+    let win_rate_delta = if context_ready {
+        Some(round3(comp.context_combined - comp.base))
+    } else {
+        None
+    };
+    let has_meaningful_team_synergy_delta = win_rate_delta
+        .map(|d| d.abs() >= 0.003)
+        .unwrap_or(false);
+    let scale = if use_mc { 2.6 } else { 3.2 };
+    let display_score = ((1.0 + (p_score - 0.5) * scale) * 100.0).round() / 100.0;
+    let mut reasons = Vec::new();
+    push_reason(&mut reasons, "fill_role");
+    if comp.base > 0.51 {
+        push_reason(&mut reasons, "base_wr");
+    }
+    if has_meaningful_team_synergy_delta && comp.ally > 0.51 {
+        push_reason(&mut reasons, "team_synergy");
+    }
+    if has_meaningful_team_synergy_delta && comp.comp > 0.53 {
+        push_reason(&mut reasons, "team_synergy");
+    }
+    if comp.enemy > 0.51 {
+        push_reason(&mut reasons, "lane_counter");
+    }
+    if lane_opp.is_none() {
+        if draft_phase_from_locked_picks(state.locked_champion_picks) == "early" && comp.base > 0.515 {
+            push_reason(&mut reasons, "blind_safe");
+        }
+    } else if comp.enemy > 0.52 {
+        push_reason(&mut reasons, "late_counter");
+    }
+    if p_score > 0.51 {
+        push_reason(&mut reasons, "meta_safe");
+    }
+    if use_mc && row.risk.unwrap_or(0.0) < 0.1 {
+        push_reason(&mut reasons, "meta_safe");
+    }
+    if has_meaningful_team_synergy_delta
+        && state.my_role == "support"
+        && [12, 53, 111, 201].contains(&row.champion_id)
+        && comp.ally > 0.5
+    {
+        push_reason(&mut reasons, "team_synergy");
+    }
+    let detail = if use_mc {
+        format!(
+            "V1 {:.1}% · EV {:.1}% · MC {:.0}% · sd{:.0}% · adj a{:.1} e{:.1} c{:.1} p{:.1} b-{:.1} · {}",
+            comp.combined * 100.0,
+            row.ev.unwrap_or(0.0) * 100.0,
+            row.mc_weight.unwrap_or(0.0) * 100.0,
+            row.risk.unwrap_or(0.0) * 100.0,
+            comp.ally_adj * 100.0,
+            comp.enemy_adj * 100.0,
+            comp.comp_adj * 100.0,
+            comp.comfort_adj * 100.0,
+            comp.blind_p * 100.0,
+            if lane_opp.is_some() { "lane" } else { "blind" }
+        )
+    } else {
+        format!(
+            "~{:.1}% blend · b{:.0}% a{:.0}% e{:.0}% c{:.0}% · adj a{:.1} e{:.1} c{:.1} p{:.1} b-{:.1} · {}",
+            comp.combined * 100.0,
+            comp.base * 100.0,
+            comp.ally * 100.0,
+            comp.enemy * 100.0,
+            comp.comp * 100.0,
+            comp.ally_adj * 100.0,
+            comp.enemy_adj * 100.0,
+            comp.comp_adj * 100.0,
+            comp.comfort_adj * 100.0,
+            comp.blind_p * 100.0,
+            if lane_opp.is_some() { "lane" } else { "blind" }
+        )
+    };
+    PickSuggestionOut {
+        champion_id: row.champion_id,
+        score: display_score,
+        reasons,
+        is_locked_pick: (Some(row.champion_id) == pinned_local_pick_id).then_some(true),
+        base_win_rate,
+        context_win_rate,
+        win_rate_delta,
+        est_win: Some(round3(p_score)),
+        lookahead_ev: row.ev,
+        lookahead_risk: row.risk,
+        detail: Some(detail),
+    }
+}
+
+fn v1_component_scores(
+    champion_id: i32,
+    pool_key: &str,
+    state: &RecommendState,
+    tables: &RecommendTables,
+) -> ComponentScores {
+    let base = base_term(champion_id, pool_key, state, tables);
+    let ally = ally_term(champion_id, &state.my_role, state.snapshot.local_player_cell_id, &state.snapshot, tables);
+    let enemy = enemy_term(champion_id, &state.my_role, &state.snapshot, tables);
+    let comfort = comfort_get(champion_id, tables);
+    let comp = comp_term(champion_id, &state.my_role, state.snapshot.local_player_cell_id, &state.snapshot, tables);
+    let ally_locks = teammate_lock_count_excluding_local(&state.snapshot);
+    let enemy_locks = enemy_lock_count(&state.snapshot);
+    let t_a = clamp01(ally_locks as f64 / 4.0);
+    let lc = lane_certainty(&state.snapshot, &state.my_role, tables);
+    let t_e = clamp01(lc * (0.65_f64.max(enemy_locks as f64 / 5.0)));
+    let t_c = t_a;
+    let r_a = reliability(ally_locks as f64 * 60.0, 80.0);
+    let r_e = reliability(enemy_locks as f64 * 70.0 * 0.35_f64.max(lc), 35.0);
+    let r_c = reliability(ally_locks as f64 * 50.0, 500.0);
+    let has_comfort = tables.comfort_by_id.contains_key(&champion_id);
+    let r_p = reliability(if has_comfort { 40.0 } else { 0.0 }, 40.0);
+    let ally_adj = (0.09 + 0.08 * t_a) * r_a * centered01(ally);
+    let enemy_adj = (0.2 + 0.3 * t_e) * r_e * centered01(enemy);
+    let comp_adj = (0.02 + 0.06 * t_c) * r_c * centered01(comp);
+    let comfort_adj = 0.04 * r_p * centered01(comfort);
+    let blind_p = blind_penalty(champion_id, pool_key, state, tables, 1.0 - t_e);
+    let context_combined = clamp01(base + ally_adj + enemy_adj + comp_adj);
+    let combined = clamp01(context_combined + comfort_adj - blind_p);
+    ComponentScores {
+        base,
+        ally,
+        enemy,
+        comfort,
+        comp,
+        ally_adj,
+        enemy_adj,
+        comp_adj,
+        comfort_adj,
+        blind_p,
+        context_combined,
+        combined,
+    }
+}
+
+fn base_term(champion_id: i32, pool_key: &str, state: &RecommendState, tables: &RecommendTables) -> f64 {
+    let role = normalize_role_key(&state.my_role).unwrap_or(pool_key);
+    if let Some(meta_rate) = tables
+        .public_base_rates
+        .get(&(role.to_string(), champion_id))
+        .copied()
+    {
+        return meta_rate;
+    }
+    tables
+        .trained_base
+        .get(&(role.to_string(), champion_id))
+        .copied()
+        .map(sigmoid)
+        .unwrap_or(0.5)
+}
+
+fn ally_term(
+    champion_id: i32,
+    my_role: &str,
+    local_cell: Option<i32>,
+    snapshot: &DraftSnapshot,
+    tables: &RecommendTables,
+) -> f64 {
+    let mut total = 0.0;
+    let mut n = 0.0;
+    for ally in &snapshot.ally {
+        let Some(ally_id) = ally.champion_id.filter(|id| *id > 0) else {
+            continue;
+        };
+        if ally.role == my_role
+            && ally.cell_id.is_some()
+            && local_cell.is_some()
+            && ally.cell_id == local_cell
+        {
+            continue;
+        }
+        let trained = tables
+            .trained_synergy
+            .get(&(my_role.to_string(), ally.role.clone(), champion_id, ally_id))
+            .copied();
+        if let Some(delta) = trained {
+            total += clamp(sigmoid(delta), 0.3, 0.7);
+        } else {
+            let bonus = tables
+                .ally_synergy
+                .get(&(champion_id, ally_id))
+                .or_else(|| tables.ally_synergy.get(&(ally_id, champion_id)))
+                .copied()
+                .unwrap_or(0.0);
+            total += bonus_to_p(bonus, 1.4);
+        }
+        n += 1.0;
+    }
+    if n > 0.0 { total / n } else { 0.5 }
+}
+
+fn enemy_term(champion_id: i32, my_role: &str, snapshot: &DraftSnapshot, tables: &RecommendTables) -> f64 {
+    let mut total = 0.0;
+    let mut weight = 0.0;
+    for (idx, enemy) in snapshot.enemy.iter().enumerate() {
+        let Some(enemy_id) = enemy.champion_id.filter(|id| *id > 0) else {
+            continue;
+        };
+        let meta = tables
+            .public_lane_rates
+            .get(&(my_role.to_string(), champion_id, enemy_id))
+            .copied();
+        let trained = tables
+            .trained_lane
+            .get(&(my_role.to_string(), champion_id, enemy_id))
+            .copied()
+            .map(sigmoid);
+        let fallback = shrunk_lane_rate(champion_id, enemy_id, tables);
+        let heuristic = blend_heuristic_matchup_rates(meta, fallback);
+        let matchup = blend_enemy_matchup_rate(trained, heuristic);
+        let lane_weight = inferred_lane_weight_for_enemy(tables, idx, my_role);
+        total += matchup * lane_weight;
+        weight += lane_weight;
+    }
+    if weight > 0.0 { total / weight } else { 0.5 }
+}
+
+fn comp_term(
+    champion_id: i32,
+    my_role: &str,
+    local_cell: Option<i32>,
+    snapshot: &DraftSnapshot,
+    tables: &RecommendTables,
+) -> f64 {
+    let mut ad_threat = 0.0;
+    let mut ap_threat = 0.0;
+    let mut fighter_count = 0.0;
+    let mut mage_count = 0.0;
+    let mut marksman_count = 0.0;
+    let mut assassin_count = 0.0;
+    let mut tank_count = 0.0;
+    let mut support_count = 0.0;
+    for ally in &snapshot.ally {
+        if ally.role == my_role
+            && ally.cell_id.is_some()
+            && local_cell.is_some()
+            && ally.cell_id == local_cell
+        {
+            add_comp_champion(
+                champion_id,
+                my_role,
+                tables,
+                &mut ad_threat,
+                &mut ap_threat,
+                &mut fighter_count,
+                &mut mage_count,
+                &mut marksman_count,
+                &mut assassin_count,
+                &mut tank_count,
+                &mut support_count,
+            );
+            continue;
+        }
+        let Some(id) = ally.champion_id.filter(|id| *id > 0) else {
+            continue;
+        };
+        add_comp_champion(
+            id,
+            &ally.role,
+            tables,
+            &mut ad_threat,
+            &mut ap_threat,
+            &mut fighter_count,
+            &mut mage_count,
+            &mut marksman_count,
+            &mut assassin_count,
+            &mut tank_count,
+            &mut support_count,
+        );
+    }
+    let total_threat = ad_threat + ap_threat;
+    if total_threat <= 0.0 {
+        return 0.5;
+    }
+    let mut score = 0.5;
+    let skew = (ad_threat - ap_threat).abs() / total_threat;
+    score += (0.45 - skew) * 0.12;
+    let one_resist_draft = (ap_threat >= 4.1 && ad_threat <= 1.0) || (ad_threat >= 4.1 && ap_threat <= 1.0);
+    if one_resist_draft {
+        score -= 0.12;
+    }
+    let class_max = fighter_count
+        .max(mage_count)
+        .max(marksman_count)
+        .max(assassin_count)
+        .max(tank_count);
+    if class_max >= 4.0 {
+        score -= 0.07;
+    }
+    let frontline = tank_count + fighter_count * 0.6;
+    if frontline < 1.2 {
+        score -= 0.06;
+    }
+    let has_sustained_dps = marksman_count >= 1.0 || ad_threat >= 1.8 || ap_threat >= 2.2;
+    if !has_sustained_dps {
+        score -= 0.04;
+    }
+    let engage_weight = tank_count + assassin_count * 0.5 + fighter_count * 0.5 + support_count * 0.35;
+    if engage_weight < 1.0 {
+        score -= 0.03;
+    }
+    clamp(score, 0.35, 0.65)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn add_comp_champion(
+    champion_id: i32,
+    role: &str,
+    tables: &RecommendTables,
+    ad_threat: &mut f64,
+    ap_threat: &mut f64,
+    fighter_count: &mut f64,
+    mage_count: &mut f64,
+    marksman_count: &mut f64,
+    assassin_count: &mut f64,
+    tank_count: &mut f64,
+    support_count: &mut f64,
+) {
+    let name = champion_name(champion_id, &tables.id_to_name);
+    if let Some(override_row) = tables.overrides.get(&normalize_key(&name)) {
+        for class in &override_row.classes {
+            match class.as_str() {
+                "fighter" => *fighter_count += 1.0,
+                "mage" => *mage_count += 1.0,
+                "marksman" => *marksman_count += 1.0,
+                "assassin" => *assassin_count += 1.0,
+                "tank" => *tank_count += 1.0,
+                "support" => *support_count += 1.0,
+                _ => {}
+            }
+        }
+        match override_row.threat.as_str() {
+            "ad" => {
+                *ad_threat += if override_row.classes.iter().any(|c| c == "marksman") { 1.1 } else { 1.0 };
+            }
+            "ap" => *ap_threat += 1.0,
+            "hybrid" => {
+                *ad_threat += 0.5;
+                *ap_threat += 0.5;
+            }
+            _ => {
+                *ad_threat += 0.125;
+                *ap_threat += 0.125;
+            }
+        }
+        return;
+    }
+    let tags = tables
+        .meta_by_id
+        .get(&champion_id)
+        .map(|meta| meta.tags.clone())
+        .unwrap_or_default();
+    let has = |tag: &str| tags.iter().any(|t| t == tag);
+    if has("Fighter") {
+        *fighter_count += 1.0;
+    }
+    if has("Mage") {
+        *mage_count += 1.0;
+    }
+    if has("Marksman") {
+        *marksman_count += 1.0;
+    }
+    if has("Assassin") {
+        *assassin_count += 1.0;
+    }
+    if has("Tank") {
+        *tank_count += 1.0;
+    }
+    if has("Support") {
+        *support_count += 1.0;
+    }
+    let utility_only = (has("Tank") || has("Support"))
+        && !has("Marksman")
+        && !has("Mage")
+        && !has("Assassin")
+        && !has("Fighter");
+    if utility_only {
+        *ad_threat += 0.1;
+        *ap_threat += 0.1;
+        return;
+    }
+    let damage = infer_damage_from_tags(&tags, role);
+    match damage.as_str() {
+        "ad" => *ad_threat += if has("Marksman") { 1.1 } else { 1.0 },
+        "ap" => *ap_threat += 1.0,
+        _ => {
+            *ad_threat += 0.5;
+            *ap_threat += 0.5;
+        }
+    }
+}
+
+fn infer_damage_from_tags(tags: &[String], role: &str) -> String {
+    let has = |tag: &str| tags.iter().any(|t| t == tag);
+    if role == "unknown" || tags.is_empty() {
+        return "mixed".to_string();
+    }
+    if has("Mage") && has("Marksman") {
+        return "flex".to_string();
+    }
+    if has("Tank") {
+        return "mixed".to_string();
+    }
+    if has("Support") && has("Mage") {
+        return "ap".to_string();
+    }
+    if has("Support") && has("Assassin") {
+        return "mixed".to_string();
+    }
+    if has("Support") {
+        return "ap".to_string();
+    }
+    if has("Mage") {
+        return "ap".to_string();
+    }
+    if has("Assassin") || has("Fighter") || has("Marksman") {
+        return "ad".to_string();
+    }
+    "mixed".to_string()
+}
+
+fn blind_penalty(
+    champion_id: i32,
+    pool_key: &str,
+    state: &RecommendState,
+    tables: &RecommendTables,
+    enemy_exposure: f64,
+) -> f64 {
+    let base = base_term(champion_id, pool_key, state, tables);
+    let early_board = draft_phase_from_locked_picks(state.locked_champion_picks) == "early"
+        && state.locked_champion_picks < 3;
+    let early_lcu = state.my_pick_order.map(|n| n <= 2).unwrap_or(false);
+    let use_early = early_lcu || (early_board && state.my_pick_order.is_none());
+    if !use_early {
+        return 0.0;
+    }
+    let role_cap = match pool_key {
+        "top" => 0.1,
+        "middle" => 0.08,
+        "bottom" => 0.06,
+        "support" => 0.05,
+        "jungle" => 0.04,
+        _ => 0.0,
+    };
+    let vulnerability = clamp01((0.51 - base) / 0.1);
+    role_cap * clamp01(enemy_exposure) * vulnerability
+}
+
+fn shrunk_lane_rate(candidate_id: i32, enemy_id: i32, tables: &RecommendTables) -> f64 {
+    let bonus = tables
+        .matchup_bonuses
+        .get(&(candidate_id, enemy_id))
+        .copied()
+        .unwrap_or_else(|| derived_matchup_bonus(candidate_id, enemy_id, tables));
+    let capped = clamp(bonus, -8.0, 8.0);
+    let p = clamp(0.5 + capped * 0.04, 0.22, 0.78);
+    let n = 52.0;
+    let wins = (n * p).round();
+    let losses = n - wins;
+    (wins + 24.0 * 0.5) / (wins + losses + 24.0)
+}
+
+fn derived_matchup_bonus(candidate_id: i32, enemy_id: i32, tables: &RecommendTables) -> f64 {
+    let candidate_name = champion_name(candidate_id, &tables.id_to_name);
+    let enemy_name = champion_name(enemy_id, &tables.id_to_name);
+    let candidate_key = normalize_key(&candidate_name);
+    let enemy_key = normalize_key(&enemy_name);
+    let candidate = champion_archetype(&candidate_name, tables);
+    let enemy = champion_archetype(&enemy_name, tables);
+    let mut bonus = hard_counter_bonus(&candidate_key, &enemy_key, tables);
+    let candidate_has = |cls: &str| candidate.classes.iter().any(|c| c == cls);
+    let enemy_has = |cls: &str| enemy.classes.iter().any(|c| c == cls);
+    if candidate_has("assassin") && (enemy_has("marksman") || enemy_has("mage") || enemy_has("support")) {
+        bonus += 1.9;
+    }
+    if enemy_has("assassin") && (candidate_has("marksman") || candidate_has("mage") || candidate_has("support")) {
+        bonus -= 1.9;
+    }
+    if candidate_has("tank") && enemy_has("assassin") {
+        bonus += 1.5;
+    }
+    if enemy_has("tank") && candidate_has("assassin") {
+        bonus -= 1.5;
+    }
+    if candidate_has("marksman") && enemy_has("tank") {
+        bonus += 1.1;
+    }
+    if enemy_has("marksman") && candidate_has("tank") {
+        bonus -= 1.1;
+    }
+    if candidate_has("fighter") && enemy_has("tank") {
+        bonus -= 0.6;
+    }
+    if enemy_has("fighter") && candidate_has("tank") {
+        bonus += 0.6;
+    }
+    if candidate_has("mage") && enemy_has("fighter") {
+        bonus += 0.7;
+    }
+    if enemy_has("mage") && candidate_has("fighter") {
+        bonus -= 0.7;
+    }
+    if candidate.threat == "hybrid" && (enemy.threat == "ad" || enemy.threat == "ap") {
+        bonus += 0.4;
+    }
+    if enemy.threat == "hybrid" && (candidate.threat == "ad" || candidate.threat == "ap") {
+        bonus -= 0.4;
+    }
+    if candidate.threat == "utility" && enemy.threat != "utility" {
+        bonus -= 0.3;
+    }
+    if enemy.threat == "utility" && candidate.threat != "utility" {
+        bonus += 0.3;
+    }
+    bonus += (((candidate_id * 31 + enemy_id * 17).rem_euclid(7)) as f64 - 3.0) * 0.05;
+    clamp(bonus, -6.0, 6.0)
+}
+
+#[derive(Debug, Clone)]
+struct ChampionArchetype {
+    threat: String,
+    classes: Vec<String>,
+}
+
+fn champion_archetype(name: &str, tables: &RecommendTables) -> ChampionArchetype {
+    if let Some(row) = tables.overrides.get(&normalize_key(name)) {
+        return ChampionArchetype {
+            threat: row.threat.clone(),
+            classes: row.classes.clone(),
+        };
+    }
+    ChampionArchetype {
+        threat: "hybrid".to_string(),
+        classes: vec!["fighter".to_string()],
+    }
+}
+
+fn hard_counter_bonus(candidate_key: &str, enemy_key: &str, tables: &RecommendTables) -> f64 {
+    let mut bonus = 0.0;
+    if tables
+        .hard_counters
+        .get(enemy_key)
+        .map(|counters| counters.iter().any(|key| key == candidate_key))
+        .unwrap_or(false)
+    {
+        bonus += 8.0;
+    }
+    if tables
+        .hard_counters
+        .get(candidate_key)
+        .map(|counters| counters.iter().any(|key| key == enemy_key))
+        .unwrap_or(false)
+    {
+        bonus -= 8.0;
+    }
+    bonus
+}
+
+fn sort_recommend_rows(rows: &mut [RecommendRowWork], use_mc: bool, sort_by: &str, context_ready: bool) {
+    if use_mc {
+        if sort_by == "delta" {
+            rows.sort_by(|a, b| {
+                if !context_ready {
+                    return cmp_desc(a.ev.unwrap_or(0.0), b.ev.unwrap_or(0.0));
+                }
+                compare_delta_rows(a, b, true)
+            });
+        } else {
+            rows.sort_by(|a, b| cmp_desc(a.ev.unwrap_or(0.0), b.ev.unwrap_or(0.0)));
+        }
+    } else if sort_by == "delta" {
+        rows.sort_by(|a, b| {
+            if !context_ready {
+                return cmp_desc(a.comp.combined, b.comp.combined);
+            }
+            compare_delta_rows(a, b, false)
+        });
+    } else {
+        rows.sort_by(|a, b| cmp_desc(a.comp.combined, b.comp.combined));
+    }
+}
+
+fn compare_delta_rows(a: &RecommendRowWork, b: &RecommendRowWork, use_ev_tiebreak: bool) -> Ordering {
+    let a_delta = a.comp.context_combined - a.comp.base;
+    let b_delta = b.comp.context_combined - b.comp.base;
+    let a_pos = if a_delta > 0.0 { 1 } else { 0 };
+    let b_pos = if b_delta > 0.0 { 1 } else { 0 };
+    if b_pos != a_pos {
+        return b_pos.cmp(&a_pos);
+    }
+    if (b_delta - a_delta).abs() > f64::EPSILON {
+        return cmp_desc(a_delta, b_delta);
+    }
+    if use_ev_tiebreak {
+        cmp_desc(a.ev.unwrap_or(a.comp.combined), b.ev.unwrap_or(b.comp.combined))
+    } else {
+        cmp_desc(a.comp.combined, b.comp.combined)
+    }
+}
+
+fn select_recommend_rows(
+    rows: &[RecommendRowWork],
+    max_results: usize,
+    sort_by: &str,
+    delta_list_mode: &str,
+    context_ready: bool,
+    pinned_local_pick_id: Option<i32>,
+) -> Vec<RecommendRowWork> {
+    let n = max_results.max(1);
+    let mut selected = if sort_by != "delta" {
+        rows.to_vec()
+    } else if context_ready {
+        let mut by_delta = rows.to_vec();
+        by_delta.sort_by(|a, b| {
+            let a_delta = a.comp.context_combined - a.comp.base;
+            let b_delta = b.comp.context_combined - b.comp.base;
+            cmp_desc(a_delta, b_delta)
+        });
+        if delta_list_mode == "worst" {
+            by_delta.reverse();
+        }
+        by_delta
+    } else if delta_list_mode == "worst" {
+        let mut reversed = rows.to_vec();
+        reversed.reverse();
+        reversed
+    } else {
+        rows.to_vec()
+    };
+    if let Some(pinned_id) = pinned_local_pick_id {
+        if let Some(pos) = rows.iter().position(|row| row.champion_id == pinned_id) {
+            let pinned = rows[pos].clone();
+            selected.retain(|row| row.champion_id != pinned_id);
+            selected.insert(0, pinned);
+        }
+    }
+    selected.into_iter().take(n).collect()
+}
+
+fn build_recommend_role_pool_cache(tables: &RecommendTables) -> HashMap<String, Vec<i32>> {
+    let mut out = HashMap::new();
+    for role in ROLE_KEYS {
+        let mut ids = Vec::new();
+        push_unique(&mut ids, tables.role_pools.get(role).map(Vec::as_slice).unwrap_or(&[]));
+        push_unique(
+            &mut ids,
+            tables.public_candidates.get(role).map(Vec::as_slice).unwrap_or(&[]),
+        );
+        out.insert(role.to_string(), ids);
+    }
+    out
+}
+
+fn clone_with_my_pick(snapshot: &DraftSnapshot, my_role: &str, local_cell: Option<i32>, champion_id: i32) -> DraftSnapshot {
+    let mut ally = snapshot.ally.clone();
+    let mut ok = false;
+    for slot in &mut ally {
+        if slot.role != my_role {
+            continue;
+        }
+        if let (Some(local), Some(cell)) = (local_cell, slot.cell_id) {
+            if cell == local {
+                slot.champion_id = Some(champion_id);
+                ok = true;
+            }
+            continue;
+        }
+        if slot.champion_id.unwrap_or(0) <= 0 {
+            slot.champion_id = Some(champion_id);
+            ok = true;
+        }
+    }
+    if !ok {
+        for slot in &mut ally {
+            if slot.role == my_role {
+                slot.champion_id = Some(champion_id);
+            }
+        }
+    }
+    DraftSnapshot {
+        ally,
+        enemy: snapshot.enemy.clone(),
+        my_team: snapshot.my_team.clone(),
+        my_role: snapshot.my_role.clone(),
+        local_player_cell_id: snapshot.local_player_cell_id,
+        bans: snapshot.bans.clone(),
+        my_pick_order: snapshot.my_pick_order,
+    }
+}
+
+fn complete_draft_randomly(
+    snapshot: &DraftSnapshot,
+    bans: &[i32],
+    rand: &mut Mulberry32,
+    role_pools: &HashMap<String, Vec<i32>>,
+) -> DraftSnapshot {
+    let mut exclude = build_unavailable_from_snapshot(snapshot, bans);
+    let ally = fill_side_randomly(&snapshot.ally, &mut exclude, rand, role_pools);
+    let enemy = fill_side_randomly(&snapshot.enemy, &mut exclude, rand, role_pools);
+    DraftSnapshot {
+        ally,
+        enemy,
+        my_team: snapshot.my_team.clone(),
+        my_role: snapshot.my_role.clone(),
+        local_player_cell_id: snapshot.local_player_cell_id,
+        bans: snapshot.bans.clone(),
+        my_pick_order: snapshot.my_pick_order,
+    }
+}
+
+fn fill_side_randomly(
+    slots: &[SlotPick],
+    exclude: &mut HashSet<i32>,
+    rand: &mut Mulberry32,
+    role_pools: &HashMap<String, Vec<i32>>,
+) -> Vec<SlotPick> {
+    slots
+        .iter()
+        .map(|slot| {
+            if slot.champion_id.unwrap_or(0) > 0 || slot.role == "unknown" {
+                return slot.clone();
+            }
+            let Some(id) = pick_from_pool_excluding(&slot.role, exclude, rand, role_pools) else {
+                return slot.clone();
+            };
+            exclude.insert(id);
+            let mut next = slot.clone();
+            next.champion_id = Some(id);
+            next
+        })
+        .collect()
+}
+
+fn pick_from_pool_excluding(
+    role: &str,
+    exclude: &HashSet<i32>,
+    rand: &mut Mulberry32,
+    role_pools: &HashMap<String, Vec<i32>>,
+) -> Option<i32> {
+    let list = role_pools.get(role)?;
+    let available = list.iter().filter(|id| !exclude.contains(id)).count();
+    if available == 0 {
+        return None;
+    }
+    let mut target = (rand.next() * available as f64).floor() as usize;
+    for id in list {
+        if exclude.contains(id) {
+            continue;
+        }
+        if target == 0 {
+            return Some(*id);
+        }
+        target -= 1;
+    }
+    None
+}
+
+fn build_unavailable_from_snapshot(snapshot: &DraftSnapshot, bans: &[i32]) -> HashSet<i32> {
+    let mut out: HashSet<i32> = bans.iter().copied().filter(|id| *id > 0).collect();
+    for slot in snapshot.ally.iter().chain(snapshot.enemy.iter()) {
+        if let Some(id) = slot.champion_id.filter(|id| *id > 0) {
+            out.insert(id);
+        }
+    }
+    out
+}
+
+#[derive(Debug, Clone)]
+struct Mulberry32 {
+    state: u32,
+}
+
+impl Mulberry32 {
+    fn new(seed: u32) -> Self {
+        Self { state: seed }
+    }
+
+    fn next(&mut self) -> f64 {
+        self.state = self.state.wrapping_add(0x6d2b_79f5);
+        let mut t = self.state;
+        t = (t ^ (t >> 15)).wrapping_mul(t | 1);
+        t ^= t.wrapping_add((t ^ (t >> 7)).wrapping_mul(t | 61));
+        ((t ^ (t >> 14)) as f64) / 4_294_967_296.0
+    }
+}
+
+fn local_locked_pick_id(snapshot: &DraftSnapshot, my_role: &str) -> Option<i32> {
+    if let Some(local_cell) = snapshot.local_player_cell_id {
+        if let Some(slot) = snapshot.ally.iter().find(|slot| slot.cell_id == Some(local_cell)) {
+            if let Some(id) = slot.champion_id.filter(|id| *id > 0) {
+                return Some(id);
+            }
+        }
+    }
+    snapshot
+        .ally
+        .iter()
+        .find(|slot| slot.role == my_role && slot.champion_id.unwrap_or(0) > 0)
+        .and_then(|slot| slot.champion_id)
+}
+
+fn teammate_lock_count_excluding_local(snapshot: &DraftSnapshot) -> i32 {
+    let local_cell = snapshot.local_player_cell_id;
+    snapshot
+        .ally
+        .iter()
+        .filter(|slot| {
+            slot.champion_id.unwrap_or(0) > 0
+                && !(local_cell.is_some() && slot.cell_id.is_some() && local_cell == slot.cell_id)
+        })
+        .count() as i32
+}
+
+fn enemy_lock_count(snapshot: &DraftSnapshot) -> i32 {
+    snapshot
+        .enemy
+        .iter()
+        .filter(|slot| slot.champion_id.unwrap_or(0) > 0)
+        .count() as i32
+}
+
+fn has_board_context(snapshot: &DraftSnapshot, my_role: &str, local_cell: Option<i32>) -> bool {
+    for ally in &snapshot.ally {
+        if ally.champion_id.unwrap_or(0) <= 0 {
+            continue;
+        }
+        if ally.role == my_role && local_cell.is_some() && ally.cell_id.is_some() && local_cell == ally.cell_id {
+            continue;
+        }
+        return true;
+    }
+    snapshot.enemy.iter().any(|slot| slot.champion_id.unwrap_or(0) > 0)
+}
+
+fn lane_certainty(snapshot: &DraftSnapshot, my_role: &str, tables: &RecommendTables) -> f64 {
+    if normalize_role_key(my_role).is_none() {
+        return 0.0;
+    }
+    let mut lane_mass = 0.0;
+    for (idx, enemy) in snapshot.enemy.iter().enumerate() {
+        if enemy.champion_id.unwrap_or(0) <= 0 {
+            continue;
+        }
+        lane_mass += tables
+            .enemy_posteriors
+            .get(&idx)
+            .and_then(|p| p.get(my_role).copied())
+            .unwrap_or(0.0);
+    }
+    clamp01(lane_mass)
+}
+
+fn inferred_lane_opponent_id(snapshot: &DraftSnapshot, my_role: &str, tables: &RecommendTables) -> Option<i32> {
+    if normalize_role_key(my_role).is_none() {
+        return None;
+    }
+    let mut best_id = None;
+    let mut best_p = 0.0;
+    for (idx, enemy) in snapshot.enemy.iter().enumerate() {
+        let Some(id) = enemy.champion_id.filter(|id| *id > 0) else {
+            continue;
+        };
+        let p = tables
+            .enemy_posteriors
+            .get(&idx)
+            .and_then(|row| row.get(my_role).copied())
+            .unwrap_or(0.0);
+        if p > best_p {
+            best_p = p;
+            best_id = Some(id);
+        }
+    }
+    if best_p >= 0.45 { best_id } else { None }
+}
+
+fn inferred_lane_weight_for_enemy(tables: &RecommendTables, enemy_idx: usize, my_role: &str) -> f64 {
+    let off_role_floor = match my_role {
+        "top" | "middle" => 0.12,
+        "jungle" => 0.2,
+        "bottom" | "support" => 0.18,
+        _ => 0.18,
+    };
+    let Some(role_key) = normalize_role_key(my_role) else {
+        return off_role_floor;
+    };
+    let lane_p = tables
+        .enemy_posteriors
+        .get(&enemy_idx)
+        .and_then(|p| p.get(role_key).copied())
+        .unwrap_or(0.0);
+    off_role_floor + (1.0 - off_role_floor) * lane_p
+}
+
+fn monte_carlo_future_weight(snapshot: &DraftSnapshot, my_role: &str, local_cell: Option<i32>, tables: &RecommendTables) -> f64 {
+    let ally_locks = teammate_lock_count_excluding_local(snapshot);
+    let enemy_locks = enemy_lock_count(snapshot);
+    let known_locks = ally_locks + enemy_locks;
+    if known_locks <= 0 || !has_board_context(snapshot, my_role, local_cell) {
+        return 0.0;
+    }
+    let lock_factor = clamp01(known_locks as f64 / 8.0);
+    let lane_factor = if enemy_locks > 0 {
+        0.35 + 0.65 * lane_certainty(snapshot, my_role, tables)
+    } else {
+        0.35
+    };
+    clamp01(0.15 + 0.45 * lock_factor * lane_factor)
+}
+
+fn recommend_mc_count(raw: i32) -> usize {
+    raw.clamp(0, 200) as usize
+}
+
+fn normalize_role_key(role: &str) -> Option<&'static str> {
+    match role {
+        "top" => Some("top"),
+        "jungle" => Some("jungle"),
+        "middle" | "mid" => Some("middle"),
+        "bottom" | "adc" | "bot" => Some("bottom"),
+        "support" | "utility" | "sup" => Some("support"),
+        _ => None,
+    }
+}
+
+fn draft_phase_from_locked_picks(locked: i32) -> &'static str {
+    if locked < 3 {
+        "early"
+    } else if locked < 6 {
+        "mid"
+    } else {
+        "late"
+    }
+}
+
+fn blend_heuristic_matchup_rates(meta: Option<f64>, fallback: f64) -> f64 {
+    let Some(meta_rate) = meta else {
+        return fallback;
+    };
+    let meta_shift = meta_rate - 0.5;
+    let fallback_shift = fallback - 0.5;
+    let same_direction = meta_shift == 0.0
+        || fallback_shift == 0.0
+        || meta_shift.signum() == fallback_shift.signum();
+    let meta_weight = if !same_direction {
+        0.9
+    } else if fallback_shift.abs() < meta_shift.abs() * 0.7 {
+        0.88
+    } else {
+        0.78
+    };
+    clamp_matchup_rate(0.5 + meta_shift * meta_weight + fallback_shift * (1.0 - meta_weight))
+}
+
+fn blend_enemy_matchup_rate(trained: Option<f64>, heuristic: f64) -> f64 {
+    let Some(trained_rate) = trained else {
+        return heuristic;
+    };
+    let trained_shift = trained_rate - 0.5;
+    let heuristic_shift = heuristic - 0.5;
+    if heuristic_shift.abs() < 0.015 {
+        return clamp_matchup_rate(trained_rate);
+    }
+    let same_direction = trained_shift == 0.0
+        || heuristic_shift == 0.0
+        || trained_shift.signum() == heuristic_shift.signum();
+    if !same_direction && trained_shift.abs() > heuristic_shift.abs() * 1.5 {
+        return clamp_matchup_rate(0.5 + trained_shift * 0.7 + heuristic_shift * 0.3);
+    }
+    let heuristic_weight = if heuristic_shift.abs() >= 0.09 && trained_shift.abs() < heuristic_shift.abs() * 0.5 {
+        0.8
+    } else if same_direction {
+        0.4
+    } else {
+        0.7
+    };
+    clamp_matchup_rate(0.5 + trained_shift * (1.0 - heuristic_weight) + heuristic_shift * heuristic_weight)
+}
+
+fn clamp_matchup_rate(v: f64) -> f64 {
+    clamp(v, 0.28, 0.72)
+}
+
+fn bonus_to_p(bonus: f64, scale: f64) -> f64 {
+    0.5 + scale * clamp(bonus * 0.04, -0.1, 0.1)
+}
+
+fn comfort_get(id: i32, tables: &RecommendTables) -> f64 {
+    tables.comfort_by_id.get(&id).copied().unwrap_or(0.5)
+}
+
+fn reliability(n_eff: f64, prior: f64) -> f64 {
+    if !n_eff.is_finite() || n_eff <= 0.0 {
+        return 0.0;
+    }
+    n_eff / (n_eff + prior)
+}
+
+fn centered01(v: f64) -> f64 {
+    clamp01(v) - 0.5
+}
+
+fn clamp01(v: f64) -> f64 {
+    clamp(v, 0.0, 1.0)
+}
+
+fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
+    v.max(lo).min(hi)
+}
+
+fn sigmoid(x: f64) -> f64 {
+    if !x.is_finite() {
+        return 0.5;
+    }
+    if x > 50.0 {
+        return 1.0;
+    }
+    if x < -50.0 {
+        return 0.0;
+    }
+    let e = x.exp();
+    e / (1.0 + e)
+}
+
+fn round3(v: f64) -> f64 {
+    (v * 1000.0).round() / 1000.0
+}
+
+fn cmp_desc(a: f64, b: f64) -> Ordering {
+    b.partial_cmp(&a).unwrap_or(Ordering::Equal)
+}
+
+fn unique_ids(ids: &[i32]) -> Vec<i32> {
+    let mut out = Vec::new();
+    push_unique(&mut out, ids);
+    out
+}
+
+fn push_unique(out: &mut Vec<i32>, ids: &[i32]) {
+    for id in ids {
+        if *id > 0 && !out.contains(id) {
+            out.push(*id);
+        }
+    }
+}
+
+fn push_reason(out: &mut Vec<String>, reason: &str) {
+    if !out.iter().any(|r| r == reason) {
+        out.push(reason.to_string());
+    }
 }
 
 fn normalize_key(value: &str) -> String {
@@ -2861,6 +5297,7 @@ fn matchup_plans(
     item_catalog: &[ItemLite],
     ugg_seed: &UggSeed,
     overrides: &HashMap<String, ThreatOverrideRow>,
+    include_item_plans: bool,
     limit: usize,
 ) -> Vec<DraftMatchupPlan> {
     let lane_opponent = likely_lane_opponent(snapshot, my_role, enemy_role_inference);
@@ -2883,17 +5320,21 @@ fn matchup_plans(
             first_recall: first_recall(s, my_role, enemy),
             rune_export: rune_export(s.runes.as_ref()),
             game_plan: plan_line(s, my_role, ally, enemy, lane_opponent),
-            item_plan: Some(item_plan(
-                s,
-                my_role,
-                ally,
-                enemy,
-                lane_opponent,
-                meta_by_id,
-                item_catalog,
-                ugg_seed,
-                overrides,
-            )),
+            item_plan: if include_item_plans {
+                Some(item_plan(
+                    s,
+                    my_role,
+                    ally,
+                    enemy,
+                    lane_opponent,
+                    meta_by_id,
+                    item_catalog,
+                    ugg_seed,
+                    overrides,
+                ))
+            } else {
+                None
+            },
         })
         .collect()
 }
@@ -2992,6 +5433,8 @@ mod tests {
                 builds: Vec::new(),
             },
             champion_threat_overrides: Vec::new(),
+            focus_champion_id: None,
+            limit: None,
         };
         let rows = build_item_matrix_plans(&input);
         assert_eq!(rows.len(), 40);
@@ -3025,11 +5468,98 @@ mod tests {
     }
 
     #[test]
-    fn recommend_api_preserves_fallback_shape() {
+    fn recommend_api_scores_candidates() {
         let raw = recommend_picks_json(
-            r#"{"fallback":[{"championId":18,"championName":"Tristana","score":1.1,"reasons":["fill_role"]}]}"#,
+            r#"{
+                "snapshot":{
+                    "ally":[{"role":"middle","championId":null,"championName":null,"cellId":1}],
+                    "enemy":[{"role":"middle","championId":238,"championName":"Zed","cellId":null}],
+                    "myTeam":null,
+                    "myRole":"middle",
+                    "localPlayerCellId":1,
+                    "bans":[],
+                    "myPickOrder":null
+                },
+                "myRole":"middle",
+                "maxResults":2,
+                "monteCarloSamples":0,
+                "roleChampionPools":[{"role":"middle","championIds":[103,61]}],
+                "publicCandidateIds":[{"role":"middle","championIds":[]}],
+                "publicBaseRates":[
+                    {"role":"middle","championId":103,"rate":0.54},
+                    {"role":"middle","championId":61,"rate":0.50}
+                ],
+                "matchupBonuses":[{"candidateId":103,"enemyId":238,"bonus":2.0}],
+                "enemyRoleInference":[{"enemyIndex":0,"roleProbabilities":{"top":0,"jungle":0,"middle":1,"bottom":0,"support":0}}],
+                "idToName":[{"id":103,"name":"Ahri"},{"id":61,"name":"Orianna"},{"id":238,"name":"Zed"}]
+            }"#,
         );
-        assert!(raw.contains("\"championId\":18"));
-        assert!(raw.contains("\"championName\":\"Tristana\""));
+        assert!(raw.contains("\"ok\":true"));
+        assert!(raw.contains("\"championId\":103"));
+        assert!(raw.contains("\"patchLabel\":\"engine-v1\""));
+    }
+
+    #[test]
+    fn rust_recommender_infers_enemy_roles_when_input_omits_posteriors() {
+        let snapshot = DraftSnapshot {
+            ally: Vec::new(),
+            enemy: vec![
+                SlotPick {
+                    role: "bottom".to_string(),
+                    champion_id: Some(67),
+                    champion_name: Some("Vayne".to_string()),
+                    cell_id: Some(5),
+                },
+                SlotPick {
+                    role: "bottom".to_string(),
+                    champion_id: Some(222),
+                    champion_name: Some("Jinx".to_string()),
+                    cell_id: Some(6),
+                },
+            ],
+            my_team: None,
+            my_role: Some("middle".to_string()),
+            local_player_cell_id: None,
+            bans: None,
+            my_pick_order: None,
+        };
+        let role_pools = HashMap::from([
+            ("top".to_string(), vec![67]),
+            ("bottom".to_string(), vec![67, 222]),
+        ]);
+        let public_candidates = role_pools.clone();
+        let posteriors = infer_recommend_enemy_posteriors(&snapshot, &role_pools, &public_candidates);
+        let vayne = posteriors.get(&0).expect("vayne posterior");
+        let jinx = posteriors.get(&1).expect("jinx posterior");
+
+        assert!(vayne.get("top").copied().unwrap_or(0.0) > vayne.get("bottom").copied().unwrap_or(0.0));
+        assert!(jinx.get("bottom").copied().unwrap_or(0.0) > 0.75);
+    }
+
+    #[test]
+    fn score_champion_api_uses_trained_base_rates() {
+        let raw = score_champion_json(
+            r#"{
+                "championId":103,
+                "snapshot":{
+                    "ally":[{"role":"middle","championId":null,"championName":null,"cellId":1}],
+                    "enemy":[],
+                    "myTeam":null,
+                    "myRole":"middle",
+                    "localPlayerCellId":1,
+                    "bans":[],
+                    "myPickOrder":null
+                },
+                "myRole":"middle",
+                "roleChampionPools":[{"role":"middle","championIds":[103]}],
+                "publicCandidateIds":[{"role":"middle","championIds":[]}],
+                "trainedBaseRates":[{"role":"middle","championId":103,"logit":1.0}],
+                "hasTrainedData":true,
+                "idToName":[{"id":103,"name":"Ahri"}]
+            }"#,
+        );
+        assert!(raw.contains("\"ok\":true"));
+        assert!(raw.contains("\"patchLabel\":\"engine-v1+trained\""));
+        assert!(raw.contains("\"base\":0.731"));
     }
 }

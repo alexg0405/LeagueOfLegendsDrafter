@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
+import { ParticleWordLoader } from './ParticleWordLoader'
 import { PreloadGuard } from './PreloadGuard'
 import { isOverlayRoute } from './route'
 
@@ -6,11 +7,7 @@ const MainShell = lazy(() => import('./MainShell').then((mod) => ({ default: mod
 const OverlayPanel = lazy(() => import('./OverlayPanel').then((mod) => ({ default: mod.OverlayPanel })))
 
 function DesktopLoading() {
-  return (
-    <div className="min-h-screen bg-nexus-bg px-6 py-5 font-mono text-sm text-nexus-muted">
-      Loading Nexus Draft...
-    </div>
-  )
+  return <ParticleWordLoader />
 }
 
 /**

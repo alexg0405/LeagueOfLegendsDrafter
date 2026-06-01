@@ -54,9 +54,9 @@ export function PreloadGuard({ children }: Props) {
         className="boot-error"
         style={{ padding: 24, maxWidth: 640, lineHeight: 1.5, background: '#060f0c', minHeight: '100vh' }}
       >
-        <h1 style={{ color: '#f85149', fontSize: '1.1rem', margin: '0 0 8px' }}>Wrong place — you’re in a web browser</h1>
+        <h1 style={{ color: '#f85149', fontSize: '1.1rem', margin: '0 0 8px' }}>Wrong place - you are in a web browser</h1>
         <p style={{ color: '#c9d1d9' }}>
-          This app only works inside the <strong>League Drafter (Electron)</strong> process. Your browser has no
+          This app only works inside the <strong>Nexus Draft desktop</strong> process. Your browser has no
           <code> window.drafter</code> bridge, so the UI cannot talk to the PC (capture, settings, etc.).
         </p>
         <p style={{ color: '#c9d1d9' }}>

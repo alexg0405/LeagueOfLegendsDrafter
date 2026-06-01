@@ -1,19 +1,20 @@
 import {
-  buildDraftItemMatrixPlans,
   serializeItemMatrixInput,
   type BuildDraftIntelArgs,
   type DraftMatchupPlan
 } from '../../../shared/draft'
+import type { ItemMatrixRequestOptions } from '../itemMatrix/itemMatrixClient'
 
 type MatrixRequest = {
   id: number
   args: BuildDraftIntelArgs
+  options?: ItemMatrixRequestOptions
 }
 
 type MatrixResponse = {
   id: number
   ok: boolean
-  source: 'rust' | 'typescript'
+  source: 'rust'
   plans: DraftMatchupPlan[]
   error?: string
 }
@@ -28,16 +29,12 @@ async function loadWasm() {
   return wasmModulePromise
 }
 
-function fallbackPlans(args: BuildDraftIntelArgs): DraftMatchupPlan[] {
-  return buildDraftItemMatrixPlans(args)
-}
-
 self.onmessage = (event: MessageEvent<MatrixRequest>) => {
   const { id, args } = event.data
   void (async () => {
     try {
       const wasm = await loadWasm()
-      const input = serializeItemMatrixInput(args)
+      const input = serializeItemMatrixInput(args, event.data.options)
       const raw = wasm.build_item_matrix_plans_json(JSON.stringify(input))
       const parsed = JSON.parse(raw) as unknown
       if (!Array.isArray(parsed)) {
@@ -50,8 +47,8 @@ self.onmessage = (event: MessageEvent<MatrixRequest>) => {
       const response: MatrixResponse = {
         id,
         ok: false,
-        source: 'typescript',
-        plans: fallbackPlans(args),
+        source: 'rust',
+        plans: [],
         error: message
       }
       ;(self as unknown as { postMessage: (message: MatrixResponse) => void }).postMessage(response)
@@ -60,4 +57,3 @@ self.onmessage = (event: MessageEvent<MatrixRequest>) => {
 }
 
 export {}
-

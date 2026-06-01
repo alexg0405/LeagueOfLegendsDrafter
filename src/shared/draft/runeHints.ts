@@ -795,7 +795,7 @@ function archetypeDefault(champion: ChampionDescriptor, role: DraftRole): RuneLo
       primaryTree: 'Flex',
       keystone: 'Match keystone to lane',
       secondary: 'Resolve or Inspiration (defence/utility)',
-      note: 'Set role in Nexus//Draft for a better default page.'
+      note: 'Set role in Nexus Draft for a better default page.'
     }
   }
 

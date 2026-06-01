@@ -18,7 +18,22 @@ export {
   type CompiledTrainedEffects,
   type TrainedEffectsStatus
 } from './trainedEffects'
-export { suggestPicks, type SuggestPicksArgs } from './suggestPicks'
+export {
+  canUseRustRecommendations,
+  ENGINE_MC_LABEL,
+  ENGINE_V1_LABEL,
+  hydrateRustRecommendations,
+  MEANINGFUL_TEAM_SYNERGY_DELTA,
+  serializeChampionScoreInput,
+  serializeRecommendInput,
+  type RustChampionScore,
+  type RustChampionScoreInput,
+  type RustChampionScoreOutput,
+  type RustRecommendInput,
+  type RustRecommendOutput,
+  type RustRecommendRow,
+  type SuggestPicksArgs
+} from './recommendRust'
 export {
   buildDraftIntel,
   buildDraftItemMatrixPlans,
@@ -34,6 +49,11 @@ export {
   type RustItemMatrixInput
 } from './itemMatrixRust'
 export {
+  hydrateRustDraftIntel,
+  serializeDraftIntelInput,
+  type RustDraftIntelInput
+} from './draftIntelRust'
+export {
   buildAdaptiveItemPlan,
   championKitProfileFromTexts,
   classifyItem,
@@ -48,16 +68,6 @@ export {
   type DraftEngineState,
   type DraftTier
 } from './draftState'
-export {
-  recommend,
-  v1ComponentScores,
-  cloneWithMyPick,
-  completeDraftRandomly,
-  ENGINE_V1_LABEL,
-  ENGINE_MC_LABEL,
-  MEANINGFUL_TEAM_SYNERGY_DELTA,
-  type RecommendArgs
-} from './recommendEngine'
 export {
   ALLY_SYNERGY_BONUS,
   ALLY_SYNERGY_TABLE_META,

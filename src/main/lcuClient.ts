@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import * as https from 'node:https'
 import { parseLcuChampSelectSession } from '../shared/draft/lcuMap'
 import type { LcuChampSelectResult } from '../shared/draft/lcuTypes'
+import type { LcuDiagnosticResult } from '../shared/desktopInterop'
 export type { LcuChampSelectResult } from '../shared/draft/lcuTypes'
 
 let warnedBadLockfile = false
@@ -39,6 +40,23 @@ function readFirstExistingLockfile(): string | null {
     }
   }
   return null
+}
+
+export function getLcuDiagnostics(): LcuDiagnosticResult {
+  const checkedPaths = getDefaultLockfilePaths().map((filePath) => ({
+    path: filePath,
+    exists: existsSync(filePath),
+    source: 'electron-default'
+  }))
+  const selectedPath = checkedPaths.find((probe) => probe.exists)?.path ?? null
+  return {
+    checkedPaths,
+    detectedProcesses: [],
+    selectedPath,
+    lockfileFound: selectedPath != null,
+    lcuReachable: false,
+    error: selectedPath == null ? 'League client lockfile not found. Start the League client.' : null
+  }
 }
 
 export function parseLockfileLine(content: string): { port: number; password: string } | null {

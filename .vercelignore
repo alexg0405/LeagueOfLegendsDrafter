@@ -2,6 +2,7 @@ node_modules
 out
 dist
 release
+target
 etl-out
 training
 draft_v1/data/*.db

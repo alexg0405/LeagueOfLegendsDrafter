@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useEffect, useState, type DragEvent as ReactDragEvent, type ReactNode } from 'react'
 import { ddragonChampionImageUrl, type ChampionLite } from '@shared/dataDragon'
 import type { OverlayShortcutStatusResult } from '@shared/desktopInterop'
@@ -91,10 +91,12 @@ type OpsSectionProps = {
 function CollapsibleOpsSection({ id, kicker, title, children, open, onToggle, accent = false }: OpsSectionProps) {
   const { reduce } = useNexusMotion()
   const contentId = `${id}-body`
+  const bodyTransition = reduce
+    ? { duration: 0 }
+    : { duration: open ? 0.18 : 0.12, ease: open ? EASING.out : EASING.sharp }
   return (
     <motion.section
       id={id}
-      layout={!reduce}
       className={[
         'relative border border-nexus-line bg-nexus-surface-2/90 mb-3 overflow-hidden',
         'shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]',
@@ -121,25 +123,24 @@ function CollapsibleOpsSection({ id, kicker, title, children, open, onToggle, ac
           +
         </motion.span>
       </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            id={contentId}
-            key="ops-section-body"
-            className="border-t border-nexus-line px-4 py-4 sm:px-5 sm:py-5 text-sm sm:text-base leading-relaxed"
-            initial={reduce ? false : { height: 0, opacity: 0, scale: 0.98, y: -6 }}
-            animate={reduce ? undefined : { height: 'auto', opacity: 1, scale: 1, y: 0 }}
-            exit={reduce ? undefined : { height: 0, opacity: 0, scale: 0.98, y: -6 }}
-            transition={reduce ? { duration: 0 } : { duration: 0.18, ease: EASING.out }}
-          >
+      <motion.div
+        id={contentId}
+        className={['grid overflow-hidden', open ? 'border-t border-nexus-line' : 'border-t border-transparent'].join(' ')}
+        initial={false}
+        animate={reduce ? { gridTemplateRows: open ? '1fr' : '0fr' } : { gridTemplateRows: open ? '1fr' : '0fr', opacity: open ? 1 : 0.98 }}
+        transition={bodyTransition}
+        aria-hidden={!open}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="px-4 py-4 sm:px-5 sm:py-5 text-sm sm:text-base leading-relaxed">
             <MicroLabel className="block mb-2 text-nexus-lime/75">{kicker}</MicroLabel>
             <h2 className="font-display text-base sm:text-lg tracking-[0.14em] uppercase text-nexus-lime/95 mb-3 sm:mb-4">
               {title}
             </h2>
             {children}
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </div>
+      </motion.div>
     </motion.section>
   )
 }

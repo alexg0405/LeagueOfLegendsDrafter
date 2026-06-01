@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useState, type ReactNode } from 'react'
 import { MicroLabel, NexusPlus } from './NexusTick'
 import { NexusProgressSegmented } from './NexusProgressSegmented'
@@ -133,6 +133,9 @@ export function NexusHomeDashboard({
             >
               {modules.map((module) => {
                 const isOpen = openModuleIds.has(module.id)
+                const bodyTransition = reduce
+                  ? { duration: 0 }
+                  : { duration: isOpen ? 0.18 : 0.12, ease: isOpen ? EASING.out : EASING.sharp }
                 return (
                   <motion.section
                     key={module.id}
@@ -171,18 +174,22 @@ export function NexusHomeDashboard({
                         +
                       </motion.span>
                     </button>
-                    <AnimatePresence initial={false}>
-                      {isOpen && (
-                        <motion.div
-                          key="module-body"
+                    <motion.div
+                      className={[
+                        'grid overflow-hidden',
+                        isOpen ? 'border-t border-nexus-line' : 'border-t border-transparent'
+                      ].join(' ')}
+                      initial={false}
+                      animate={reduce ? { gridTemplateRows: isOpen ? '1fr' : '0fr' } : { gridTemplateRows: isOpen ? '1fr' : '0fr', opacity: isOpen ? 1 : 0.98 }}
+                      transition={bodyTransition}
+                      aria-hidden={!isOpen}
+                    >
+                      <div className="min-h-0 overflow-hidden">
+                        <div
                           className={[
-                            'border-t border-nexus-line px-4 py-3 min-h-[120px]',
+                            'px-4 py-3 min-h-[120px]',
                             module.light ? 'text-[#1a1e1a]' : 'text-nexus-muted'
                           ].join(' ')}
-                          initial={reduce ? false : { height: 0, opacity: 0, scale: 0.98, y: -6 }}
-                          animate={reduce ? undefined : { height: 'auto', opacity: 1, scale: 1, y: 0 }}
-                          exit={reduce ? undefined : { height: 0, opacity: 0, scale: 0.98, y: -6 }}
-                          transition={reduce ? { duration: 0 } : { duration: 0.18, ease: EASING.out }}
                         >
                           <MicroLabel className={module.light ? 'opacity-70 text-[#1a1e1a]' : 'opacity-80'}>
                             {module.kicker}
@@ -196,9 +203,9 @@ export function NexusHomeDashboard({
                             {module.title}
                           </h3>
                           <div className="mt-2 text-base leading-relaxed">{module.body}</div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                        </div>
+                      </div>
+                    </motion.div>
                   </motion.section>
                 )
               })}

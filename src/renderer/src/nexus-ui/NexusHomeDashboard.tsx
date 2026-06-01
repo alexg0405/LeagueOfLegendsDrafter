@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { useState, type ReactNode } from 'react'
+import { ParticleWordMark } from '../ParticleWordLoader'
 import { MicroLabel, NexusPlus } from './NexusTick'
 import { NexusProgressSegmented } from './NexusProgressSegmented'
 import {
@@ -84,14 +85,22 @@ export function NexusHomeDashboard({
               <MicroLabel>league // champ select</MicroLabel>
               <span className="font-mono text-sm text-nexus-lime/85">SoloQ · Flex · manual entry if needed</span>
             </motion.div>
-            <h1 className="font-display text-5xl sm:text-6xl md:text-7xl text-nexus-text leading-[0.9] tracking-[0.06em] mb-1 overflow-hidden">
-              <motion.span className="block" custom={0} variants={titleV} initial="initial" animate="animate">
-                NEXUS
-              </motion.span>
-              <motion.span className="block text-nexus-lime" custom={1} variants={titleV} initial="initial" animate="animate">
-                DRAFT
-              </motion.span>
-            </h1>
+            <motion.h1
+              className="mb-1"
+              custom={0}
+              variants={titleV}
+              initial="initial"
+              animate="animate"
+            >
+              <ParticleWordMark
+                ariaLabel="NexusDraft"
+                className="h-[8.5rem] w-full max-w-[620px] sm:h-[10rem] md:h-[11.5rem]"
+                maxParticles={3000}
+                fontScale={0.22}
+                minFontSize={54}
+                maxFontSize={154}
+              />
+            </motion.h1>
             <motion.div
               className="mt-4 flex flex-wrap items-center gap-2 font-mono text-sm text-nexus-muted"
               custom={1}

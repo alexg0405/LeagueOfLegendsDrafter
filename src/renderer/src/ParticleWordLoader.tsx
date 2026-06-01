@@ -21,14 +21,26 @@ type ParticleWordLoaderProps = {
   label?: string
 }
 
-const WORD = 'NexusDraft'
-const MAX_PARTICLES = 3200
+type ParticleWordMarkProps = {
+  word?: string
+  ariaLabel?: string
+  className?: string
+  maxParticles?: number
+  fontScale?: number
+  minFontSize?: number
+  maxFontSize?: number
+}
+
+type ParticleWordOptions = Required<Pick<ParticleWordMarkProps, 'word' | 'maxParticles' | 'fontScale' | 'minFontSize' | 'maxFontSize'>>
+
+const DEFAULT_WORD = 'NexusDraft'
+const DEFAULT_MAX_PARTICLES = 3200
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
 
-function makeParticles(width: number, height: number, previous: Particle[]): Particle[] {
+function makeParticles(width: number, height: number, previous: Particle[], options: ParticleWordOptions): Particle[] {
   const scratch = document.createElement('canvas')
   scratch.width = Math.max(1, Math.floor(width))
   scratch.height = Math.max(1, Math.floor(height))
@@ -37,13 +49,19 @@ function makeParticles(width: number, height: number, previous: Particle[]): Par
     return []
   }
 
-  const fontSize = clamp(width * 0.14, 48, 150)
+  let fontSize = clamp(width * options.fontScale, options.minFontSize, options.maxFontSize)
   context.clearRect(0, 0, scratch.width, scratch.height)
   context.fillStyle = '#ffffff'
   context.textAlign = 'center'
   context.textBaseline = 'middle'
   context.font = `900 ${fontSize}px Inter, "Segoe UI", system-ui, sans-serif`
-  context.fillText(WORD, width / 2, height / 2)
+  const maxTextWidth = width * 0.96
+  const measuredWidth = context.measureText(options.word).width
+  if (measuredWidth > maxTextWidth) {
+    fontSize = clamp(fontSize * (maxTextWidth / measuredWidth), options.minFontSize, options.maxFontSize)
+    context.font = `900 ${fontSize}px Inter, "Segoe UI", system-ui, sans-serif`
+  }
+  context.fillText(options.word, width / 2, height / 2)
 
   const step = clamp(Math.floor(width / 150), 4, 7)
   const image = context.getImageData(0, 0, scratch.width, scratch.height)
@@ -57,7 +75,7 @@ function makeParticles(width: number, height: number, previous: Particle[]): Par
     }
   }
 
-  const stride = Math.max(1, Math.ceil(targets.length / MAX_PARTICLES))
+  const stride = Math.max(1, Math.ceil(targets.length / options.maxParticles))
   const centerX = width / 2
   const centerY = height / 2
   return targets
@@ -79,7 +97,15 @@ function makeParticles(width: number, height: number, previous: Particle[]): Par
     })
 }
 
-export function ParticleWordLoader({ label = 'Loading' }: ParticleWordLoaderProps) {
+function ParticleWordCanvas({
+  word = DEFAULT_WORD,
+  ariaLabel = word,
+  className = '',
+  maxParticles = DEFAULT_MAX_PARTICLES,
+  fontScale = 0.14,
+  minFontSize = 48,
+  maxFontSize = 150
+}: ParticleWordMarkProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
@@ -95,6 +121,7 @@ export function ParticleWordLoader({ label = 'Loading' }: ParticleWordLoaderProp
     let particles: Particle[] = []
     const pointer: PointerState = { x: -9999, y: -9999, active: false }
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const options: ParticleWordOptions = { word, maxParticles, fontScale, minFontSize, maxFontSize }
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect()
@@ -104,7 +131,7 @@ export function ParticleWordLoader({ label = 'Loading' }: ParticleWordLoaderProp
       canvas.width = Math.floor(width * dpr)
       canvas.height = Math.floor(height * dpr)
       context.setTransform(dpr, 0, 0, dpr, 0, 0)
-      particles = makeParticles(width, height, particles)
+      particles = makeParticles(width, height, particles, options)
     }
 
     const draw = () => {
@@ -182,12 +209,25 @@ export function ParticleWordLoader({ label = 'Loading' }: ParticleWordLoaderProp
       canvas.removeEventListener('pointermove', handlePointerMove)
       canvas.removeEventListener('pointerleave', handlePointerLeave)
     }
-  }, [])
+  }, [fontScale, maxFontSize, maxParticles, minFontSize, word])
 
+  return (
+    <span className={`relative block overflow-hidden ${className}`} aria-label={ariaLabel}>
+      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" aria-hidden />
+      <span className="sr-only">{ariaLabel}</span>
+    </span>
+  )
+}
+
+export function ParticleWordMark(props: ParticleWordMarkProps) {
+  return <ParticleWordCanvas {...props} />
+}
+
+export function ParticleWordLoader({ label = 'Loading' }: ParticleWordLoaderProps) {
   return (
     <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#06100d_0%,#020706_100%)] text-nexus-text">
       <div className="nexus-noise absolute inset-0 opacity-70" aria-hidden />
-      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" aria-hidden />
+      <ParticleWordCanvas className="absolute inset-0 h-full w-full" ariaLabel="NexusDraft" />
       <div className="pointer-events-none absolute inset-x-0 bottom-[18vh] flex justify-center px-6">
         <p className="m-0 border border-nexus-line/70 bg-nexus-bg/55 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-nexus-muted shadow-[0_0_28px_rgba(29,212,168,0.12)]">
           {label}

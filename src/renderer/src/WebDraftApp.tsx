@@ -61,6 +61,7 @@ import {
 } from './livePublicDataClient'
 import { buildDraftIntelAsync } from './draftIntel/draftIntelClient'
 import { buildDraftItemMatrixPlansAsync, type ItemMatrixRequestOptions } from './itemMatrix/itemMatrixClient'
+import { ParticleWordMark } from './ParticleWordLoader'
 import { suggestPicksAsync } from './recommend/recommendClient'
 
 const ROLES: Exclude<DraftRole, 'unknown'>[] = ['top', 'jungle', 'middle', 'bottom', 'support']
@@ -1913,8 +1914,15 @@ export function WebDraftApp() {
           <MicroLabel className="text-nexus-lime/80">web app // manual draft lab</MicroLabel>
           <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h1 className="font-display text-6xl sm:text-8xl leading-none tracking-[0.06em] text-nexus-text drop-shadow-[0_0_18px_rgba(231,255,245,0.10)]">
-                NEXUS <span className="text-nexus-lime">DRAFT</span>
+              <h1 className="drop-shadow-[0_0_18px_rgba(231,255,245,0.10)]">
+                <ParticleWordMark
+                  ariaLabel="NexusDraft"
+                  className="h-[6.5rem] w-full max-w-[760px] sm:h-[8.5rem] lg:h-[10rem]"
+                  maxParticles={3400}
+                  fontScale={0.2}
+                  minFontSize={48}
+                  maxFontSize={160}
+                />
               </h1>
               <p className="mt-3 max-w-2xl font-mono text-sm text-nexus-muted leading-relaxed">
                 Browser draft assistant with manual board entry.

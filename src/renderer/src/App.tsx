@@ -23,7 +23,13 @@ function IntroShell({ children }: { children: ReactNode }) {
 
   return (
     <ParticleIntroActiveContext.Provider value={!entered}>
-      {children}
+      <div
+        aria-hidden={!entered}
+        className={entered ? undefined : 'pointer-events-none select-none'}
+        style={entered ? undefined : { visibility: 'hidden' }}
+      >
+        {children}
+      </div>
       {!entered ? <ParticleWordIntroOverlay onDone={() => setEntered(true)} /> : null}
     </ParticleIntroActiveContext.Provider>
   )

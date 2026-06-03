@@ -30,6 +30,10 @@ type ParticleWordMarkProps = {
   fontScale?: number
   minFontSize?: number
   maxFontSize?: number
+  interactive?: boolean
+  settledOnMount?: boolean
+  maxDevicePixelRatio?: number
+  softGlow?: boolean
 }
 
 type ParticleWordOptions = Required<Pick<ParticleWordMarkProps, 'word' | 'maxParticles' | 'fontScale' | 'minFontSize' | 'maxFontSize'>>
@@ -93,7 +97,13 @@ function makeWordTargets(width: number, height: number, options: ParticleWordOpt
   return sampled.length > 0 ? sampled : [{ x: centerX, y: centerY }]
 }
 
-function makeParticles(width: number, height: number, previous: Particle[], options: ParticleWordOptions): Particle[] {
+function makeParticles(
+  width: number,
+  height: number,
+  previous: Particle[],
+  options: ParticleWordOptions,
+  settledOnMount = false
+): Particle[] {
   const targets = makeWordTargets(width, height, options)
   const centerX = width / 2
   const centerY = height / 2
@@ -103,12 +113,12 @@ function makeParticles(width: number, height: number, previous: Particle[], opti
       const angle = index * 2.3999632297
       const spread = 110 + (index % 17) * 5
       return {
-        x: old?.x ?? centerX + Math.cos(angle) * spread,
-        y: old?.y ?? centerY + Math.sin(angle) * spread * 0.35,
+        x: settledOnMount ? target.x : old?.x ?? centerX + Math.cos(angle) * spread,
+        y: settledOnMount ? target.y : old?.y ?? centerY + Math.sin(angle) * spread * 0.35,
         tx: target.x,
         ty: target.y,
-        vx: old?.vx ?? 0,
-        vy: old?.vy ?? 0,
+        vx: settledOnMount ? 0 : old?.vx ?? 0,
+        vy: settledOnMount ? 0 : old?.vy ?? 0,
         r: 1.05 + (index % 4) * 0.16,
         glow: 0.55 + (index % 9) * 0.045
       }
@@ -123,7 +133,11 @@ function ParticleWordCanvas({
   maxParticles = DEFAULT_MAX_PARTICLES,
   fontScale = 0.14,
   minFontSize = 48,
-  maxFontSize = 150
+  maxFontSize = 150,
+  interactive = true,
+  settledOnMount = false,
+  maxDevicePixelRatio = 2,
+  softGlow = true
 }: ParticleWordMarkProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const introActive = useContext(ParticleIntroActiveContext)
@@ -152,11 +166,11 @@ function ParticleWordCanvas({
       const rect = canvas.getBoundingClientRect()
       width = Math.max(1, rect.width)
       height = Math.max(1, rect.height)
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      const dpr = Math.min(window.devicePixelRatio || 1, maxDevicePixelRatio)
       canvas.width = Math.floor(width * dpr)
       canvas.height = Math.floor(height * dpr)
       context.setTransform(dpr, 0, 0, dpr, 0, 0)
-      particles = makeParticles(width, height, particles, options)
+      particles = makeParticles(width, height, particles, options, settledOnMount)
     }
 
     const start = () => {
@@ -169,9 +183,9 @@ function ParticleWordCanvas({
     const draw = () => {
       running = false
       context.clearRect(0, 0, width, height)
-      context.globalCompositeOperation = 'lighter'
+      context.globalCompositeOperation = softGlow ? 'lighter' : 'source-over'
       context.shadowColor = 'rgba(29, 212, 168, 0.34)'
-      context.shadowBlur = 5
+      context.shadowBlur = softGlow ? 5 : 0
       let settled = !pointer.active
       for (const particle of particles) {
         if (!reduceMotion) {
@@ -247,17 +261,21 @@ function ParticleWordCanvas({
       }
     })
     observer.observe(canvas)
-    canvas.addEventListener('pointermove', handlePointerMove)
-    canvas.addEventListener('pointerleave', handlePointerLeave)
+    if (interactive) {
+      canvas.addEventListener('pointermove', handlePointerMove)
+      canvas.addEventListener('pointerleave', handlePointerLeave)
+    }
 
     return () => {
       window.cancelAnimationFrame(raf)
       running = false
       observer.disconnect()
-      canvas.removeEventListener('pointermove', handlePointerMove)
-      canvas.removeEventListener('pointerleave', handlePointerLeave)
+      if (interactive) {
+        canvas.removeEventListener('pointermove', handlePointerMove)
+        canvas.removeEventListener('pointerleave', handlePointerLeave)
+      }
     }
-  }, [fontScale, maxFontSize, maxParticles, minFontSize, word, suspendedForIntro])
+  }, [fontScale, interactive, maxDevicePixelRatio, maxFontSize, maxParticles, minFontSize, settledOnMount, softGlow, word, suspendedForIntro])
 
   return suspendedForIntro ? (
     <span className={`relative block overflow-hidden ${className}`} aria-label={ariaLabel} data-particle-word-target={target}>
@@ -286,12 +304,12 @@ function findIntroTargetBounds(): ParticleWordBounds | undefined {
 
 export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
   const rootRef = useRef<HTMLDivElement | null>(null)
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const wordRef = useRef<HTMLDivElement | null>(null)
   const onDoneRef = useRef(onDone)
   const exitingRef = useRef(false)
-  const exitStartedRef = useRef(0)
-  const completedRef = useRef(false)
+  const doneTimerRef = useRef<number | null>(null)
   const [exiting, setExiting] = useState(false)
+  const [wordTransform, setWordTransform] = useState('translate3d(-50%, -50%, 0) scale(1)')
 
   useEffect(() => {
     onDoneRef.current = onDone
@@ -299,170 +317,10 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
 
   useEffect(() => {
     rootRef.current?.focus()
-  }, [])
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    const context = canvas?.getContext('2d')
-    if (!canvas || !context) {
-      return
-    }
-
-    let raf = 0
-    let width = 0
-    let height = 0
-    let particles: Particle[] = []
-    let targetCenter = { x: window.innerWidth / 2, y: window.innerHeight / 2 }
-    let retargeted = false
-    const pointer: PointerState = { x: -9999, y: -9999, active: false }
-    const options: ParticleWordOptions = {
-      word: DEFAULT_WORD,
-      maxParticles: 1500,
-      fontScale: 0.16,
-      minFontSize: 54,
-      maxFontSize: 170
-    }
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect()
-      width = Math.max(1, rect.width)
-      height = Math.max(1, rect.height)
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      canvas.width = Math.floor(width * dpr)
-      canvas.height = Math.floor(height * dpr)
-      context.setTransform(dpr, 0, 0, dpr, 0, 0)
-      if (!exitingRef.current) {
-        particles = makeParticles(width, height, particles, options)
-      }
-    }
-
-    const retargetToHero = () => {
-      const fallback = {
-        left: width * 0.18,
-        top: height * 0.14,
-        width: width * 0.42,
-        height: height * 0.18
-      }
-      const bounds = findIntroTargetBounds() ?? fallback
-      targetCenter = { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }
-      const targets = makeWordTargets(width, height, {
-        ...options,
-        fontScale: 0.2,
-        maxFontSize: 160
-      }, bounds)
-      particles = particles.map((particle, index) => {
-        const target = targets[index % targets.length]
-        const angle = index * 0.21
-        return {
-          ...particle,
-          tx: target.x,
-          ty: target.y,
-          vx: particle.vx + Math.cos(angle) * 2.1,
-          vy: particle.vy + Math.sin(angle) * 2.1
-        }
-      })
-    }
-
-    const finish = () => {
-      if (completedRef.current) {
-        return
-      }
-      completedRef.current = true
-      onDoneRef.current()
-    }
-
-    const draw = (time: number) => {
-      const isExiting = exitingRef.current
-      if (isExiting && !retargeted) {
-        retargeted = true
-        retargetToHero()
-      }
-
-      const progress = isExiting ? clamp((time - exitStartedRef.current) / 950, 0, 1) : 0
-      const particleAlpha = isExiting ? clamp(1 - Math.max(0, progress - 0.82) / 0.18, 0, 1) : 1
-
-      context.clearRect(0, 0, width, height)
-      context.globalCompositeOperation = 'lighter'
-      context.shadowColor = `rgba(29, 212, 168, ${0.34 * particleAlpha})`
-      context.shadowBlur = 5
-      for (const particle of particles) {
-        if (!reduceMotion) {
-          const toTargetX = particle.tx - particle.x
-          const toTargetY = particle.ty - particle.y
-          const spring = isExiting ? 0.092 : 0.036
-          particle.vx += toTargetX * spring
-          particle.vy += toTargetY * spring
-
-          if (isExiting) {
-            const dx = particle.x - targetCenter.x
-            const dy = particle.y - targetCenter.y
-            const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy))
-            const swirl = (1 - progress) * 0.92
-            particle.vx += (-dy / distance) * swirl
-            particle.vy += (dx / distance) * swirl
-          } else if (pointer.active) {
-            const dx = particle.x - pointer.x
-            const dy = particle.y - pointer.y
-            const distanceSquared = dx * dx + dy * dy
-            const radius = 132
-            if (distanceSquared > 0.01 && distanceSquared < radius * radius) {
-              const distance = Math.sqrt(distanceSquared)
-              const push = (1 - distance / radius) * 7.6
-              particle.vx += (dx / distance) * push
-              particle.vy += (dy / distance) * push
-            }
-          }
-
-          particle.vx *= isExiting ? 0.8 : 0.78
-          particle.vy *= isExiting ? 0.8 : 0.78
-          particle.x += particle.vx
-          particle.y += particle.vy
-        } else {
-          particle.x = particle.tx
-          particle.y = particle.ty
-        }
-
-        context.beginPath()
-        const alpha = particleAlpha * (particle.glow > 0.8 ? 0.94 : particle.glow > 0.67 ? 0.84 : 0.78)
-        context.fillStyle =
-          particle.glow > 0.8 ? `rgba(232, 243, 238, ${alpha})` : particle.glow > 0.67 ? `rgba(61, 184, 160, ${alpha})` : `rgba(29, 212, 168, ${alpha})`
-        context.arc(particle.x, particle.y, particle.r, 0, Math.PI * 2)
-        context.fill()
-      }
-      context.globalCompositeOperation = 'source-over'
-      context.shadowBlur = 0
-
-      if (isExiting && (progress >= 1 || reduceMotion)) {
-        finish()
-        return
-      }
-      raf = window.requestAnimationFrame(draw)
-    }
-
-    const handlePointerMove = (event: PointerEvent) => {
-      pointer.x = event.clientX
-      pointer.y = event.clientY
-      pointer.active = true
-    }
-    const handlePointerLeave = () => {
-      pointer.active = false
-    }
-
-    resize()
-    raf = window.requestAnimationFrame(draw)
-    const observer = new ResizeObserver(resize)
-    observer.observe(canvas)
-    window.addEventListener('resize', resize)
-    canvas.addEventListener('pointermove', handlePointerMove)
-    canvas.addEventListener('pointerleave', handlePointerLeave)
-
     return () => {
-      window.cancelAnimationFrame(raf)
-      observer.disconnect()
-      window.removeEventListener('resize', resize)
-      canvas.removeEventListener('pointermove', handlePointerMove)
-      canvas.removeEventListener('pointerleave', handlePointerLeave)
+      if (doneTimerRef.current != null) {
+        window.clearTimeout(doneTimerRef.current)
+      }
     }
   }, [])
 
@@ -470,9 +328,25 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
     if (exitingRef.current) {
       return
     }
+    const current = wordRef.current?.getBoundingClientRect()
+    const target = findIntroTargetBounds()
+    if (current && target) {
+      const currentCenterX = current.left + current.width / 2
+      const currentCenterY = current.top + current.height / 2
+      const targetCenterX = target.left + target.width / 2
+      const targetCenterY = target.top + target.height / 2
+      const scale = clamp(Math.min(target.width / current.width, target.height / current.height), 0.44, 1.08)
+      setWordTransform(
+        `translate3d(-50%, -50%, 0) translate3d(${Math.round(targetCenterX - currentCenterX)}px, ${Math.round(
+          targetCenterY - currentCenterY
+        )}px, 0) scale(${scale.toFixed(3)})`
+      )
+    }
     exitingRef.current = true
-    exitStartedRef.current = performance.now()
     setExiting(true)
+    doneTimerRef.current = window.setTimeout(() => {
+      onDoneRef.current()
+    }, 720)
   }
 
   return (
@@ -496,7 +370,24 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
     >
       <div className={['absolute inset-0 bg-[linear-gradient(180deg,#06100d_0%,#020706_100%)] transition-opacity duration-700', exiting ? 'opacity-0' : 'opacity-100'].join(' ')} aria-hidden />
       <div className={['nexus-noise absolute inset-0 transition-opacity duration-700', exiting ? 'opacity-0' : 'opacity-70'].join(' ')} aria-hidden />
-      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" aria-hidden />
+      <div
+        ref={wordRef}
+        className="absolute left-1/2 top-[42%] h-[clamp(118px,18vw,208px)] w-[min(92vw,920px)] origin-center transform-gpu transition-transform duration-700 ease-[cubic-bezier(0.2,0.9,0.2,1)] will-change-transform"
+        style={{ transform: wordTransform, contain: 'layout paint style' }}
+      >
+        <ParticleWordCanvas
+          ariaLabel="NexusDraft"
+          className="h-full w-full"
+          maxParticles={560}
+          fontScale={0.16}
+          minFontSize={54}
+          maxFontSize={170}
+          interactive={false}
+          settledOnMount
+          maxDevicePixelRatio={1.2}
+          softGlow={false}
+        />
+      </div>
       <div className={['pointer-events-none absolute inset-x-0 bottom-[18vh] flex justify-center px-6 transition-opacity duration-300', exiting ? 'opacity-0' : 'opacity-100'].join(' ')}>
         <p className="m-0 border border-nexus-line/70 bg-nexus-bg/55 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-nexus-muted shadow-[0_0_28px_rgba(29,212,168,0.12)]">
           Click to enter
@@ -511,7 +402,18 @@ export function ParticleWordLoader({ label = 'Loading' }: ParticleWordLoaderProp
   return (
     <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#06100d_0%,#020706_100%)] text-nexus-text">
       <div className="nexus-noise absolute inset-0 opacity-70" aria-hidden />
-      <ParticleWordCanvas className="absolute inset-0 h-full w-full" ariaLabel="NexusDraft" />
+      <ParticleWordCanvas
+        className="absolute left-1/2 top-[42%] h-[clamp(118px,18vw,208px)] w-[min(92vw,920px)] -translate-x-1/2 -translate-y-1/2"
+        ariaLabel="NexusDraft"
+        maxParticles={700}
+        fontScale={0.16}
+        minFontSize={54}
+        maxFontSize={170}
+        interactive={false}
+        settledOnMount
+        maxDevicePixelRatio={1.2}
+        softGlow={false}
+      />
       <div className="pointer-events-none absolute inset-x-0 bottom-[18vh] flex justify-center px-6">
         <p className="m-0 border border-nexus-line/70 bg-nexus-bg/55 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-nexus-muted shadow-[0_0_28px_rgba(29,212,168,0.12)]">
           {label}

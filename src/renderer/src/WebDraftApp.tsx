@@ -1917,6 +1917,7 @@ export function WebDraftApp() {
               <h1 className="drop-shadow-[0_0_18px_rgba(231,255,245,0.10)]">
                 <ParticleWordMark
                   ariaLabel="NexusDraft"
+                  target="nexusdraft"
                   className="h-[6.5rem] w-full max-w-[760px] sm:h-[8.5rem] lg:h-[10rem]"
                   maxParticles={3400}
                   fontScale={0.2}

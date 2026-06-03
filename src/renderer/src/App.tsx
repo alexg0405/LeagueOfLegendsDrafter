@@ -1,5 +1,6 @@
-import { lazy, Suspense } from 'react'
-import { ParticleWordLoader } from './ParticleWordLoader'
+import { lazy, Suspense, useState, type ReactNode } from 'react'
+import { ParticleWordIntroOverlay, ParticleWordLoader } from './ParticleWordLoader'
+import { isOverlayRoute } from './route'
 
 const IS_WEB_BUILD = import.meta.env.VITE_NEXUS_WEB === '1'
 const WebDraftApp = IS_WEB_BUILD
@@ -13,12 +14,33 @@ function AppLoading() {
   return <ParticleWordLoader />
 }
 
+function shouldShowIntroOverlay(): boolean {
+  return typeof window !== 'undefined' && !isOverlayRoute()
+}
+
+function IntroShell({ children }: { children: ReactNode }) {
+  const [entered, setEntered] = useState(() => !shouldShowIntroOverlay())
+
+  return (
+    <>
+      {children}
+      {!entered ? <ParticleWordIntroOverlay onDone={() => setEntered(true)} /> : null}
+    </>
+  )
+}
+
 export function App() {
   const LoadedApp = IS_WEB_BUILD ? WebDraftApp : DesktopApp
 
   return (
     <Suspense fallback={<AppLoading />}>
-      {LoadedApp ? <LoadedApp /> : <AppLoading />}
+      {LoadedApp ? (
+        <IntroShell>
+          <LoadedApp />
+        </IntroShell>
+      ) : (
+        <AppLoading />
+      )}
     </Suspense>
   )
 }

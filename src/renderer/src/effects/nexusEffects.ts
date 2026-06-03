@@ -22,7 +22,7 @@ export type NexusEffectPayload = {
   championId?: number | null
 }
 
-export type NexusQualitySettings = {
+type NexusQualitySettings = {
   capacity: number
   ambientPerSecond: number
   maxDpr: number
@@ -39,7 +39,7 @@ const KNOWN_EVENTS: ReadonlySet<string> = new Set<NexusEffectEvent>([
   'matrix:scroll-end'
 ])
 
-export const NEXUS_QUALITY_SETTINGS: Record<EffectQualityTier, NexusQualitySettings> = {
+const NEXUS_QUALITY_SETTINGS: Record<EffectQualityTier, NexusQualitySettings> = {
   ultra: { capacity: 1800, ambientPerSecond: 34, maxDpr: 1.75, updateEvery: 1 },
   high: { capacity: 1200, ambientPerSecond: 22, maxDpr: 1.5, updateEvery: 1 },
   medium: { capacity: 720, ambientPerSecond: 13, maxDpr: 1.25, updateEvery: 1 },
@@ -147,7 +147,7 @@ export class NexusQualityController {
   }
 }
 
-export type ParticleEmitOptions = {
+type ParticleEmitOptions = {
   x: number
   y: number
   count: number

@@ -144,15 +144,3 @@ export function cardStaggerContainerVars(reduce: boolean): Variants {
   }
 }
 
-export const cardStaggerItem = (reduce: boolean): Variants => ({
-  initial: { opacity: 0, y: reduce ? 0 : 12, x: reduce ? 0 : -6, skewX: reduce ? 0 : -0.3 },
-  animate: {
-    opacity: 1,
-    y: 0,
-    x: 0,
-    skewX: 0,
-    transition: { duration: DUR.section, ease: EASING.out }
-  }
-})
-
-export { STAGGER }

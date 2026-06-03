@@ -139,7 +139,7 @@ function CollapsibleOpsSection({ id, kicker, title, children, open, onToggle, ac
   )
 }
 
-export type NexusOperationsViewProps = {
+type NexusOperationsViewProps = {
   lcuStatusLine: string
   lcuError: string | null
   draftSource: DraftSource

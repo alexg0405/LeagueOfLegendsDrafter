@@ -12,17 +12,6 @@ export function NexusPlus({ className = '' }: { className?: string }) {
   )
 }
 
-export function NexusCross({ className = '' }: { className?: string }) {
-  return (
-    <span
-      className={`inline-block font-mono text-nexus-line select-none ${className}`}
-      aria-hidden
-    >
-      ×
-    </span>
-  )
-}
-
 export function MicroLabel({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
     <span

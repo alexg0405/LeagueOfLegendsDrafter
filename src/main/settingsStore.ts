@@ -19,9 +19,3 @@ export function getCaptureSourceId(): string | null {
 export function setCaptureSourceId(id: unknown) {
   store.set('captureSourceId', typeof id === 'string' && id.trim() ? id : null)
 }
-
-/** Gemini key is never persisted; optional env for dev/CI. */
-export function getGeminiKeyFromEnv(): string | null {
-  const k = process.env['GEMINI_API_KEY']?.trim()
-  return k || null
-}

@@ -12,7 +12,7 @@ export function lcuUiStatus(lcu: LcuChampSelectResult | null): NonNullable<Draft
   return 'waiting'
 }
 
-export function isBenignLcuWaitingError(error: string | null): boolean {
+function isBenignLcuWaitingError(error: string | null): boolean {
   if (!error) {
     return true
   }

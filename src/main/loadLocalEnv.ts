@@ -8,7 +8,6 @@ import { app } from 'electron'
  * - Strips UTF-8 BOM (common when saving in Notepad) — otherwise keys never match.
  * - Supports `export KEY=...` used by some tools.
  * - **Non-empty** values win: empty `KEY=` lines do not clobber, so a later file can fill a key.
- * - `GEMINI_API_KEY` last non-empty in file order wins.
  */
 function parseAndApplyEnvFile(content: string) {
   const raw = content.replace(/^\uFEFF/, '')
@@ -88,14 +87,5 @@ export function loadLocalEnvWhenReady() {
   }
   for (const p of more) {
     tryRead(p)
-  }
-  if (!app.isPackaged) {
-    const ok = Boolean(process.env['GEMINI_API_KEY']?.trim())
-    if (!ok) {
-      // eslint-disable-next-line no-console
-      console.log(
-        '[drafter] GEMINI_API_KEY not set after .env load. Use project root .env with: GEMINI_API_KEY=yourkey (no UTF-8 BOM; save as UTF-8 in VS Code / Cursor).'
-      )
-    }
   }
 }

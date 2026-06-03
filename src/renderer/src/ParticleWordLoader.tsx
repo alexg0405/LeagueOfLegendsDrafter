@@ -34,6 +34,7 @@ type ParticleWordMarkProps = {
   settledOnMount?: boolean
   maxDevicePixelRatio?: number
   softGlow?: boolean
+  particleRadiusScale?: number
 }
 
 type ParticleWordOptions = Required<Pick<ParticleWordMarkProps, 'word' | 'maxParticles' | 'fontScale' | 'minFontSize' | 'maxFontSize'>>
@@ -78,7 +79,7 @@ function makeWordTargets(width: number, height: number, options: ParticleWordOpt
   }
   context.fillText(options.word, centerX, centerY)
 
-  const step = clamp(Math.floor(wordWidth / 150), 4, 7)
+  const step = clamp(Math.floor(wordWidth / 190), 3, 6)
   const image = context.getImageData(0, 0, scratch.width, scratch.height)
   const targets: ParticleTarget[] = []
   const scanLeft = bounds ? clamp(Math.floor(bounds.left), 0, scratch.width - 1) : 0
@@ -104,7 +105,8 @@ function makeParticles(
   height: number,
   previous: Particle[],
   options: ParticleWordOptions,
-  settledOnMount = false
+  settledOnMount = false,
+  particleRadiusScale = 1
 ): Particle[] {
   const targets = makeWordTargets(width, height, options)
   const centerX = width / 2
@@ -121,7 +123,7 @@ function makeParticles(
         ty: target.y,
         vx: settledOnMount ? 0 : old?.vx ?? 0,
         vy: settledOnMount ? 0 : old?.vy ?? 0,
-        r: 1.05 + (index % 4) * 0.16,
+        r: (1.05 + (index % 4) * 0.16) * particleRadiusScale,
         glow: 0.55 + (index % 9) * 0.045
       }
     })
@@ -139,7 +141,8 @@ function ParticleWordCanvas({
   interactive = true,
   settledOnMount = false,
   maxDevicePixelRatio = 2,
-  softGlow = true
+  softGlow = true,
+  particleRadiusScale = 1
 }: ParticleWordMarkProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const introActive = useContext(ParticleIntroActiveContext)
@@ -172,7 +175,7 @@ function ParticleWordCanvas({
       canvas.width = Math.floor(width * dpr)
       canvas.height = Math.floor(height * dpr)
       context.setTransform(dpr, 0, 0, dpr, 0, 0)
-      particles = makeParticles(width, height, particles, options, settledOnMount)
+      particles = makeParticles(width, height, particles, options, settledOnMount, particleRadiusScale)
     }
 
     const start = () => {
@@ -277,7 +280,19 @@ function ParticleWordCanvas({
         canvas.removeEventListener('pointerleave', handlePointerLeave)
       }
     }
-  }, [fontScale, interactive, maxDevicePixelRatio, maxFontSize, maxParticles, minFontSize, settledOnMount, softGlow, word, suspendedForIntro])
+  }, [
+    fontScale,
+    interactive,
+    maxDevicePixelRatio,
+    maxFontSize,
+    maxParticles,
+    minFontSize,
+    particleRadiusScale,
+    settledOnMount,
+    softGlow,
+    word,
+    suspendedForIntro
+  ])
 
   return suspendedForIntro ? (
     <span className={`relative block overflow-hidden ${className}`} aria-label={ariaLabel} data-particle-word-target={target}>
@@ -389,14 +404,15 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
         <ParticleWordCanvas
           ariaLabel="NexusDraft"
           className="h-full w-full"
-          maxParticles={560}
-          fontScale={0.16}
-          minFontSize={54}
-          maxFontSize={170}
+          maxParticles={1850}
+          fontScale={0.19}
+          minFontSize={52}
+          maxFontSize={188}
           interactive={false}
           settledOnMount
-          maxDevicePixelRatio={1.2}
-          softGlow={false}
+          maxDevicePixelRatio={1.5}
+          softGlow
+          particleRadiusScale={1.18}
         />
       </div>
       <div className={['pointer-events-none absolute inset-x-0 bottom-[18vh] flex justify-center px-6 transition-opacity duration-300', exiting ? 'opacity-0' : 'opacity-100'].join(' ')}>
@@ -416,14 +432,15 @@ export function ParticleWordLoader({ label = 'Loading' }: ParticleWordLoaderProp
       <ParticleWordCanvas
         className="absolute left-1/2 top-[42%] h-[clamp(118px,18vw,208px)] w-[min(92vw,920px)] -translate-x-1/2 -translate-y-1/2"
         ariaLabel="NexusDraft"
-        maxParticles={700}
-        fontScale={0.16}
-        minFontSize={54}
-        maxFontSize={170}
+        maxParticles={1850}
+        fontScale={0.19}
+        minFontSize={52}
+        maxFontSize={188}
         interactive={false}
         settledOnMount
-        maxDevicePixelRatio={1.2}
-        softGlow={false}
+        maxDevicePixelRatio={1.5}
+        softGlow
+        particleRadiusScale={1.18}
       />
       <div className="pointer-events-none absolute inset-x-0 bottom-[18vh] flex justify-center px-6">
         <p className="m-0 border border-nexus-line/70 bg-nexus-bg/55 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-nexus-muted shadow-[0_0_28px_rgba(29,212,168,0.12)]">

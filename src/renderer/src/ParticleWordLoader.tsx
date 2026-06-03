@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 
 type Particle = {
   x: number
@@ -43,6 +43,8 @@ type ParticleWordBounds = { left: number; top: number; width: number; height: nu
 const DEFAULT_WORD = 'NexusDraft'
 const DEFAULT_MAX_PARTICLES = 1600
 const INTRO_TARGET = 'nexusdraft'
+const INTRO_HOLD_MS = 5000
+const INTRO_EXIT_MS = 520
 
 export const ParticleIntroActiveContext = createContext(false)
 
@@ -307,6 +309,7 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
   const wordRef = useRef<HTMLDivElement | null>(null)
   const onDoneRef = useRef(onDone)
   const exitingRef = useRef(false)
+  const holdTimerRef = useRef<number | null>(null)
   const doneTimerRef = useRef<number | null>(null)
   const [exiting, setExiting] = useState(false)
   const [wordTransform, setWordTransform] = useState('translate3d(-50%, -50%, 0) scale(1)')
@@ -318,15 +321,22 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
   useEffect(() => {
     rootRef.current?.focus()
     return () => {
+      if (holdTimerRef.current != null) {
+        window.clearTimeout(holdTimerRef.current)
+      }
       if (doneTimerRef.current != null) {
         window.clearTimeout(doneTimerRef.current)
       }
     }
   }, [])
 
-  const enter = () => {
+  const enter = useCallback(() => {
     if (exitingRef.current) {
       return
+    }
+    if (holdTimerRef.current != null) {
+      window.clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = null
     }
     const current = wordRef.current?.getBoundingClientRect()
     const target = findIntroTargetBounds()
@@ -346,33 +356,34 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
     setExiting(true)
     doneTimerRef.current = window.setTimeout(() => {
       onDoneRef.current()
-    }, 720)
-  }
+    }, INTRO_EXIT_MS)
+  }, [])
+
+  useEffect(() => {
+    holdTimerRef.current = window.setTimeout(enter, INTRO_HOLD_MS)
+    return () => {
+      if (holdTimerRef.current != null) {
+        window.clearTimeout(holdTimerRef.current)
+        holdTimerRef.current = null
+      }
+    }
+  }, [enter])
 
   return (
     <div
       ref={rootRef}
       className={[
         'fixed inset-0 z-[300] overflow-hidden bg-transparent text-nexus-text outline-none',
-        exiting ? 'pointer-events-none' : 'cursor-pointer'
+        exiting ? 'pointer-events-none' : ''
       ].join(' ')}
-      role="button"
-      tabIndex={0}
-      aria-label="Enter NexusDraft"
-      onPointerDown={enter}
-      onClick={enter}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          enter()
-        }
-      }}
+      role="status"
+      aria-label="Loading NexusDraft"
     >
-      <div className={['absolute inset-0 bg-[linear-gradient(180deg,#06100d_0%,#020706_100%)] transition-opacity duration-700', exiting ? 'opacity-0' : 'opacity-100'].join(' ')} aria-hidden />
-      <div className={['nexus-noise absolute inset-0 transition-opacity duration-700', exiting ? 'opacity-0' : 'opacity-70'].join(' ')} aria-hidden />
+      <div className={['absolute inset-0 bg-[linear-gradient(180deg,#06100d_0%,#020706_100%)] transition-opacity duration-500', exiting ? 'opacity-0' : 'opacity-100'].join(' ')} aria-hidden />
+      <div className={['nexus-noise absolute inset-0 transition-opacity duration-500', exiting ? 'opacity-0' : 'opacity-70'].join(' ')} aria-hidden />
       <div
         ref={wordRef}
-        className="absolute left-1/2 top-[42%] h-[clamp(118px,18vw,208px)] w-[min(92vw,920px)] origin-center transform-gpu transition-transform duration-700 ease-[cubic-bezier(0.2,0.9,0.2,1)] will-change-transform"
+        className="absolute left-1/2 top-[42%] h-[clamp(118px,18vw,208px)] w-[min(92vw,920px)] origin-center transform-gpu transition-transform duration-500 ease-[cubic-bezier(0.2,0.9,0.2,1)] will-change-transform"
         style={{ transform: wordTransform, contain: 'layout paint style' }}
       >
         <ParticleWordCanvas
@@ -390,10 +401,10 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
       </div>
       <div className={['pointer-events-none absolute inset-x-0 bottom-[18vh] flex justify-center px-6 transition-opacity duration-300', exiting ? 'opacity-0' : 'opacity-100'].join(' ')}>
         <p className="m-0 border border-nexus-line/70 bg-nexus-bg/55 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-nexus-muted shadow-[0_0_28px_rgba(29,212,168,0.12)]">
-          Click to enter
+          Loading NexusDraft
         </p>
       </div>
-      <span className="sr-only">Click to enter NexusDraft</span>
+      <span className="sr-only">Loading NexusDraft</span>
     </div>
   )
 }

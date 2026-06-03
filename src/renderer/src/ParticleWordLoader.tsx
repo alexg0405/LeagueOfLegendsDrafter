@@ -35,6 +35,8 @@ type ParticleWordMarkProps = {
   maxDevicePixelRatio?: number
   softGlow?: boolean
   particleRadiusScale?: number
+  settleSpring?: number
+  settleDamping?: number
 }
 
 type ParticleWordOptions = Required<Pick<ParticleWordMarkProps, 'word' | 'maxParticles' | 'fontScale' | 'minFontSize' | 'maxFontSize'>>
@@ -44,6 +46,12 @@ type ParticleWordBounds = { left: number; top: number; width: number; height: nu
 const DEFAULT_WORD = 'NexusDraft'
 const DEFAULT_MAX_PARTICLES = 1600
 const INTRO_TARGET = 'nexusdraft'
+const INTRO_EXIT_MS = 1050
+const INTRO_SETTLE_SPRING = 0.034
+const INTRO_EXIT_SPRING = 0.078
+const INTRO_SETTLE_DAMPING = 0.78
+const INTRO_EXIT_DAMPING = 0.81
+const INTRO_SWIRL_FORCE = 1.12
 
 export const ParticleIntroActiveContext = createContext(false)
 
@@ -140,7 +148,9 @@ function ParticleWordCanvas({
   settledOnMount = false,
   maxDevicePixelRatio = 2,
   softGlow = true,
-  particleRadiusScale = 1
+  particleRadiusScale = 1,
+  settleSpring = 0.04,
+  settleDamping = 0.78
 }: ParticleWordMarkProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const introActive = useContext(ParticleIntroActiveContext)
@@ -194,8 +204,8 @@ function ParticleWordCanvas({
         if (!reduceMotion) {
           const toTargetX = particle.tx - particle.x
           const toTargetY = particle.ty - particle.y
-          particle.vx += toTargetX * 0.04
-          particle.vy += toTargetY * 0.04
+          particle.vx += toTargetX * settleSpring
+          particle.vy += toTargetY * settleSpring
 
           if (pointer.active) {
             const dx = particle.x - pointer.x
@@ -210,8 +220,8 @@ function ParticleWordCanvas({
             }
           }
 
-          particle.vx *= 0.78
-          particle.vy *= 0.78
+          particle.vx *= settleDamping
+          particle.vy *= settleDamping
           particle.x += particle.vx
           particle.y += particle.vy
           if (
@@ -286,6 +296,8 @@ function ParticleWordCanvas({
     maxParticles,
     minFontSize,
     particleRadiusScale,
+    settleDamping,
+    settleSpring,
     settledOnMount,
     softGlow,
     word,
@@ -428,7 +440,7 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
         retargetToHero()
       }
 
-      const progress = isExiting ? clamp((time - exitStartedRef.current) / 1050, 0, 1) : 0
+      const progress = isExiting ? clamp((time - exitStartedRef.current) / INTRO_EXIT_MS, 0, 1) : 0
       const particleAlpha = isExiting ? clamp(1 - Math.max(0, progress - 0.8) / 0.2, 0, 1) : 1
 
       context.clearRect(0, 0, width, height)
@@ -440,7 +452,7 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
         if (!reduceMotion) {
           const toTargetX = particle.tx - particle.x
           const toTargetY = particle.ty - particle.y
-          const spring = isExiting ? 0.078 : 0.034
+          const spring = isExiting ? INTRO_EXIT_SPRING : INTRO_SETTLE_SPRING
           particle.vx += toTargetX * spring
           particle.vy += toTargetY * spring
 
@@ -448,7 +460,7 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
             const dx = particle.x - targetCenter.x
             const dy = particle.y - targetCenter.y
             const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy))
-            const swirl = (1 - progress) * 1.12
+            const swirl = (1 - progress) * INTRO_SWIRL_FORCE
             particle.vx += (-dy / distance) * swirl
             particle.vy += (dx / distance) * swirl
           } else if (pointer.active) {
@@ -464,8 +476,8 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
             }
           }
 
-          particle.vx *= isExiting ? 0.81 : 0.78
-          particle.vy *= isExiting ? 0.81 : 0.78
+          particle.vx *= isExiting ? INTRO_EXIT_DAMPING : INTRO_SETTLE_DAMPING
+          particle.vy *= isExiting ? INTRO_EXIT_DAMPING : INTRO_SETTLE_DAMPING
           particle.x += particle.vx
           particle.y += particle.vy
 
@@ -585,7 +597,12 @@ export function ParticleWordLoader({ label = 'Loading' }: ParticleWordLoaderProp
   return (
     <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#06100d_0%,#020706_100%)] text-nexus-text">
       <div className="nexus-noise absolute inset-0 opacity-70" aria-hidden />
-      <ParticleWordCanvas className="absolute inset-0 h-full w-full" ariaLabel="NexusDraft" />
+      <ParticleWordCanvas
+        className="absolute inset-0 h-full w-full"
+        ariaLabel="NexusDraft"
+        settleSpring={0.2}
+        settleDamping={0.62}
+      />
       <div className="pointer-events-none absolute inset-x-0 bottom-[18vh] flex justify-center px-6">
         <p className="m-0 border border-nexus-line/70 bg-nexus-bg/55 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-nexus-muted shadow-[0_0_28px_rgba(29,212,168,0.12)]">
           {label}

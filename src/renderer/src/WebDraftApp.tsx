@@ -1974,7 +1974,6 @@ export function WebDraftApp() {
                   fontScale={0.2}
                   minFontSize={48}
                   maxFontSize={160}
-                  interactive={false}
                 />
               </h1>
               <p className="mt-3 max-w-2xl font-mono text-sm text-nexus-muted leading-relaxed">

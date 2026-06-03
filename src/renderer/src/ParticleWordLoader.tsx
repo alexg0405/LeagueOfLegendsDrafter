@@ -570,17 +570,6 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
       }
     }
 
-    const handlePointerMove = (event: PointerEvent) => {
-      pointer.x = event.clientX
-      pointer.y = event.clientY
-      pointer.active = true
-      start()
-    }
-    const handlePointerLeave = () => {
-      pointer.active = false
-      start()
-    }
-
     resize()
     start()
     const observer = new ResizeObserver(() => {
@@ -593,8 +582,6 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
     })
     observer.observe(canvas)
     window.addEventListener('resize', resize)
-    canvas.addEventListener('pointermove', handlePointerMove)
-    canvas.addEventListener('pointerleave', handlePointerLeave)
 
     return () => {
       window.cancelAnimationFrame(raf)
@@ -602,8 +589,6 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
       startAnimationRef.current = null
       observer.disconnect()
       window.removeEventListener('resize', resize)
-      canvas.removeEventListener('pointermove', handlePointerMove)
-      canvas.removeEventListener('pointerleave', handlePointerLeave)
     }
   }, [])
 

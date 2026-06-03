@@ -101,7 +101,6 @@ export function NexusHomeDashboard({
                 fontScale={0.22}
                 minFontSize={54}
                 maxFontSize={154}
-                interactive={false}
               />
             </motion.h1>
             <motion.div

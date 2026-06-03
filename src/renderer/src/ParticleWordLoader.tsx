@@ -52,6 +52,8 @@ const INTRO_EXIT_SPRING = 0.078
 const INTRO_SETTLE_DAMPING = 0.78
 const INTRO_EXIT_DAMPING = 0.81
 const INTRO_SWIRL_FORCE = 1.12
+const WORD_TARGET_CACHE_LIMIT = 48
+const wordTargetCache = new Map<string, ParticleTarget[]>()
 
 export const ParticleIntroActiveContext = createContext(false)
 
@@ -59,7 +61,43 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
 
+function targetCacheNumber(value: number): number {
+  return Math.max(1, Math.round(value / 4) * 4)
+}
+
+function wordTargetCacheKey(width: number, height: number, options: ParticleWordOptions, bounds?: ParticleWordBounds): string {
+  const b = bounds
+    ? `${targetCacheNumber(bounds.left)}:${targetCacheNumber(bounds.top)}:${targetCacheNumber(bounds.width)}:${targetCacheNumber(bounds.height)}`
+    : 'full'
+  return [
+    options.word,
+    targetCacheNumber(width),
+    targetCacheNumber(height),
+    options.maxParticles,
+    options.fontScale,
+    options.minFontSize,
+    options.maxFontSize,
+    b
+  ].join('|')
+}
+
+function rememberWordTargets(key: string, targets: ParticleTarget[]): ParticleTarget[] {
+  if (wordTargetCache.size >= WORD_TARGET_CACHE_LIMIT) {
+    const firstKey = wordTargetCache.keys().next().value as string | undefined
+    if (firstKey) {
+      wordTargetCache.delete(firstKey)
+    }
+  }
+  wordTargetCache.set(key, targets)
+  return targets
+}
+
 function makeWordTargets(width: number, height: number, options: ParticleWordOptions, bounds?: ParticleWordBounds): ParticleTarget[] {
+  const cacheKey = wordTargetCacheKey(width, height, options, bounds)
+  const cached = wordTargetCache.get(cacheKey)
+  if (cached) {
+    return cached
+  }
   const scratch = document.createElement('canvas')
   scratch.width = Math.max(1, Math.floor(width))
   scratch.height = Math.max(1, Math.floor(height))
@@ -103,7 +141,7 @@ function makeWordTargets(width: number, height: number, options: ParticleWordOpt
 
   const stride = Math.max(1, Math.ceil(targets.length / options.maxParticles))
   const sampled = targets.filter((_, index) => index % stride === 0)
-  return sampled.length > 0 ? sampled : [{ x: centerX, y: centerY }]
+  return rememberWordTargets(cacheKey, sampled.length > 0 ? sampled : [{ x: centerX, y: centerY }])
 }
 
 function makeParticles(
@@ -171,6 +209,7 @@ function ParticleWordCanvas({
     let height = 0
     let particles: Particle[] = []
     let running = false
+    let visible = true
     const pointer: PointerState = { x: -9999, y: -9999, active: false }
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const options: ParticleWordOptions = { word, maxParticles, fontScale, minFontSize, maxFontSize }
@@ -187,7 +226,7 @@ function ParticleWordCanvas({
     }
 
     const start = () => {
-      if (!running) {
+      if (visible && !running) {
         running = true
         raf = window.requestAnimationFrame(draw)
       }
@@ -195,6 +234,9 @@ function ParticleWordCanvas({
 
     const draw = () => {
       running = false
+      if (!visible) {
+        return
+      }
       context.clearRect(0, 0, width, height)
       context.globalCompositeOperation = softGlow ? 'lighter' : 'source-over'
       context.shadowColor = 'rgba(29, 212, 168, 0.34)'
@@ -274,6 +316,19 @@ function ParticleWordCanvas({
       }
     })
     observer.observe(canvas)
+    const visibilityObserver =
+      typeof IntersectionObserver === 'undefined'
+        ? null
+        : new IntersectionObserver((entries) => {
+            visible = entries[0]?.isIntersecting ?? true
+            if (visible) {
+              start()
+            } else {
+              window.cancelAnimationFrame(raf)
+              running = false
+            }
+          })
+    visibilityObserver?.observe(canvas)
     if (interactive) {
       canvas.addEventListener('pointermove', handlePointerMove)
       canvas.addEventListener('pointerleave', handlePointerLeave)
@@ -283,6 +338,7 @@ function ParticleWordCanvas({
       window.cancelAnimationFrame(raf)
       running = false
       observer.disconnect()
+      visibilityObserver?.disconnect()
       if (interactive) {
         canvas.removeEventListener('pointermove', handlePointerMove)
         canvas.removeEventListener('pointerleave', handlePointerLeave)
@@ -600,6 +656,7 @@ export function ParticleWordLoader({ label = 'Loading' }: ParticleWordLoaderProp
       <ParticleWordCanvas
         className="absolute inset-0 h-full w-full"
         ariaLabel="NexusDraft"
+        interactive={false}
         settleSpring={0.2}
         settleDamping={0.62}
       />

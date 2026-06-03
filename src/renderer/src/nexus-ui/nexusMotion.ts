@@ -17,6 +17,13 @@ export const DUR = {
   section: 0.38
 }
 
+export const MOTION_PRESETS = {
+  fast: DUR.fast,
+  panel: DUR.panel,
+  cinematic: 0.52,
+  reduced: 0.01
+}
+
 const STAGGER = { nav: 0.055, card: 0.065, row: 0.045, meta: 0.04 }
 
 export const NAV_ORDER: Record<NexusNavId, number> = { home: 0, operations: 1, settings: 2 }

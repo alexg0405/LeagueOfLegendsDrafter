@@ -516,6 +516,8 @@ function ChampionIcon({
       alt=""
       width={32}
       height={32}
+      loading="lazy"
+      decoding="async"
     />
   )
 }
@@ -565,9 +567,42 @@ function SuggestionContextPortrait({
       className={['inline-flex h-7 w-7 items-center justify-center border p-0.5', toneClass].join(' ')}
       title={title}
     >
-      {src ? <img className="h-full w-full object-cover" src={src} alt="" width={28} height={28} /> : <span className="h-full w-full bg-nexus-bg" aria-hidden />}
+      {src ? <img className="h-full w-full object-cover" src={src} alt="" width={28} height={28} loading="lazy" decoding="async" /> : <span className="h-full w-full bg-nexus-bg" aria-hidden />}
     </span>
   )
+}
+
+type SuggestionBadge = { label: string; tone: 'lime' | 'red' | 'yellow' | 'muted' }
+
+function suggestionBadges(
+  suggestion: PickSuggestion,
+  matchupPlan?: DraftIntel['matchupPlans'][number] | null
+): SuggestionBadge[] {
+  const badges: SuggestionBadge[] = []
+  if (suggestion.winRateDelta != null && Math.abs(suggestion.winRateDelta) >= 0.01) {
+    badges.push({
+      label: `${suggestion.winRateDelta >= 0 ? '+' : ''}${(suggestion.winRateDelta * 100).toFixed(1)} delta`,
+      tone: suggestion.winRateDelta >= 0 ? 'lime' : 'red'
+    })
+  }
+  if (suggestion.reasons.includes('team_synergy')) badges.push({ label: 'synergy', tone: 'lime' })
+  if (suggestion.reasons.includes('lane_counter')) badges.push({ label: 'lane counter', tone: 'yellow' })
+  if (suggestion.reasons.includes('blind_safe')) badges.push({ label: 'blind safe', tone: 'muted' })
+  if (matchupPlan?.itemPlan?.matrixRows?.length) badges.push({ label: 'items ready', tone: 'lime' })
+  return badges.slice(0, 4)
+}
+
+function suggestionBadgeClass(tone: SuggestionBadge['tone']): string {
+  switch (tone) {
+    case 'lime':
+      return 'border-nexus-lime/45 bg-nexus-lime/10 text-nexus-lime/90'
+    case 'red':
+      return 'border-nexus-red/45 bg-nexus-red/10 text-nexus-red/85'
+    case 'yellow':
+      return 'border-nexus-yellow/45 bg-nexus-yellow/10 text-nexus-yellow/90'
+    default:
+      return 'border-nexus-line/70 bg-nexus-bg/45 text-nexus-muted'
+  }
 }
 
 function SuggestionRow({
@@ -612,21 +647,37 @@ function SuggestionRow({
     suggestion.runes?.note,
     suggestion.buildProfile?.buildHint ?? 'Use this pick when it fits your lane matchup and team damage profile.'
   )
+  const badges = useMemo(() => suggestionBadges(suggestion, matchupPlan), [matchupPlan, suggestion])
   return (
-    <li className="rounded-lg border border-white/[0.07] bg-gradient-to-br from-nexus-surface-2/90 to-nexus-bg/85 px-3 py-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.2)] transition-colors hover:border-nexus-lime/25">
+    <li className="relative overflow-hidden rounded-lg border border-white/[0.07] border-l-2 border-l-nexus-lime/45 bg-gradient-to-br from-nexus-surface-2/95 to-nexus-bg/90 px-3 py-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.2)] transition-colors hover:border-nexus-lime/30">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-nexus-lime/55 via-transparent to-transparent" aria-hidden />
       <div className="flex gap-2.5">
         <ChampionIcon championId={suggestion.championId} champions={champions} ddragonVersion={ddragonVersion} />
         <div className="min-w-0 flex-1">
-          <div className="font-mono text-sm font-bold leading-tight">
-            <span className="text-nexus-lime/95">{suggestion.championName}</span>
+          <div className="flex min-w-0 flex-wrap items-start justify-between gap-2 font-mono text-sm font-bold leading-tight">
+            <div className="min-w-0">
+              <span className="text-nexus-lime/95">{suggestion.championName}</span>
             <span className="text-nexus-muted"> · </span>
-            <span className="text-nexus-text/90 tabular-nums">{suggestion.score}</span>
+              <span className="text-nexus-text/90 tabular-nums">{suggestion.score}</span>
+            </div>
             {suggestion.isLockedPick && (
-              <span className="ml-2 rounded-sm border border-nexus-lime/60 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">
+              <span className="shrink-0 rounded-sm border border-nexus-lime/60 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">
                 Picked
               </span>
             )}
           </div>
+          {badges.length > 0 ? (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {badges.map((badge) => (
+                <span
+                  key={`${suggestion.championId}-${badge.label}`}
+                  className={`inline-flex border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] ${suggestionBadgeClass(badge.tone)}`}
+                >
+                  {badge.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
           {suggestion.buildProfile && (
             <p className="m-0 mt-1.5 text-[11px] font-mono uppercase tracking-[0.16em] text-nexus-muted/75">
               {suggestion.buildProfile.archetype}
@@ -844,7 +895,7 @@ function WebSuggestionsPage({ onNavigateDraft }: { onNavigateDraft: () => void }
         Skip to main
       </a>
       <main id="nexus-web-main" className="relative mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:px-6 lg:px-8">
-        <section className="relative mb-5 overflow-hidden border border-nexus-line bg-nexus-surface-2/90 p-5 shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
+        <section className="nexus-command-deck relative mb-5 overflow-hidden border border-nexus-line bg-nexus-surface-2/90 p-5 shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
           <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(35,213,176,0.12),transparent_35%,rgba(83,166,255,0.08))]" aria-hidden />
           <div className="relative">
             <MicroLabel className="text-nexus-lime/80">suggestions // feedback</MicroLabel>
@@ -1908,7 +1959,7 @@ export function WebDraftApp() {
         Skip to main
       </a>
       <main id="nexus-web-main" className="relative mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:px-6 lg:px-8">
-        <section className="relative mb-5 overflow-hidden border border-nexus-line bg-nexus-surface-2/90 p-5 shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
+        <section className="nexus-command-deck relative mb-5 overflow-hidden border border-nexus-line bg-nexus-surface-2/90 p-5 shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
           <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(35,213,176,0.12),transparent_35%,rgba(83,166,255,0.08))]" aria-hidden />
           <div className="relative">
           <MicroLabel className="text-nexus-lime/80">web app // manual draft lab</MicroLabel>
@@ -1923,6 +1974,7 @@ export function WebDraftApp() {
                   fontScale={0.2}
                   minFontSize={48}
                   maxFontSize={160}
+                  interactive={false}
                 />
               </h1>
               <p className="mt-3 max-w-2xl font-mono text-sm text-nexus-muted leading-relaxed">

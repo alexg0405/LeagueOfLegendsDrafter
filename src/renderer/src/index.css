@@ -159,6 +159,49 @@
   pointer-events: none;
 }
 
+.nexus-command-deck {
+  isolation: isolate;
+}
+
+.nexus-command-deck::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent, rgba(29, 212, 168, 0.3), transparent) 0 0 / 34% 1px no-repeat,
+    linear-gradient(180deg, rgba(232, 243, 238, 0.055), transparent 18%, transparent 82%, rgba(29, 212, 168, 0.09));
+  animation: nexus-command-edge 2.8s ease-in-out infinite;
+  opacity: 0.72;
+}
+
+.nexus-command-deck::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 92% 16%, rgba(29, 212, 168, 0.16), transparent 25%),
+    linear-gradient(110deg, rgba(29, 212, 168, 0.1), transparent 34%, rgba(61, 184, 160, 0.06));
+}
+
+.nexus-command-deck > * {
+  position: relative;
+  z-index: 2;
+}
+
+@keyframes nexus-command-edge {
+  0%,
+  100% {
+    background-position: -34% 0, 0 0;
+  }
+  50% {
+    background-position: 134% 0, 0 0;
+  }
+}
+
 .nexus-matrix-stage {
   background:
     radial-gradient(circle at 78% 12%, rgba(29, 212, 168, 0.2), transparent 24%),
@@ -286,5 +329,19 @@
   to {
     opacity: 1;
     transform: scale(1) translateY(0);
+  }
+}
+
+.nexus-matrix-stage:has(.nexus-matrix-scrolling)::before {
+  animation-play-state: paused;
+  opacity: 0.16;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nexus-command-deck::before,
+  .nexus-matrix-stage::before,
+  .nexus-matrix-beams span,
+  .nexus-matrix-panel {
+    animation: none !important;
   }
 }

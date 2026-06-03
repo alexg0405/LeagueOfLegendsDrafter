@@ -103,14 +103,15 @@ export function dedupeMatchupPlansForMatrix(plans: MatchupPlan[] | undefined): M
 export function dedupeEnemyTargetsForMatrix(
   targets: DraftItemMatrixRow['enemyTargets'] | null | undefined
 ): NonNullable<DraftItemMatrixRow['enemyTargets']> {
-  const byChampionId = new Map<number, NonNullable<DraftItemMatrixRow['enemyTargets']>[number]>()
+  const byChampionKey = new Map<string, NonNullable<DraftItemMatrixRow['enemyTargets']>[number]>()
   for (const target of targets ?? []) {
-    const previous = byChampionId.get(target.championId)
+    const key = target.championId > 0 ? `id:${target.championId}` : `name:${target.championName.trim().toLowerCase()}`
+    const previous = byChampionKey.get(key)
     if (!previous || TARGET_SOURCE_WEIGHT[target.source] < TARGET_SOURCE_WEIGHT[previous.source]) {
-      byChampionId.set(target.championId, target)
+      byChampionKey.set(key, target)
     }
   }
-  return Array.from(byChampionId.values())
+  return Array.from(byChampionKey.values())
 }
 
 function shortTags(row: DraftItemMatrixRow): string {
@@ -271,8 +272,11 @@ export function DraftItemMatrixView({
   const [activeChampionId, setActiveChampionId] = useState<number | null>(initialChampionId)
   const [championQuery, setChampionQuery] = useState('')
   const deferredChampionQuery = useDeferredValue(championQuery)
+  const panelRef = useRef<HTMLElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const scrollIdleRef = useRef<number | null>(null)
   const [scrollState, setScrollState] = useState({ top: 0, height: MATRIX_VIEWPORT_FALLBACK })
+  const [isScrolling, setIsScrolling] = useState(false)
 
   useEffect(() => {
     setActiveChampionId(selectedChampionId ?? championId ?? selectablePlans[0]?.championId ?? null)
@@ -310,6 +314,34 @@ export function DraftItemMatrixView({
     const nextTop = event.currentTarget.scrollTop
     const nextHeight = event.currentTarget.clientHeight || MATRIX_VIEWPORT_FALLBACK
     setScrollState((prev) => (prev.top === nextTop && prev.height === nextHeight ? prev : { top: nextTop, height: nextHeight }))
+    setIsScrolling(true)
+    if (scrollIdleRef.current != null) {
+      window.clearTimeout(scrollIdleRef.current)
+    }
+    scrollIdleRef.current = window.setTimeout(() => setIsScrolling(false), 140)
+  }, [])
+  useEffect(() => {
+    panelRef.current?.focus({ preventScroll: true })
+  }, [])
+  useEffect(() => {
+    if (!onClose) {
+      return
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+  useEffect(() => {
+    return () => {
+      if (scrollIdleRef.current != null) {
+        window.clearTimeout(scrollIdleRef.current)
+      }
+    }
   }, [])
   useEffect(() => {
     const element = scrollRef.current
@@ -353,13 +385,17 @@ export function DraftItemMatrixView({
   }, [ddragonVersion, virtualRows.rows])
 
   return (
-    <section className={`flex min-h-0 flex-col border border-nexus-lime/45 bg-nexus-surface/95 shadow-[0_0_42px_rgba(29,212,168,0.18)] ${className}`}>
+    <section
+      ref={panelRef}
+      tabIndex={-1}
+      className={`flex min-h-0 flex-col border border-nexus-lime/45 bg-nexus-surface/95 shadow-[0_0_42px_rgba(29,212,168,0.18)] focus:outline-none ${isScrolling ? 'nexus-matrix-scrolling' : ''} ${className}`}
+    >
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-nexus-lime/35 bg-nexus-surface-2/95 px-3 py-2.5">
         <div className="min-w-0 cursor-move select-none nexus-overlay-drag nexus-window-drag" data-tauri-drag-region>
           <p className="m-0 font-mono text-[10px] uppercase tracking-[0.22em] text-nexus-lime/75">item matrix</p>
           <h2 className="m-0 truncate font-display text-lg uppercase tracking-[0.12em] text-nexus-text">{activeChampionName}</h2>
         </div>
-        <div className="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.12em]">
+        <div className="nexus-window-nodrag flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.12em]">
           {(['all', 'default', 'situational'] as const).map((value) => (
             <button
               key={value}
@@ -391,7 +427,7 @@ export function DraftItemMatrixView({
         </div>
       ) : null}
       {selectablePlans.length > 1 ? (
-        <div className="grid gap-2 border-b border-nexus-line/70 bg-nexus-bg/70 px-3 py-2">
+        <div className="nexus-window-nodrag grid gap-2 border-b border-nexus-line/70 bg-nexus-bg/70 px-3 py-2">
           <div className="flex flex-wrap items-center gap-2">
             <label className="min-w-0 flex-1">
               <span className="sr-only">Champion lookup</span>

@@ -18,6 +18,7 @@ import {
 import { copyDraftSource } from './nexusCopy'
 import { DraftItemMatrixView } from './DraftItemMatrixView'
 import { DraftItemPlanBlock as ItemPlanBlock } from './DraftItemPlanBlock'
+import { NexusCollapsible } from './NexusCollapsible'
 import { MicroLabel } from './NexusTick'
 import { EASING, useNexusMotion } from './nexusMotion'
 
@@ -91,9 +92,6 @@ type OpsSectionProps = {
 function CollapsibleOpsSection({ id, kicker, title, children, open, onToggle, accent = false }: OpsSectionProps) {
   const { reduce } = useNexusMotion()
   const contentId = `${id}-body`
-  const bodyTransition = reduce
-    ? { duration: 0 }
-    : { duration: open ? 0.18 : 0.12, ease: open ? EASING.out : EASING.sharp }
   return (
     <motion.section
       id={id}
@@ -123,24 +121,20 @@ function CollapsibleOpsSection({ id, kicker, title, children, open, onToggle, ac
           +
         </motion.span>
       </button>
-      <motion.div
+      <NexusCollapsible
         id={contentId}
-        className={['grid overflow-hidden', open ? 'border-t border-nexus-line' : 'border-t border-transparent'].join(' ')}
-        initial={false}
-        animate={reduce ? { gridTemplateRows: open ? '1fr' : '0fr' } : { gridTemplateRows: open ? '1fr' : '0fr', opacity: open ? 1 : 0.98 }}
-        transition={bodyTransition}
-        aria-hidden={!open}
+        open={open}
+        reduce={reduce}
+        className={open ? 'border-t border-nexus-line' : 'border-t border-transparent'}
       >
-        <div className="min-h-0 overflow-hidden">
-          <div className="px-4 py-4 sm:px-5 sm:py-5 text-sm sm:text-base leading-relaxed">
-            <MicroLabel className="block mb-2 text-nexus-lime/75">{kicker}</MicroLabel>
-            <h2 className="font-display text-base sm:text-lg tracking-[0.14em] uppercase text-nexus-lime/95 mb-3 sm:mb-4">
-              {title}
-            </h2>
-            {children}
-          </div>
+        <div className="px-4 py-4 sm:px-5 sm:py-5 text-sm sm:text-base leading-relaxed">
+          <MicroLabel className="block mb-2 text-nexus-lime/75">{kicker}</MicroLabel>
+          <h2 className="font-display text-base sm:text-lg tracking-[0.14em] uppercase text-nexus-lime/95 mb-3 sm:mb-4">
+            {title}
+          </h2>
+          {children}
         </div>
-      </motion.div>
+      </NexusCollapsible>
     </motion.section>
   )
 }

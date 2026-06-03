@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { useState, type ReactNode } from 'react'
 import { ParticleWordMark } from '../ParticleWordLoader'
+import { NexusCollapsible } from './NexusCollapsible'
 import { MicroLabel, NexusPlus } from './NexusTick'
 import { NexusProgressSegmented } from './NexusProgressSegmented'
 import {
@@ -71,7 +72,7 @@ export function NexusHomeDashboard({
 
   return (
     <div className="p-5 lg:px-8 lg:py-6 min-h-0 max-w-[1100px]">
-      <section className="relative mb-6 border border-nexus-line bg-nexus-surface-2 overflow-hidden">
+      <section className="nexus-command-deck relative mb-6 border border-nexus-line bg-nexus-surface-2 overflow-hidden">
         <div className="nexus-noise absolute inset-0 opacity-40" aria-hidden />
         <div className="relative grid grid-cols-1 lg:grid-cols-[1fr_120px]">
           <div className="p-6 pb-5 lg:pr-4">
@@ -100,6 +101,7 @@ export function NexusHomeDashboard({
                 fontScale={0.22}
                 minFontSize={54}
                 maxFontSize={154}
+                interactive={false}
               />
             </motion.h1>
             <motion.div
@@ -143,9 +145,6 @@ export function NexusHomeDashboard({
             >
               {modules.map((module) => {
                 const isOpen = openModuleIds.has(module.id)
-                const bodyTransition = reduce
-                  ? { duration: 0 }
-                  : { duration: isOpen ? 0.18 : 0.12, ease: isOpen ? EASING.out : EASING.sharp }
                 return (
                   <motion.section
                     key={module.id}
@@ -184,38 +183,31 @@ export function NexusHomeDashboard({
                         +
                       </motion.span>
                     </button>
-                    <motion.div
-                      className={[
-                        'grid overflow-hidden',
-                        isOpen ? 'border-t border-nexus-line' : 'border-t border-transparent'
-                      ].join(' ')}
-                      initial={false}
-                      animate={reduce ? { gridTemplateRows: isOpen ? '1fr' : '0fr' } : { gridTemplateRows: isOpen ? '1fr' : '0fr', opacity: isOpen ? 1 : 0.98 }}
-                      transition={bodyTransition}
-                      aria-hidden={!isOpen}
+                    <NexusCollapsible
+                      open={isOpen}
+                      reduce={reduce}
+                      className={isOpen ? 'border-t border-nexus-line' : 'border-t border-transparent'}
                     >
-                      <div className="min-h-0 overflow-hidden">
-                        <div
+                      <div
+                        className={[
+                          'px-4 py-3 min-h-[120px]',
+                          module.light ? 'text-[#1a1e1a]' : 'text-nexus-muted'
+                        ].join(' ')}
+                      >
+                        <MicroLabel className={module.light ? 'opacity-70 text-[#1a1e1a]' : 'opacity-80'}>
+                          {module.kicker}
+                        </MicroLabel>
+                        <h3
                           className={[
-                            'px-4 py-3 min-h-[120px]',
-                            module.light ? 'text-[#1a1e1a]' : 'text-nexus-muted'
+                            'mt-1 font-display text-2xl tracking-[0.1em] uppercase leading-tight',
+                            module.light ? 'text-[#0a0c0d]' : 'text-nexus-text'
                           ].join(' ')}
                         >
-                          <MicroLabel className={module.light ? 'opacity-70 text-[#1a1e1a]' : 'opacity-80'}>
-                            {module.kicker}
-                          </MicroLabel>
-                          <h3
-                            className={[
-                              'mt-1 font-display text-2xl tracking-[0.1em] uppercase leading-tight',
-                              module.light ? 'text-[#0a0c0d]' : 'text-nexus-text'
-                            ].join(' ')}
-                          >
-                            {module.title}
-                          </h3>
-                          <div className="mt-2 text-base leading-relaxed">{module.body}</div>
-                        </div>
+                          {module.title}
+                        </h3>
+                        <div className="mt-2 text-base leading-relaxed">{module.body}</div>
                       </div>
-                    </motion.div>
+                    </NexusCollapsible>
                   </motion.section>
                 )
               })}

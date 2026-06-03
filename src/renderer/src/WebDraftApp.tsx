@@ -60,6 +60,7 @@ import {
   type LivePublicDataRefreshStatus
 } from './livePublicDataClient'
 import { buildDraftIntelAsync } from './draftIntel/draftIntelClient'
+import { emitNexusEffect } from './effects'
 import { buildDraftItemMatrixPlansAsync, type ItemMatrixRequestOptions } from './itemMatrix/itemMatrixClient'
 import { ParticleWordMark } from './ParticleWordLoader'
 import { suggestPicksAsync } from './recommend/recommendClient'
@@ -1984,7 +1985,13 @@ export function WebDraftApp() {
               ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
-              <a className={buttonClass} href={EXE_DOWNLOAD_URL} download={EXE_DOWNLOAD_FILE}>
+              <a
+                className={buttonClass}
+                href={EXE_DOWNLOAD_URL}
+                download={EXE_DOWNLOAD_FILE}
+                onPointerEnter={(event) => emitNexusEffect('button:hover', { x: event.clientX, y: event.clientY })}
+                onPointerDown={(event) => emitNexusEffect('button:press', { x: event.clientX, y: event.clientY })}
+              >
                 Download EXE
               </a>
               <a
@@ -2585,7 +2592,13 @@ export function WebDraftApp() {
               <p className="font-mono text-sm text-nexus-muted leading-relaxed">
                 Use the Windows desktop app for League Client API detection, automatic role parsing, and the always-on-top overlay.
               </p>
-              <a className={buttonClass + ' mt-3'} href={EXE_DOWNLOAD_URL} download={EXE_DOWNLOAD_FILE}>
+              <a
+                className={buttonClass + ' mt-3'}
+                href={EXE_DOWNLOAD_URL}
+                download={EXE_DOWNLOAD_FILE}
+                onPointerEnter={(event) => emitNexusEffect('button:hover', { x: event.clientX, y: event.clientY })}
+                onPointerDown={(event) => emitNexusEffect('button:press', { x: event.clientX, y: event.clientY })}
+              >
                 Download EXE
               </a>
               <div className="mt-4 flex items-center gap-2 border-t border-nexus-line/50 pt-3 text-nexus-muted">

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { NexusEffectsLayer, emitNexusEffect } from './effects'
 
 type Particle = {
   x: number
@@ -193,6 +194,7 @@ function ParticleWordCanvas({
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const introActive = useContext(ParticleIntroActiveContext)
   const suspendedForIntro = introActive && target === INTRO_TARGET
+  const showEffectsLayer = interactive && Boolean(target) && !suspendedForIntro
 
   useEffect(() => {
     if (suspendedForIntro) {
@@ -360,12 +362,23 @@ function ParticleWordCanvas({
     suspendedForIntro
   ])
 
+  useEffect(() => {
+    if (!showEffectsLayer) {
+      return
+    }
+    const handle = window.setTimeout(() => {
+      emitNexusEffect('hero:settle', { target })
+    }, settledOnMount ? 90 : 420)
+    return () => window.clearTimeout(handle)
+  }, [settledOnMount, showEffectsLayer, target])
+
   return suspendedForIntro ? (
     <span className={`relative block overflow-hidden ${className}`} aria-label={ariaLabel} data-particle-word-target={target}>
       <span className="sr-only">{ariaLabel}</span>
     </span>
   ) : (
     <span className={`relative block overflow-hidden ${className}`} aria-label={ariaLabel} data-particle-word-target={target}>
+      {showEffectsLayer ? <NexusEffectsLayer surface="hero" quality="high" interactive className="opacity-80" /> : null}
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" aria-hidden />
       <span className="sr-only">{ariaLabel}</span>
     </span>

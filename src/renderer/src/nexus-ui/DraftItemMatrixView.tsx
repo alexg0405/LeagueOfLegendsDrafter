@@ -1,6 +1,7 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type UIEvent } from 'react'
 import { canonicalItemName, ddragonItemImageUrl } from '@shared/dataDragon'
 import type { DraftIntel, DraftItemMatrixRow, DraftItemRef } from '@shared/draft'
+import { NexusEffectsLayer, emitNexusEffect } from '../effects'
 
 export type MatchupPlan = DraftIntel['matchupPlans'][number]
 type DraftItemPlan = NonNullable<MatchupPlan['itemPlan']>
@@ -314,12 +315,18 @@ export function DraftItemMatrixView({
     const nextTop = event.currentTarget.scrollTop
     const nextHeight = event.currentTarget.clientHeight || MATRIX_VIEWPORT_FALLBACK
     setScrollState((prev) => (prev.top === nextTop && prev.height === nextHeight ? prev : { top: nextTop, height: nextHeight }))
+    if (!isScrolling) {
+      emitNexusEffect('matrix:scroll-start')
+    }
     setIsScrolling(true)
     if (scrollIdleRef.current != null) {
       window.clearTimeout(scrollIdleRef.current)
     }
-    scrollIdleRef.current = window.setTimeout(() => setIsScrolling(false), 140)
-  }, [])
+    scrollIdleRef.current = window.setTimeout(() => {
+      setIsScrolling(false)
+      emitNexusEffect('matrix:scroll-end')
+    }, 140)
+  }, [isScrolling])
   useEffect(() => {
     panelRef.current?.focus({ preventScroll: true })
   }, [])
@@ -365,6 +372,9 @@ export function DraftItemMatrixView({
     scrollRef.current?.scrollTo({ top: 0 })
     setScrollState((prev) => ({ ...prev, top: 0 }))
   }, [activePlan?.championId, filter])
+  useEffect(() => {
+    emitNexusEffect('matrix:open', { championId: activePlan?.championId ?? activeChampionId })
+  }, [activeChampionId, activePlan?.championId])
   const virtualRows = useMemo(() => {
     const start = Math.max(0, Math.floor(scrollState.top / MATRIX_ROW_HEIGHT) - MATRIX_ROW_OVERSCAN)
     const count = Math.ceil(scrollState.height / MATRIX_ROW_HEIGHT) + MATRIX_ROW_OVERSCAN * 2
@@ -388,9 +398,10 @@ export function DraftItemMatrixView({
     <section
       ref={panelRef}
       tabIndex={-1}
-      className={`flex min-h-0 flex-col border border-nexus-lime/45 bg-nexus-surface/95 shadow-[0_0_42px_rgba(29,212,168,0.18)] focus:outline-none ${isScrolling ? 'nexus-matrix-scrolling' : ''} ${className}`}
+      className={`relative isolate flex min-h-0 flex-col overflow-hidden border border-nexus-lime/45 bg-nexus-surface/95 shadow-[0_0_42px_rgba(29,212,168,0.18)] focus:outline-none ${isScrolling ? 'nexus-matrix-scrolling' : ''} ${className}`}
     >
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-nexus-lime/35 bg-nexus-surface-2/95 px-3 py-2.5">
+      <NexusEffectsLayer surface="matrix" quality="high" className="z-0 opacity-85" />
+      <header className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-b border-nexus-lime/35 bg-nexus-surface-2/95 px-3 py-2.5">
         <div className="min-w-0 cursor-move select-none nexus-overlay-drag nexus-window-drag" data-tauri-drag-region>
           <p className="m-0 font-mono text-[10px] uppercase tracking-[0.22em] text-nexus-lime/75">item matrix</p>
           <h2 className="m-0 truncate font-display text-lg uppercase tracking-[0.12em] text-nexus-text">{activeChampionName}</h2>
@@ -422,12 +433,12 @@ export function DraftItemMatrixView({
         </div>
       </header>
       {(isPreparing || error) ? (
-        <div className={`border-b border-nexus-line/70 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] ${error ? 'bg-nexus-red/10 text-nexus-red/85' : 'bg-nexus-bg/70 text-nexus-muted'}`}>
+        <div className={`relative z-10 border-b border-nexus-line/70 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] ${error ? 'bg-nexus-red/10 text-nexus-red/85' : 'bg-nexus-bg/70 text-nexus-muted'}`}>
           {error ? `Item matrix unavailable: ${error}` : 'Preparing items...'}
         </div>
       ) : null}
       {selectablePlans.length > 1 ? (
-        <div className="nexus-window-nodrag grid gap-2 border-b border-nexus-line/70 bg-nexus-bg/70 px-3 py-2">
+        <div className="nexus-window-nodrag relative z-10 grid gap-2 border-b border-nexus-line/70 bg-nexus-bg/70 px-3 py-2">
           <div className="flex flex-wrap items-center gap-2">
             <label className="min-w-0 flex-1">
               <span className="sr-only">Champion lookup</span>
@@ -473,7 +484,7 @@ export function DraftItemMatrixView({
           </div>
         </div>
       ) : null}
-      <div ref={scrollRef} className="nexus-matrix-scroll min-h-0 flex-1 overflow-auto" onScroll={handleMatrixScroll}>
+      <div ref={scrollRef} className="nexus-matrix-scroll relative z-10 min-h-0 flex-1 overflow-auto bg-nexus-bg/25" onScroll={handleMatrixScroll}>
         <table className="w-full min-w-[54rem] table-fixed border-collapse text-left font-mono text-xs">
           <colgroup>
             <col className="w-8" />

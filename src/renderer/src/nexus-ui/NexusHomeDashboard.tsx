@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { useState, type ReactNode } from 'react'
 import { ParticleWordMark } from '../ParticleWordLoader'
+import { emitNexusEffect } from '../effects'
 import { NexusCollapsible } from './NexusCollapsible'
 import { MicroLabel, NexusPlus } from './NexusTick'
 import { NexusProgressSegmented } from './NexusProgressSegmented'
@@ -118,6 +119,8 @@ export function NexusHomeDashboard({
               <motion.button
                 type="button"
                 onClick={onEnterOperations}
+                onPointerEnter={(event) => emitNexusEffect('button:hover', { x: event.clientX, y: event.clientY })}
+                onPointerDown={(event) => emitNexusEffect('button:press', { x: event.clientX, y: event.clientY })}
                 className="nexus-focus px-7 py-3 font-display text-base tracking-[0.18em] uppercase bg-nexus-lime text-nexus-bg border border-nexus-lime/90"
                 whileHover={reduce ? undefined : { x: 3, transition: { duration: 0.12, ease: EASING.sharp } }}
                 whileTap={reduce ? undefined : { scale: 0.99 }}

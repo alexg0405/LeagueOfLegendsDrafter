@@ -192,6 +192,21 @@
   z-index: 2;
 }
 
+.nexus-effects-layer {
+  contain: strict;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+}
+
+.nexus-effects-canvas {
+  display: block;
+  pointer-events: none;
+}
+
+.nexus-matrix-scrolling .nexus-effects-layer {
+  opacity: 0.28;
+}
+
 @keyframes nexus-command-edge {
   0%,
   100% {
@@ -216,8 +231,7 @@
   background:
     repeating-linear-gradient(90deg, transparent 0 22px, rgba(29, 212, 168, 0.16) 23px, transparent 24px),
     repeating-linear-gradient(180deg, rgba(29, 212, 168, 0.07) 0 1px, transparent 1px 6px);
-  animation: nexus-matrix-rain 1.4s linear infinite;
-  opacity: 0.35;
+  opacity: 0.16;
 }
 
 .nexus-matrix-stage::after {
@@ -269,7 +283,7 @@
   transform-origin: right center;
   background: linear-gradient(90deg, transparent, rgba(29, 212, 168, 0.04), rgba(29, 212, 168, 0.82));
   box-shadow: 0 0 14px rgba(29, 212, 168, 0.75);
-  animation: nexus-matrix-beam 420ms ease-out both;
+  opacity: 0.32;
 }
 
 .nexus-matrix-beams span:nth-child(1) {
@@ -278,27 +292,22 @@
 
 .nexus-matrix-beams span:nth-child(2) {
   transform: rotate(24deg);
-  animation-delay: 35ms;
 }
 
 .nexus-matrix-beams span:nth-child(3) {
   transform: rotate(41deg);
-  animation-delay: 70ms;
 }
 
 .nexus-matrix-beams span:nth-child(4) {
   transform: rotate(63deg);
-  animation-delay: 105ms;
 }
 
 .nexus-matrix-beams span:nth-child(5) {
   transform: rotate(83deg);
-  animation-delay: 140ms;
 }
 
 .nexus-matrix-beams span:nth-child(6) {
   transform: rotate(116deg);
-  animation-delay: 175ms;
 }
 
 @keyframes nexus-matrix-rain {
@@ -333,15 +342,19 @@
 }
 
 .nexus-matrix-stage:has(.nexus-matrix-scrolling)::before {
-  animation-play-state: paused;
-  opacity: 0.16;
+  opacity: 0.08;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .nexus-command-deck::before,
   .nexus-matrix-stage::before,
   .nexus-matrix-beams span,
-  .nexus-matrix-panel {
+  .nexus-matrix-panel,
+  .nexus-effects-layer {
     animation: none !important;
+  }
+
+  .nexus-effects-layer {
+    opacity: 0.18;
   }
 }

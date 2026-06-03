@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 
 type Particle = {
   x: number
@@ -37,8 +37,10 @@ type ParticleTarget = { x: number; y: number }
 type ParticleWordBounds = { left: number; top: number; width: number; height: number }
 
 const DEFAULT_WORD = 'NexusDraft'
-const DEFAULT_MAX_PARTICLES = 3200
+const DEFAULT_MAX_PARTICLES = 1600
 const INTRO_TARGET = 'nexusdraft'
+
+export const ParticleIntroActiveContext = createContext(false)
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
@@ -124,8 +126,13 @@ function ParticleWordCanvas({
   maxFontSize = 150
 }: ParticleWordMarkProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const introActive = useContext(ParticleIntroActiveContext)
+  const suspendedForIntro = introActive && target === INTRO_TARGET
 
   useEffect(() => {
+    if (suspendedForIntro) {
+      return
+    }
     const canvas = canvasRef.current
     const context = canvas?.getContext('2d')
     if (!canvas || !context) {
@@ -136,6 +143,7 @@ function ParticleWordCanvas({
     let width = 0
     let height = 0
     let particles: Particle[] = []
+    let running = false
     const pointer: PointerState = { x: -9999, y: -9999, active: false }
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const options: ParticleWordOptions = { word, maxParticles, fontScale, minFontSize, maxFontSize }
@@ -151,17 +159,26 @@ function ParticleWordCanvas({
       particles = makeParticles(width, height, particles, options)
     }
 
+    const start = () => {
+      if (!running) {
+        running = true
+        raf = window.requestAnimationFrame(draw)
+      }
+    }
+
     const draw = () => {
+      running = false
       context.clearRect(0, 0, width, height)
       context.globalCompositeOperation = 'lighter'
-      context.shadowColor = 'rgba(29, 212, 168, 0.48)'
-      context.shadowBlur = 8
+      context.shadowColor = 'rgba(29, 212, 168, 0.34)'
+      context.shadowBlur = 5
+      let settled = !pointer.active
       for (const particle of particles) {
         if (!reduceMotion) {
           const toTargetX = particle.tx - particle.x
           const toTargetY = particle.ty - particle.y
-          particle.vx += toTargetX * 0.035
-          particle.vy += toTargetY * 0.035
+          particle.vx += toTargetX * 0.04
+          particle.vy += toTargetY * 0.04
 
           if (pointer.active) {
             const dx = particle.x - pointer.x
@@ -180,6 +197,15 @@ function ParticleWordCanvas({
           particle.vy *= 0.78
           particle.x += particle.vx
           particle.y += particle.vy
+          if (
+            settled &&
+            (Math.abs(toTargetX) > 0.7 ||
+              Math.abs(toTargetY) > 0.7 ||
+              Math.abs(particle.vx) > 0.035 ||
+              Math.abs(particle.vy) > 0.035)
+          ) {
+            settled = false
+          }
         } else {
           particle.x = particle.tx
           particle.y = particle.ty
@@ -193,8 +219,8 @@ function ParticleWordCanvas({
       }
       context.globalCompositeOperation = 'source-over'
       context.shadowBlur = 0
-      if (!reduceMotion) {
-        raf = window.requestAnimationFrame(draw)
+      if (!reduceMotion && !settled) {
+        start()
       }
     }
 
@@ -203,17 +229,21 @@ function ParticleWordCanvas({
       pointer.x = event.clientX - rect.left
       pointer.y = event.clientY - rect.top
       pointer.active = true
+      start()
     }
     const handlePointerLeave = () => {
       pointer.active = false
+      start()
     }
 
     resize()
-    draw()
+    start()
     const observer = new ResizeObserver(() => {
       resize()
       if (reduceMotion) {
         draw()
+      } else {
+        start()
       }
     })
     observer.observe(canvas)
@@ -222,13 +252,18 @@ function ParticleWordCanvas({
 
     return () => {
       window.cancelAnimationFrame(raf)
+      running = false
       observer.disconnect()
       canvas.removeEventListener('pointermove', handlePointerMove)
       canvas.removeEventListener('pointerleave', handlePointerLeave)
     }
-  }, [fontScale, maxFontSize, maxParticles, minFontSize, word])
+  }, [fontScale, maxFontSize, maxParticles, minFontSize, word, suspendedForIntro])
 
-  return (
+  return suspendedForIntro ? (
+    <span className={`relative block overflow-hidden ${className}`} aria-label={ariaLabel} data-particle-word-target={target}>
+      <span className="sr-only">{ariaLabel}</span>
+    </span>
+  ) : (
     <span className={`relative block overflow-hidden ${className}`} aria-label={ariaLabel} data-particle-word-target={target}>
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" aria-hidden />
       <span className="sr-only">{ariaLabel}</span>
@@ -282,7 +317,7 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
     const pointer: PointerState = { x: -9999, y: -9999, active: false }
     const options: ParticleWordOptions = {
       word: DEFAULT_WORD,
-      maxParticles: 3400,
+      maxParticles: 1500,
       fontScale: 0.16,
       minFontSize: 54,
       maxFontSize: 170
@@ -344,18 +379,18 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
         retargetToHero()
       }
 
-      const progress = isExiting ? clamp((time - exitStartedRef.current) / 1450, 0, 1) : 0
-      const particleAlpha = isExiting ? clamp(1 - Math.max(0, progress - 0.7) / 0.3, 0, 1) : 1
+      const progress = isExiting ? clamp((time - exitStartedRef.current) / 950, 0, 1) : 0
+      const particleAlpha = isExiting ? clamp(1 - Math.max(0, progress - 0.82) / 0.18, 0, 1) : 1
 
       context.clearRect(0, 0, width, height)
       context.globalCompositeOperation = 'lighter'
-      context.shadowColor = `rgba(29, 212, 168, ${0.46 * particleAlpha})`
-      context.shadowBlur = 9
+      context.shadowColor = `rgba(29, 212, 168, ${0.34 * particleAlpha})`
+      context.shadowBlur = 5
       for (const particle of particles) {
         if (!reduceMotion) {
           const toTargetX = particle.tx - particle.x
           const toTargetY = particle.ty - particle.y
-          const spring = isExiting ? 0.062 : 0.034
+          const spring = isExiting ? 0.092 : 0.036
           particle.vx += toTargetX * spring
           particle.vy += toTargetY * spring
 
@@ -363,7 +398,7 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
             const dx = particle.x - targetCenter.x
             const dy = particle.y - targetCenter.y
             const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy))
-            const swirl = (1 - progress) * 1.45
+            const swirl = (1 - progress) * 0.92
             particle.vx += (-dy / distance) * swirl
             particle.vy += (dx / distance) * swirl
           } else if (pointer.active) {
@@ -379,8 +414,8 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
             }
           }
 
-          particle.vx *= isExiting ? 0.82 : 0.78
-          particle.vy *= isExiting ? 0.82 : 0.78
+          particle.vx *= isExiting ? 0.8 : 0.78
+          particle.vy *= isExiting ? 0.8 : 0.78
           particle.x += particle.vx
           particle.y += particle.vy
         } else {

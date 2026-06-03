@@ -96,7 +96,7 @@ export function NexusHomeDashboard({
                 ariaLabel="NexusDraft"
                 target="nexusdraft"
                 className="h-[8.5rem] w-full max-w-[620px] sm:h-[10rem] md:h-[11.5rem]"
-                maxParticles={3000}
+                maxParticles={1500}
                 fontScale={0.22}
                 minFontSize={54}
                 maxFontSize={154}

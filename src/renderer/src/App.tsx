@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, type ReactNode } from 'react'
-import { ParticleWordIntroOverlay, ParticleWordLoader } from './ParticleWordLoader'
+import { ParticleIntroActiveContext, ParticleWordIntroOverlay, ParticleWordLoader } from './ParticleWordLoader'
 import { isOverlayRoute } from './route'
 
 const IS_WEB_BUILD = import.meta.env.VITE_NEXUS_WEB === '1'
@@ -22,10 +22,10 @@ function IntroShell({ children }: { children: ReactNode }) {
   const [entered, setEntered] = useState(() => !shouldShowIntroOverlay())
 
   return (
-    <>
+    <ParticleIntroActiveContext.Provider value={!entered}>
       {children}
       {!entered ? <ParticleWordIntroOverlay onDone={() => setEntered(true)} /> : null}
-    </>
+    </ParticleIntroActiveContext.Provider>
   )
 }
 

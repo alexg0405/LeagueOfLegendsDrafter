@@ -1,6 +1,6 @@
 [package]
 name = "nexus-draft-tauri"
-version = "4.1.0"
+version = "4.2.0"
 edition = "2021"
 description = "Rust desktop shell for Nexus Draft"
 publish = false

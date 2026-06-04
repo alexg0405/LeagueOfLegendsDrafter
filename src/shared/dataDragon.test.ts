@@ -48,20 +48,28 @@ describe('Data Dragon item normalization', () => {
         name: "Prowler's Claw",
         tags: ['Damage'],
         stats: { FlatPhysicalDamageMod: 55 },
-        gold: { total: 3000, purchasable: true },
-        maps: { 11: true }
+        gold: { total: 2850, purchasable: false },
+        maps: { 11: true },
+        inStore: false
       },
-      443056: {
-        name: "Demon King's Crown",
-        tags: ['Health'],
-        stats: { FlatHPPoolMod: 300 },
-        gold: { total: 2500, purchasable: true },
-        maps: { 11: true, 30: true }
-      },
-      443193: {
+      2525: {
         name: 'Protoplasm Harness',
         tags: ['Health', 'Active'],
         stats: { FlatHPPoolMod: 400 },
+        gold: { total: 2500, purchasable: true },
+        maps: { 11: true, 12: true, 21: true, 35: true }
+      },
+      222525: {
+        name: 'Protoplasm Harness',
+        tags: ['Health', 'Active'],
+        stats: { FlatHPPoolMod: 400 },
+        gold: { total: 2500, purchasable: true },
+        maps: { 30: true }
+      },
+      663056: {
+        name: "Demon King's Crown",
+        tags: ['Health'],
+        stats: { FlatHPPoolMod: 300 },
         gold: { total: 2500, purchasable: true },
         maps: { 11: true, 30: true }
       },
@@ -83,8 +91,9 @@ describe('Data Dragon item normalization', () => {
       }
     })
 
-    expect(items).toHaveLength(1)
-    expect(items[0]).toMatchObject({ id: 1001, name: 'Boots' })
+    expect(items).toHaveLength(2)
+    expect(items.map((item) => item.id)).toEqual(expect.arrayContaining([1001, 2525]))
+    expect(items.map((item) => item.id)).not.toEqual(expect.arrayContaining([222525, 663056]))
   })
 
   it('collapses same-name current items and keeps the best populated row', () => {

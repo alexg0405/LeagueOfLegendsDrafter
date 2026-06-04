@@ -47,6 +47,7 @@ const catalog: ItemLite[] = [
   item(3157, "Zhonya's Hourglass", 'Ability Power, Armor, and Stasis for burst defense.', ['SpellDamage', 'Armor'], { FlatMagicDamageMod: 105, FlatArmorMod: 50 }, 3250),
   item(6695, "Serpent's Fang", 'Lethality. Shield Reaver reduces enemy shields.', ['Damage'], { FlatPhysicalDamageMod: 55 }, 2500),
   item(3031, 'Infinity Edge', 'Attack Damage and Critical Strike.', ['Damage', 'CriticalStrike'], { FlatPhysicalDamageMod: 75, FlatCritChanceMod: 0.25 }, 3450),
+  item(3033, 'Mortal Reminder', 'Attack damage, critical strike, armor penetration, and Grievous Wounds.', ['Damage', 'CriticalStrike'], { FlatPhysicalDamageMod: 35, FlatCritChanceMod: 0.25 }, 3000),
   item(3071, 'Black Cleaver', 'Attack damage and health. Reduces enemy armor.', ['Damage', 'Health'], { FlatPhysicalDamageMod: 40, FlatHPPoolMod: 400 }, 3000)
 ]
 
@@ -55,7 +56,7 @@ describe('item intelligence', () => {
     expect(classifyItem(catalog[2]!).tags).toEqual(expect.arrayContaining(['boots', 'mr', 'anti-cc']))
     expect(classifyItem(catalog[4]!).tags).toEqual(expect.arrayContaining(['ap', 'anti-heal']))
     expect(classifyItem(catalog[7]!).tags).toEqual(expect.arrayContaining(['ad', 'anti-shield']))
-    expect(classifyItem(catalog[9]!).tags).toEqual(expect.arrayContaining(['ad', 'health', 'anti-tank']))
+    expect(classifyItem(catalog[10]!).tags).toEqual(expect.arrayContaining(['ad', 'health', 'anti-tank']))
   })
 
   it('parses champion spell text for combat signals', () => {
@@ -305,5 +306,61 @@ describe('item intelligence', () => {
     ])
     expect(ids.has(443056)).toBe(false)
     expect(ids.has(9005)).toBe(false)
+  })
+
+  it('does not use specialist on-hit and hybrid items as generic pure marksman fallback cores', () => {
+    const critCatalog = [
+      item(6676, 'The Collector', 'Attack damage, crit, and armor penetration.', ['Damage', 'CriticalStrike'], { FlatPhysicalDamageMod: 50, FlatCritChanceMod: 0.25 }, 3000),
+      item(3031, 'Infinity Edge', 'Attack damage and critical strike.', ['Damage', 'CriticalStrike'], { FlatPhysicalDamageMod: 75, FlatCritChanceMod: 0.25 }, 3500),
+      item(3036, "Lord Dominik's Regards", 'Attack damage, crit, and armor penetration.', ['Damage', 'CriticalStrike'], { FlatPhysicalDamageMod: 35, FlatCritChanceMod: 0.25 }, 3300),
+      item(3124, "Guinsoo's Rageblade", 'Attack damage, ability power, attack speed, and on-hit damage.', ['Damage', 'SpellDamage', 'AttackSpeed', 'OnHit'], { FlatPhysicalDamageMod: 30, FlatMagicDamageMod: 30, PercentAttackSpeedMod: 0.25 }, 3000),
+      item(3146, 'Hextech Gunblade', 'Attack damage, ability power, and omnivamp.', ['Damage', 'SpellDamage'], { FlatPhysicalDamageMod: 40, FlatMagicDamageMod: 80 }, 3000),
+      item(3087, 'Statikk Shiv', 'Attack damage, ability power, attack speed, and on-hit chain lightning.', ['Damage', 'SpellDamage', 'AttackSpeed', 'OnHit'], { FlatPhysicalDamageMod: 45, FlatMagicDamageMod: 30, PercentAttackSpeedMod: 0.3 }, 3000)
+    ]
+
+    const plan = buildAdaptiveItemPlan(critCatalog, {
+      championName: 'Caitlyn',
+      role: 'bottom',
+      buildProfile: {
+        damage: 'ad',
+        archetype: 'Marksman',
+        buildHint: 'Crit carry.',
+        itemHint: 'Default crit path.',
+        tagsLine: 'Marksman',
+        partype: 'Mana'
+      },
+      ally: { magic: 1, physical: 2, frontline: 1, engage: 1, scaling: 2, slots: 4 },
+      enemy: {
+        magic: 1,
+        physical: 2,
+        frontline: 2,
+        tanks: 1,
+        assassins: 1,
+        supports: 1,
+        dive: 1,
+        poke: 1,
+        pick: 1,
+        sustain: 1,
+        marksmen: 1,
+        hardCc: 1,
+        healing: 1,
+        shielding: 1,
+        mobility: 1,
+        burst: 1
+      },
+      laneThreat: 'ad',
+      fallback: {
+        core: 'Fallback core',
+        boots: 'Fallback boots',
+        defensive: 'Fallback defense',
+        situational: [],
+        notes: []
+      }
+    })
+
+    const coreNames = plan.coreBuild?.map((row) => row.name) ?? []
+    expect(coreNames).toHaveLength(3)
+    expect(coreNames).toEqual(expect.arrayContaining(['Infinity Edge', "Lord Dominik's Regards", 'The Collector']))
+    expect(coreNames).not.toEqual(expect.arrayContaining(["Guinsoo's Rageblade", 'Hextech Gunblade', 'Statikk Shiv']))
   })
 })

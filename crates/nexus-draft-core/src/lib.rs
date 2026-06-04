@@ -2998,52 +2998,7 @@ fn canonical_item_name(value: &str) -> String {
 }
 
 fn is_mode_exclusive_item_id(id: i32) -> bool {
-    (220000..230000).contains(&id) || (440000..450000).contains(&id)
-}
-
-fn is_retired_or_offstore_item_name(name: &str) -> bool {
-    matches!(
-        canonical_item_name(name).as_str(),
-        "prowler's claw"
-            | "prowlers claw"
-            | "galeforce"
-            | "everfrost"
-            | "crown of the shattered queen"
-            | "divine sunderer"
-            | "goredrinker"
-            | "duskblade of draktharr"
-            | "demon king's crown"
-            | "demon kings crown"
-            | "dragonheart"
-            | "darksteel talons"
-            | "detonation orb"
-            | "eleisa's miracle"
-            | "eleisas miracle"
-            | "empyrean promise"
-            | "force of entropy"
-            | "gambler's blade"
-            | "gambler s blade"
-            | "hemomancer's helm"
-            | "hemomancers helm"
-            | "hexbolt companion"
-            | "innervating locket"
-            | "kinslayer"
-            | "mirage blade"
-            | "moonflair spellblade"
-            | "perplexity"
-            | "protoplasm harness"
-            | "puppeteer"
-            | "reaper's toll"
-            | "reapers toll"
-            | "reverberation"
-            | "runecarver"
-            | "sanguine gift"
-            | "shield of molten stone"
-            | "sword of the blossoming dawn"
-            | "talisman of ascension"
-            | "twilight's edge"
-            | "twilights edge"
-    )
+    id >= 10000
 }
 
 fn is_recommendable_sr_item(item: &ItemLite) -> bool {
@@ -3052,7 +3007,6 @@ fn is_recommendable_sr_item(item: &ItemLite) -> bool {
         && item.gold.purchasable
         && item.required_champion.is_none()
         && !is_mode_exclusive_item_id(item.id)
-        && !is_retired_or_offstore_item_name(&item.name)
 }
 
 fn champion_name(champion_id: i32, id_to_name: &HashMap<i32, String>) -> String {
@@ -4350,6 +4304,33 @@ fn champion_classes(profile: Option<&ChampionBuildProfile>) -> Vec<String> {
         .collect()
 }
 
+fn includes_static(rows: &[&str], value: &str) -> bool {
+    rows.iter().any(|row| *row == value)
+}
+
+fn is_on_hit_carry(value: &str) -> bool {
+    matches!(
+        normalize_key(value).as_str(),
+        "ashe"
+            | "kaisa"
+            | "kalista"
+            | "kayle"
+            | "kogmaw"
+            | "teemo"
+            | "twitch"
+            | "varus"
+            | "vayne"
+            | "zeri"
+    )
+}
+
+fn is_hybrid_carry(value: &str) -> bool {
+    matches!(
+        normalize_key(value).as_str(),
+        "corki" | "ezreal" | "kaisa" | "kennen" | "kogmaw" | "teemo" | "varus" | "zeri"
+    )
+}
+
 fn score_item(item: &ItemLite, profile: &ItemProfile, ctx: &AdaptiveItemContext) -> f64 {
     let p = &profile.tags;
     let classes = champion_classes(ctx.build_profile);
@@ -4357,6 +4338,7 @@ fn score_item(item: &ItemLite, profile: &ItemProfile, ctx: &AdaptiveItemContext)
         .build_profile
         .map(|profile| profile.damage.as_str())
         .unwrap_or("flex");
+    let item_key = canonical_item_name(&item.name);
     let mut score = 35.0;
     if profile.phase == "completed" {
         score += 20.0;
@@ -4537,6 +4519,25 @@ fn score_item(item: &ItemLite, profile: &ItemProfile, ctx: &AdaptiveItemContext)
     }
     if ctx.role == "support" && includes(p, "support") {
         score += 18.0;
+    }
+    if ctx.role == "bottom" && includes(&classes, "marksman") && damage == "ad" {
+        if includes_static(
+            &[
+                "guinsoo's rageblade",
+                "hextech gunblade",
+                "nashor's tooth",
+                "statikk shiv",
+                "terminus",
+                "wit's end",
+            ],
+            &item_key,
+        ) && !is_on_hit_carry(ctx.champion_name)
+        {
+            score -= 36.0;
+        }
+        if includes(p, "ap") && !includes(p, "crit") && !is_hybrid_carry(ctx.champion_name) {
+            score -= 34.0;
+        }
     }
     if let Some(required) = &item.required_champion {
         if required.to_lowercase() != ctx.champion_name.to_lowercase() {
@@ -5472,6 +5473,20 @@ mod tests {
             &["Health"],
             2500.0,
         );
+        let protoplasm = item(
+            2525,
+            "Protoplasm Harness",
+            "Current ranked health item.",
+            &["Health"],
+            2500.0,
+        );
+        let protoplasm_arena = item(
+            222525,
+            "Protoplasm Harness",
+            "Arena-only duplicate.",
+            &["Health"],
+            2500.0,
+        );
         let mut champion_locked = item(
             9005,
             "Champion Locked Item",
@@ -5482,7 +5497,9 @@ mod tests {
         champion_locked.required_champion = Some("ModeOnly".to_string());
 
         assert!(is_recommendable_sr_item(&black_cleaver));
+        assert!(is_recommendable_sr_item(&protoplasm));
         assert!(!is_recommendable_sr_item(&demon_crown));
+        assert!(!is_recommendable_sr_item(&protoplasm_arena));
         assert!(!is_recommendable_sr_item(&champion_locked));
     }
 
@@ -5557,6 +5574,130 @@ mod tests {
         let deduped = dedupe_refs(&rows, 8);
         assert_eq!(deduped.len(), 1);
         assert_eq!(deduped[0].item_id, 3504);
+    }
+
+    #[test]
+    fn pure_marksman_fallback_does_not_force_specialist_on_hit_core() {
+        let catalog = vec![
+            item(
+                6676,
+                "The Collector",
+                "Attack damage, critical strike, and armor penetration.",
+                &["Damage", "CriticalStrike"],
+                3000.0,
+            ),
+            item(
+                3031,
+                "Infinity Edge",
+                "Attack damage and critical strike.",
+                &["Damage", "CriticalStrike"],
+                3500.0,
+            ),
+            item(
+                3036,
+                "Lord Dominik's Regards",
+                "Attack damage, critical strike, and armor penetration.",
+                &["Damage", "CriticalStrike"],
+                3300.0,
+            ),
+            item(
+                3124,
+                "Guinsoo's Rageblade",
+                "Attack damage, ability power, attack speed, and on-hit damage.",
+                &["Damage", "SpellDamage", "AttackSpeed", "OnHit"],
+                3000.0,
+            ),
+            item(
+                3146,
+                "Hextech Gunblade",
+                "Attack damage, ability power, and omnivamp.",
+                &["Damage", "SpellDamage"],
+                3000.0,
+            ),
+            item(
+                3087,
+                "Statikk Shiv",
+                "Attack damage, ability power, attack speed, and on-hit chain lightning.",
+                &["Damage", "SpellDamage", "AttackSpeed", "OnHit"],
+                3000.0,
+            ),
+        ];
+        let profile = ChampionBuildProfile {
+            damage: "ad".to_string(),
+            archetype: "Marksman".to_string(),
+            build_hint: "Crit carry.".to_string(),
+            item_hint: Some("Default crit path.".to_string()),
+            tags_line: "Marksman".to_string(),
+            partype: "Mana".to_string(),
+        };
+        let plan = build_adaptive_item_plan(
+            &catalog,
+            AdaptiveItemContext {
+                champion_name: "Caitlyn",
+                role: "bottom",
+                build_profile: Some(&profile),
+                ally: AllyItemSignals {
+                    magic: 1.0,
+                    physical: 2.0,
+                    frontline: 1.0,
+                    engage: 1.0,
+                    scaling: 2.0,
+                    slots: 4,
+                },
+                enemy: EnemyItemSignals {
+                    magic: 1.0,
+                    physical: 2.0,
+                    frontline: 2.0,
+                    tanks: 1.0,
+                    assassins: 1.0,
+                    supports: 1.0,
+                    dive: 1.0,
+                    poke: 1.0,
+                    pick: 1.0,
+                    sustain: 1.0,
+                    marksmen: 1.0,
+                    hard_cc: 1.0,
+                    healing: 1.0,
+                    shielding: 1.0,
+                    mobility: 1.0,
+                    burst: 1.0,
+                },
+                enemy_details: Vec::new(),
+                default_build: None,
+                lane_threat: Some("ad".to_string()),
+                fallback: DraftItemPlan {
+                    core: "Fallback core".to_string(),
+                    boots: "Fallback boots".to_string(),
+                    defensive: "Fallback defense".to_string(),
+                    situational: Vec::new(),
+                    notes: Vec::new(),
+                    default_build_source: None,
+                    default_item_ids: None,
+                    starting: None,
+                    first_recall: None,
+                    boot_choice: None,
+                    boot_alternatives: None,
+                    core_build: None,
+                    final_build: None,
+                    situational_items: None,
+                    matrix_rows: None,
+                    threat_summary: None,
+                },
+            },
+        );
+        let names: Vec<String> = plan
+            .core_build
+            .unwrap_or_default()
+            .into_iter()
+            .map(|row| row.name)
+            .collect();
+        assert_eq!(names.len(), 3);
+        assert!(names.contains(&"Infinity Edge".to_string()));
+        assert!(names.contains(&"Lord Dominik's Regards".to_string()));
+        assert!(names.contains(&"The Collector".to_string()));
+        assert!(!names.iter().any(|name| {
+            name == "Guinsoo's Rageblade" || name == "Hextech Gunblade" || name == "Statikk Shiv"
+        }));
     }
 
     #[test]

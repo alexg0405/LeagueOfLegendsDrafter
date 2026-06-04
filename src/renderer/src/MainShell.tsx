@@ -1004,7 +1004,7 @@ export function MainShell() {
     runnerId: 'NEXUS//LOCAL',
     region: 'AMERICAS',
     dataVersion: ddVersion && ddVersion[0] !== '(' ? ddVersion : '—',
-    build: '4.1.0',
+    build: '4.2.0',
     networkStatus: lcuStatus === 'ready' ? 'On' : 'Wait',
     link: lcuStatus === 'ready' ? 'League: ready' : 'League: waiting',
     resourceLine: `Picks from: ${copyDraftSource(draftSource)} · Suggestions: ${patchLabel ?? ENGINE_V1_LABEL} · ${livePublicDataStatusLine(liveDataStatus)}`,

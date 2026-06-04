@@ -7,6 +7,7 @@ type UggSeedRole = Exclude<DraftRole, 'unknown'>
 type UggSeedRow = {
   championId: number
   role: UggSeedRole
+  sourceType?: 'ugg' | 'ugg-fallback' | 'trusted' | 'generated' | 'pinned'
   sourceUrl: string
   starting?: number[]
   boots?: number[]

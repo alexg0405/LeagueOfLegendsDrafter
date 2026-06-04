@@ -72,47 +72,7 @@ export type ItemLite = {
   consumeOnFull?: boolean
 }
 
-const RETIRED_OR_OFFSTORE_ITEM_NAMES = new Set([
-  'prowlers claw',
-  "prowler's claw",
-  'galeforce',
-  'everfrost',
-  'crown of the shattered queen',
-  'divine sunderer',
-  'goredrinker',
-  'duskblade of draktharr',
-  'demon kings crown',
-  "demon king's crown",
-  'dragonheart',
-  'darksteel talons',
-  'detonation orb',
-  'eleisas miracle',
-  "eleisa's miracle",
-  'empyrean promise',
-  'force of entropy',
-  'gambler s blade',
-  "gambler's blade",
-  'hemomancers helm',
-  "hemomancer's helm",
-  'hexbolt companion',
-  'innervating locket',
-  'kinslayer',
-  'mirage blade',
-  'moonflair spellblade',
-  'perplexity',
-  'protoplasm harness',
-  'puppeteer',
-  'reapers toll',
-  "reaper's toll",
-  'reverberation',
-  'runecarver',
-  'sanguine gift',
-  'shield of molten stone',
-  'sword of the blossoming dawn',
-  'talisman of ascension',
-  'twilights edge',
-  "twilight's edge"
-])
+const RETIRED_OR_OFFSTORE_ITEM_NAMES = new Set<string>()
 
 const SUMMONERS_RIFT_MODE_NAMES = new Set(['classic', 'sr', 'summoners rift', "summoner's rift", 'summoners_rift'])
 
@@ -132,7 +92,7 @@ function hasNonstandardItemAccess(item: Record<string, unknown>): boolean {
 }
 
 function isModeExclusiveItemId(id: number): boolean {
-  return (id >= 220000 && id < 230000) || (id >= 440000 && id < 450000)
+  return id >= 10000
 }
 
 function hasOnlyNonRiftModes(item: Record<string, unknown>): boolean {

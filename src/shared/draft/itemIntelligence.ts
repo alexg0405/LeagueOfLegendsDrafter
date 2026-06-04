@@ -189,6 +189,43 @@ function championClasses(profile: ChampionBuildProfile | null | undefined): stri
   return ['marksman', 'mage', 'fighter', 'tank', 'support', 'assassin'].filter((cls) => tags.includes(cls))
 }
 
+function compactName(value: string | null | undefined): string {
+  return (value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+const ON_HIT_CARRIES = new Set([
+  'ashe',
+  'kaisa',
+  'kalista',
+  'kayle',
+  'kogmaw',
+  'teemo',
+  'twitch',
+  'varus',
+  'vayne',
+  'zeri'
+])
+
+const HYBRID_CARRIES = new Set([
+  'corki',
+  'ezreal',
+  'kaisa',
+  'kennen',
+  'kogmaw',
+  'teemo',
+  'varus',
+  'zeri'
+])
+
+const SPECIALIST_ON_HIT_ITEMS = new Set([
+  "guinsoo's rageblade",
+  'hextech gunblade',
+  "nashor's tooth",
+  'statikk shiv',
+  'terminus',
+  "wit's end"
+])
+
 function itemRef(item: ItemLite, score: number, profile: ItemProfile, reason: string): DraftItemRef {
   return {
     itemId: item.id,
@@ -301,6 +338,8 @@ function scoreItem(item: ItemLite, profile: ItemProfile, ctx: AdaptiveItemContex
   const p = profile.tags
   const classes = championClasses(ctx.buildProfile)
   const damage = ctx.buildProfile?.damage ?? 'flex'
+  const championKey = compactName(ctx.championName)
+  const itemKey = canonicalItemName(item.name)
   let score = 35
   if (profile.phase === 'completed') score += 20
   if (profile.phase === 'component') score += 7
@@ -333,6 +372,14 @@ function scoreItem(item: ItemLite, profile: ItemProfile, ctx: AdaptiveItemContex
   if (ctx.role !== 'jungle' && p.includes('jungle')) score -= 60
   if (ctx.role === 'jungle' && p.includes('jungle') && profile.phase === 'starter') score += 28
   if (ctx.role === 'support' && p.includes('support')) score += 18
+  if (ctx.role === 'bottom' && classes.includes('marksman') && damage === 'ad') {
+    if (SPECIALIST_ON_HIT_ITEMS.has(itemKey) && !ON_HIT_CARRIES.has(championKey)) {
+      score -= 36
+    }
+    if (p.includes('ap') && !p.includes('crit') && !HYBRID_CARRIES.has(championKey)) {
+      score -= 34
+    }
+  }
   if (item.requiredChampion && item.requiredChampion.toLowerCase() !== ctx.championName.toLowerCase()) score -= 100
   if (profile.phase === 'consumable') score -= 25
   return score

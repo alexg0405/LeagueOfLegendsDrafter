@@ -364,7 +364,7 @@ fn public_data_base_url() -> String {
 async fn fetch_json(client: &reqwest::Client, url: &str) -> Result<Value, String> {
     let response = client
         .get(url)
-        .header("user-agent", "NexusDraft/4.1 rust-desktop")
+        .header("user-agent", "NexusDraft/4.2 rust-desktop")
         .send()
         .await
         .map_err(|error| error.to_string())?;

@@ -3,7 +3,7 @@
 exports[`parityState fixture (TS v1, candidate subset) > ranks ParityStateJson candidates and is stable for snapshot review 1`] = `
 [
   {
-    "c": 0.514,
+    "c": 0.515,
     "i": 22,
   },
   {

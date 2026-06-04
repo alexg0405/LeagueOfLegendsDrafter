@@ -138,7 +138,27 @@
     display: none;
   }
 
-  /* Overlay top-level: no body scroll — the HUD is self-contained and scrolls invisibly if needed */
+  /* Overlay main content: real scroll target inside the fixed HUD window. */
+  .nexus-overlay-scroll {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+    overscroll-behavior: contain;
+    pointer-events: auto;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--nexus-lime) 34%, transparent) transparent;
+    touch-action: pan-y;
+  }
+  .nexus-overlay-scroll::-webkit-scrollbar {
+    width: 5px;
+  }
+  .nexus-overlay-scroll::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--nexus-lime) 28%, transparent);
+  }
+  .nexus-overlay-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Overlay top-level: no body scroll — the HUD is self-contained and scrolls internally. */
   html:has(.nexus-overlay-root) {
     overflow: hidden;
     height: 100%;

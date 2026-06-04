@@ -622,7 +622,7 @@ export function OverlayPanel() {
   }, [lookupId, poolRole, lookupDdragon, lookupChampion])
 
   return (
-    <div className="nexus-overlay-root h-full min-h-0 flex flex-col font-body font-bold text-nexus-text text-sm relative">
+    <div className="nexus-overlay-root flex h-[calc(100dvh-8px)] max-h-[calc(100dvh-8px)] min-h-0 flex-col overflow-hidden font-body font-bold text-nexus-text text-sm relative">
       <div className="nexus-noise absolute inset-0 opacity-[0.35] pointer-events-none z-0" aria-hidden />
       <div
         className="nexus-overlay-drag relative z-10 flex items-center flex-wrap gap-x-2 gap-y-1 border-b border-nexus-line bg-nexus-surface-2 px-3 py-2.5"
@@ -885,7 +885,7 @@ export function OverlayPanel() {
         </div>
       )}
 
-      <div className="nexus-overlay-nodrag nexus-overlay-no-scrollbar relative z-10 flex-1 min-h-0 overflow-y-auto px-3.5 py-3.5 text-sm leading-relaxed">
+      <div className="nexus-overlay-nodrag nexus-overlay-scroll relative z-10 flex-1 min-h-0 overflow-y-auto px-3.5 py-3.5 text-sm leading-relaxed">
         {s && (
           <section className="mb-5">
             <SectionLabel>Draft board</SectionLabel>

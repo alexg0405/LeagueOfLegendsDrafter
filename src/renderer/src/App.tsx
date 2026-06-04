@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { ParticleIntroActiveContext, ParticleWordIntroOverlay, ParticleWordLoader } from './ParticleWordLoader'
 import { isOverlayRoute } from './route'
 
@@ -21,11 +21,23 @@ function shouldShowIntroOverlay(): boolean {
 function IntroShell({ children }: { children: ReactNode }) {
   const [entered, setEntered] = useState(() => !shouldShowIntroOverlay())
 
+  useEffect(() => {
+    if (entered || typeof document === 'undefined') {
+      return
+    }
+    document.documentElement.classList.add('nexus-intro-active')
+    document.body.classList.add('nexus-intro-active')
+    return () => {
+      document.documentElement.classList.remove('nexus-intro-active')
+      document.body.classList.remove('nexus-intro-active')
+    }
+  }, [entered])
+
   return (
     <ParticleIntroActiveContext.Provider value={!entered}>
       <div
         aria-hidden={!entered}
-        className={entered ? undefined : 'pointer-events-none select-none'}
+        className={entered ? undefined : 'pointer-events-none fixed inset-0 h-dvh w-full overflow-hidden select-none'}
         style={entered ? undefined : { visibility: 'hidden' }}
       >
         {children}

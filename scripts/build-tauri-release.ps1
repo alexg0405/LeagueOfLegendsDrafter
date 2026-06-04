@@ -83,6 +83,9 @@ if ($StageWebsitePortable) {
   }
 
   $websitePortablePath = Join-Path $publicDownloadsDir "Nexus-Draft-Portable-$Version.exe"
+  Get-ChildItem -LiteralPath $publicDownloadsDir -Filter 'Nexus-Draft-Portable-*.exe' |
+    Where-Object { $_.FullName -ne $websitePortablePath } |
+    Remove-Item -Force
   Copy-Item -LiteralPath $rawExePath -Destination $websitePortablePath -Force
   Write-Host "Staged website portable download: $websitePortablePath"
 }

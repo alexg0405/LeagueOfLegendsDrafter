@@ -619,7 +619,7 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
     <div
       ref={rootRef}
       className={[
-        'fixed inset-0 z-[300] overflow-hidden bg-transparent text-nexus-text outline-none',
+        'fixed inset-0 z-[300] h-dvh w-full overflow-hidden bg-transparent text-nexus-text outline-none',
         exiting ? 'pointer-events-none' : 'cursor-pointer'
       ].join(' ')}
       role="button"
@@ -649,7 +649,7 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
 
 export function ParticleWordLoader({ label = 'Loading' }: ParticleWordLoaderProps) {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#06100d_0%,#020706_100%)] text-nexus-text">
+    <div className="fixed inset-0 h-dvh w-full overflow-hidden bg-[linear-gradient(180deg,#06100d_0%,#020706_100%)] text-nexus-text">
       <div className="nexus-noise absolute inset-0 opacity-70" aria-hidden />
       <ParticleWordCanvas
         className="absolute inset-0 h-full w-full"

@@ -1,0 +1,77 @@
+name: Bump release version
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore: bump release version') }}
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Inspect pushed commits
+        id: inspect
+        env:
+          COMMITS_JSON: ${{ toJson(github.event.commits) }}
+        run: |
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const commits = JSON.parse(process.env.COMMITS_JSON || '[]')
+          const versionFiles = new Set([
+            'package.json',
+            'package-lock.json',
+            'Cargo.lock',
+            'src-tauri/Cargo.toml',
+            'src-tauri/tauri.conf.json',
+            'src-tauri/src/lib.rs',
+            'src/renderer/src/MainShell.tsx',
+            'src/renderer/src/WebDraftApp.tsx'
+          ])
+          const userCommits = commits.filter((commit) => !String(commit.message || '').startsWith('chore: bump release version'))
+          const touchedVersion = userCommits.some((commit) =>
+            [...(commit.added || []), ...(commit.modified || []), ...(commit.removed || [])].some((path) => versionFiles.has(path))
+          )
+          console.log(`count=${userCommits.length}`)
+          console.log(`skip=${touchedVersion || userCommits.length === 0}`)
+          NODE
+
+      - name: Bump release version
+        if: ${{ steps.inspect.outputs.skip != 'true' }}
+        run: npm run release:bump-version -- --count ${{ steps.inspect.outputs.count }}
+
+      - name: Build website portable download
+        if: ${{ steps.inspect.outputs.skip != 'true' }}
+        run: npm run tauri:portable:web
+
+      - name: Commit version bump
+        if: ${{ steps.inspect.outputs.skip != 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json Cargo.lock src-tauri/Cargo.toml src-tauri/tauri.conf.json src-tauri/src/lib.rs src/renderer/src/MainShell.tsx src/renderer/src/WebDraftApp.tsx src/renderer/public/downloads
+          git diff --cached --quiet || git commit -m "chore: bump release version"
+          git push

@@ -398,10 +398,10 @@ export function DraftItemMatrixView({
     <section
       ref={panelRef}
       tabIndex={-1}
-      className={`relative isolate flex min-h-0 flex-col overflow-hidden border border-nexus-lime/45 bg-nexus-surface/95 shadow-[0_0_42px_rgba(29,212,168,0.18)] focus:outline-none ${isScrolling ? 'nexus-matrix-scrolling' : ''} ${className}`}
+      className={`relative isolate flex min-h-0 flex-col overflow-hidden border border-nexus-lime/45 bg-nexus-surface shadow-[0_0_42px_rgba(29,212,168,0.18)] focus:outline-none ${isScrolling ? 'nexus-matrix-scrolling' : ''} ${className}`}
     >
-      <NexusEffectsLayer surface="matrix" quality="high" className="z-0 opacity-85" />
-      <header className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-b border-nexus-lime/35 bg-nexus-surface-2/95 px-3 py-2.5">
+      <NexusEffectsLayer surface="matrix" quality="high" className="z-0 opacity-35" />
+      <header className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-b border-nexus-lime/35 bg-nexus-surface-2 px-3 py-2.5">
         <div className="min-w-0 cursor-move select-none nexus-overlay-drag nexus-window-drag" data-tauri-drag-region>
           <p className="m-0 font-mono text-[10px] uppercase tracking-[0.22em] text-nexus-lime/75">item matrix</p>
           <h2 className="m-0 truncate font-display text-lg uppercase tracking-[0.12em] text-nexus-text">{activeChampionName}</h2>
@@ -433,12 +433,12 @@ export function DraftItemMatrixView({
         </div>
       </header>
       {(isPreparing || error) ? (
-        <div className={`relative z-10 border-b border-nexus-line/70 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] ${error ? 'bg-nexus-red/10 text-nexus-red/85' : 'bg-nexus-bg/70 text-nexus-muted'}`}>
+        <div className={`relative z-10 border-b border-nexus-line/70 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] ${error ? 'bg-[#1a0d0c] text-nexus-red/85' : 'bg-nexus-bg text-nexus-muted'}`}>
           {error ? `Item matrix unavailable: ${error}` : 'Preparing items...'}
         </div>
       ) : null}
       {selectablePlans.length > 1 ? (
-        <div className="nexus-window-nodrag relative z-10 grid gap-2 border-b border-nexus-line/70 bg-nexus-bg/70 px-3 py-2">
+        <div className="nexus-window-nodrag relative z-10 grid gap-2 border-b border-nexus-line/70 bg-nexus-bg px-3 py-2">
           <div className="flex flex-wrap items-center gap-2">
             <label className="min-w-0 flex-1">
               <span className="sr-only">Champion lookup</span>
@@ -484,7 +484,7 @@ export function DraftItemMatrixView({
           </div>
         </div>
       ) : null}
-      <div ref={scrollRef} className="nexus-matrix-scroll relative z-10 min-h-0 flex-1 overflow-auto bg-nexus-bg/25" onScroll={handleMatrixScroll}>
+      <div ref={scrollRef} className="nexus-matrix-scroll relative z-10 min-h-0 flex-1 overflow-auto bg-nexus-bg" onScroll={handleMatrixScroll}>
         <table className="w-full min-w-[54rem] table-fixed border-collapse text-left font-mono text-xs">
           <colgroup>
             <col className="w-8" />

@@ -121,7 +121,8 @@ export function NexusHomeDashboard({
                 onClick={onEnterOperations}
                 onPointerEnter={(event) => emitNexusEffect('button:hover', { x: event.clientX, y: event.clientY })}
                 onPointerDown={(event) => emitNexusEffect('button:press', { x: event.clientX, y: event.clientY })}
-                className="nexus-focus px-7 py-3 font-display text-base tracking-[0.18em] uppercase bg-nexus-lime text-nexus-bg border border-nexus-lime/90"
+                className="nexus-focus nexus-glitch-cta nexus-glitch-cta--solid px-7 py-3 font-display text-base tracking-[0.18em] uppercase bg-nexus-lime text-nexus-bg border border-nexus-lime/90"
+                data-glitch-label="Open draft"
                 whileHover={reduce ? undefined : { x: 3, transition: { duration: 0.12, ease: EASING.sharp } }}
                 whileTap={reduce ? undefined : { scale: 0.99 }}
               >

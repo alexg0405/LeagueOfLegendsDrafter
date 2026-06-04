@@ -320,7 +320,7 @@ export function NexusOperationsView({
   return (
     <div className="w-full max-w-4xl mx-auto px-3 sm:px-5 lg:px-6 py-2 sm:py-3 pb-10 text-nexus-text nexus-ops-scroll">
       {itemMatrixOpen && activeItemMatrixPlan ? (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-4">
           <button
             type="button"
             className="absolute inset-0 cursor-default"
@@ -756,8 +756,8 @@ export function NexusOperationsView({
         open={openSectionIds.has('MD_01')}
         onToggle={() => toggleSection('MD_01')}
       >
-        <div className="mb-4 grid gap-3 border-b border-nexus-line/50 pb-4">
-          <div className="grid gap-3 sm:grid-cols-[minmax(8rem,10rem)_minmax(12rem,15rem)_minmax(0,1fr)] sm:items-end">
+        <div className="mb-4 grid min-w-0 gap-3 border-b border-nexus-line/50 pb-4">
+          <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(8rem,10rem)_minmax(12rem,15rem)] lg:items-end xl:grid-cols-[minmax(8rem,10rem)_minmax(12rem,15rem)_minmax(0,1fr)]">
             <label className="flex min-w-0 flex-col gap-1.5">
               <span className="font-mono text-[10px] sm:text-xs text-nexus-lime/85 uppercase tracking-[0.12em]">
                 Rollouts
@@ -790,11 +790,11 @@ export function NexusOperationsView({
                 <option value="worst">Worst in context first</option>
               </select>
             </label>
-            <div className="min-w-0 border border-nexus-line/60 bg-nexus-bg/35 px-3 py-2 font-mono text-xs leading-relaxed text-nexus-muted">
+            <div className="min-w-0 border border-nexus-line/60 bg-nexus-bg/35 px-3 py-2 font-mono text-xs leading-relaxed text-nexus-muted lg:col-span-2 xl:col-span-1">
               <span className="block uppercase tracking-[0.12em] text-nexus-lime/80">
                 {suggestMcRollouts > 0 ? `V1 + ${suggestMcRollouts} rollout(s)` : 'Fast V1'}
               </span>
-              <span className="block truncate" title={`Max ${maxSuggestMcRollouts} rollouts. Higher values react more as picks lock.`}>
+              <span className="block whitespace-normal break-words" title={`Max ${maxSuggestMcRollouts} rollouts. Higher values react more as picks lock.`}>
                 Max {maxSuggestMcRollouts}. Higher values react more as picks lock.
               </span>
             </div>

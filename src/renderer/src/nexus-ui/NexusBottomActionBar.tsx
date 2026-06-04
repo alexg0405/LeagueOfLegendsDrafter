@@ -63,7 +63,8 @@ export function NexusBottomActionBar({
         <motion.button
           type="button"
           onClick={onPrimary}
-          className="nexus-focus relative overflow-hidden px-6 sm:px-8 min-w-[180px] font-display text-base tracking-[0.2em] uppercase bg-nexus-lime text-nexus-bg border-l border-nexus-lime/80 hover:brightness-110"
+          className="nexus-focus nexus-glitch-cta nexus-glitch-cta--solid relative overflow-hidden px-6 sm:px-8 min-w-[180px] font-display text-base tracking-[0.2em] uppercase bg-nexus-lime text-nexus-bg border-l border-nexus-lime/80 hover:brightness-110"
+          data-glitch-label={primaryLabel}
           initial="rest"
           whileHover={reduce ? undefined : 'hover'}
           whileTap={reduce ? undefined : { scale: 0.992 }}

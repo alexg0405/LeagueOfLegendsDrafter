@@ -1,6 +1,6 @@
 {
   "name": "nexusdraft",
-  "version": "3.11.0",
+  "version": "4.0.0",
   "description": "Nexus Draft",
   "author": "Nexus Draft contributors",
   "main": "out/main/index.js",
@@ -16,6 +16,7 @@
     "tauri:build": "tauri build",
     "tauri:build:lowdisk": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:CARGO_BUILD_JOBS='1'; tauri build\"",
     "tauri:portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-tauri-release.ps1 -PortableOnly",
+    "tauri:portable:web": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-tauri-release.ps1 -PortableOnly -StageWebsitePortable",
     "tauri:dist": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-tauri-release.ps1",
     "tauri:dist:clean": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-tauri-release.ps1 -CleanTarget",
     "preview": "electron-vite preview",
@@ -36,6 +37,7 @@
     "release:sign:tauri:azcli": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sign-release-artifacts.ps1 -TauriOnly",
     "release:sign:all:azcli": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sign-release-artifacts.ps1 -IncludeTauri",
     "release:stage-web": "node scripts/stage-desktop-update-feed.mjs",
+    "release:bump-version": "node scripts/bump-release-version.mjs",
     "etl:riot-lane": "node scripts/riot-lane-etl.mjs",
     "items:update:ugg": "node scripts/update-ugg-default-builds.mjs",
     "meta:update:mobalytics": "node scripts/update-public-meta-mobalytics.mjs",

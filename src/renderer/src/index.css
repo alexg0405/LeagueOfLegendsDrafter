@@ -56,6 +56,18 @@
     outline-offset: 2px;
   }
 
+  html.nexus-intro-active {
+    height: 100%;
+    overflow: hidden;
+  }
+  html.nexus-intro-active body,
+  html.nexus-intro-active #root {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    margin: 0;
+  }
+
   .nexus-ops-scroll {
     scrollbar-width: thin;
     scrollbar-color: color-mix(in srgb, var(--nexus-lime) 30%, transparent) transparent;
@@ -203,8 +215,141 @@
   pointer-events: none;
 }
 
+.nexus-glitch-cta {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transform: translateZ(0);
+  transition:
+    border-color 120ms ease-out,
+    box-shadow 120ms ease-out,
+    filter 120ms ease-out,
+    background-color 120ms ease-out;
+}
+
+.nexus-glitch-cta::before,
+.nexus-glitch-cta::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  content: '';
+}
+
+.nexus-glitch-cta::before {
+  z-index: 1;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(240, 113, 103, 0.22) 18%,
+      rgba(61, 184, 255, 0.28) 48%,
+      rgba(232, 243, 238, 0.12) 56%,
+      transparent 82%
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 7px,
+      rgba(232, 243, 238, 0.16) 7px 8px,
+      transparent 8px 14px
+    );
+  mix-blend-mode: screen;
+  transform: translateX(-32%);
+}
+
+.nexus-glitch-cta::after {
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: inherit;
+  color: transparent;
+  content: attr(data-glitch-label);
+  text-shadow:
+    -1.5px 0 rgba(240, 113, 103, 0.78),
+    1.5px 0 rgba(61, 184, 255, 0.82);
+  white-space: nowrap;
+  clip-path: inset(0 0 0 0);
+}
+
+.nexus-glitch-cta--solid:hover,
+.nexus-glitch-cta--solid:focus-visible {
+  box-shadow:
+    0 0 0 1px rgba(232, 243, 238, 0.18),
+    0 0 28px rgba(29, 212, 168, 0.24),
+    -6px 0 18px rgba(240, 113, 103, 0.16),
+    6px 0 18px rgba(61, 184, 255, 0.16);
+}
+
+.nexus-glitch-cta--outline:hover,
+.nexus-glitch-cta--outline:focus-visible {
+  border-color: color-mix(in srgb, var(--nexus-lime) 72%, transparent);
+  background-color: color-mix(in srgb, var(--nexus-lime) 11%, transparent);
+  box-shadow:
+    0 0 0 1px rgba(61, 184, 255, 0.12),
+    -5px 0 16px rgba(240, 113, 103, 0.1),
+    5px 0 16px rgba(61, 184, 255, 0.13);
+}
+
+.nexus-glitch-cta:hover::before,
+.nexus-glitch-cta:focus-visible::before,
+.nexus-glitch-cta:active::before {
+  opacity: 0.75;
+  animation: nexus-glitch-scan 360ms cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+
+.nexus-glitch-cta:hover::after,
+.nexus-glitch-cta:focus-visible::after,
+.nexus-glitch-cta:active::after {
+  opacity: 0.72;
+  animation: nexus-glitch-chroma 260ms steps(2, end) both;
+}
+
+.nexus-glitch-cta:disabled::before,
+.nexus-glitch-cta:disabled::after,
+.nexus-glitch-cta[aria-disabled='true']::before,
+.nexus-glitch-cta[aria-disabled='true']::after {
+  opacity: 0;
+  animation: none;
+}
+
 .nexus-matrix-scrolling .nexus-effects-layer {
   opacity: 0.28;
+}
+
+@keyframes nexus-glitch-scan {
+  0% {
+    transform: translateX(-34%);
+  }
+  45% {
+    transform: translateX(8%);
+  }
+  100% {
+    transform: translateX(34%);
+  }
+}
+
+@keyframes nexus-glitch-chroma {
+  0% {
+    clip-path: inset(0 0 0 0);
+    transform: translate(0, 0);
+  }
+  20% {
+    clip-path: inset(8% 0 68% 0);
+    transform: translate(-1px, 0);
+  }
+  42% {
+    clip-path: inset(58% 0 22% 0);
+    transform: translate(1px, 0);
+  }
+  68% {
+    clip-path: inset(30% 0 42% 0);
+    transform: translate(-0.5px, 0.5px);
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    transform: translate(0, 0);
+  }
 }
 
 @keyframes nexus-command-edge {
@@ -347,11 +492,26 @@
 
 @media (prefers-reduced-motion: reduce) {
   .nexus-command-deck::before,
+  .nexus-glitch-cta::before,
+  .nexus-glitch-cta::after,
   .nexus-matrix-stage::before,
   .nexus-matrix-beams span,
   .nexus-matrix-panel,
   .nexus-effects-layer {
     animation: none !important;
+  }
+
+  .nexus-glitch-cta:hover::before,
+  .nexus-glitch-cta:focus-visible::before {
+    opacity: 0.24;
+    transform: none;
+  }
+
+  .nexus-glitch-cta:hover::after,
+  .nexus-glitch-cta:focus-visible::after {
+    opacity: 0.38;
+    clip-path: inset(0 0 0 0);
+    transform: none;
   }
 
   .nexus-effects-layer {

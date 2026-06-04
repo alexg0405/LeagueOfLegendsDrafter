@@ -50,6 +50,36 @@ describe('Data Dragon item normalization', () => {
         stats: { FlatPhysicalDamageMod: 55 },
         gold: { total: 3000, purchasable: true },
         maps: { 11: true }
+      },
+      443056: {
+        name: "Demon King's Crown",
+        tags: ['Health'],
+        stats: { FlatHPPoolMod: 300 },
+        gold: { total: 2500, purchasable: true },
+        maps: { 11: true, 30: true }
+      },
+      443193: {
+        name: 'Protoplasm Harness',
+        tags: ['Health', 'Active'],
+        stats: { FlatHPPoolMod: 400 },
+        gold: { total: 2500, purchasable: true },
+        maps: { 11: true, 30: true }
+      },
+      9005: {
+        name: 'Mode Only Item',
+        tags: ['Damage'],
+        stats: { FlatPhysicalDamageMod: 40 },
+        gold: { total: 2600, purchasable: true },
+        maps: { 11: true },
+        modes: ['ARAM']
+      },
+      9006: {
+        name: 'Champion Locked Item',
+        tags: ['Damage'],
+        stats: { FlatPhysicalDamageMod: 40 },
+        gold: { total: 2600, purchasable: true },
+        maps: { 11: true },
+        requiredChampion: 'SomeChampion'
       }
     })
 

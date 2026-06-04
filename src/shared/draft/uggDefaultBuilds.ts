@@ -1,5 +1,5 @@
 import seed from '../data/uggDefaultItemBuildsSeed.json'
-import type { ItemLite } from '../dataDragon'
+import { isRecommendableSummonersRiftItem, type ItemLite } from '../dataDragon'
 import type { DraftItemRef, DraftRole } from './types'
 
 type UggSeedRole = Exclude<DraftRole, 'unknown'>
@@ -93,7 +93,7 @@ export function getUggDefaultItemBuild(
   if (!row) {
     return null
   }
-  const byId = new Map(itemCatalog.map((item) => [item.id, item] as const))
+  const byId = new Map(itemCatalog.filter(isRecommendableSummonersRiftItem).map((item) => [item.id, item] as const))
   const starting = refsFor(row.starting, byId, 'starting')
   const boots = refsFor(row.boots, byId, 'boots')
   const core = refsFor(row.core, byId, 'core')

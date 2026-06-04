@@ -1890,7 +1890,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-draft-tauri"
-version = "4.0.0"
+version = "4.1.0"
 dependencies = [
  "base64 0.22.1",
  "nexus-draft-core",

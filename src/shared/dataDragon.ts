@@ -80,8 +80,41 @@ const RETIRED_OR_OFFSTORE_ITEM_NAMES = new Set([
   'crown of the shattered queen',
   'divine sunderer',
   'goredrinker',
-  'duskblade of draktharr'
+  'duskblade of draktharr',
+  'demon kings crown',
+  "demon king's crown",
+  'dragonheart',
+  'darksteel talons',
+  'detonation orb',
+  'eleisas miracle',
+  "eleisa's miracle",
+  'empyrean promise',
+  'force of entropy',
+  'gambler s blade',
+  "gambler's blade",
+  'hemomancers helm',
+  "hemomancer's helm",
+  'hexbolt companion',
+  'innervating locket',
+  'kinslayer',
+  'mirage blade',
+  'moonflair spellblade',
+  'perplexity',
+  'protoplasm harness',
+  'puppeteer',
+  'reapers toll',
+  "reaper's toll",
+  'reverberation',
+  'runecarver',
+  'sanguine gift',
+  'shield of molten stone',
+  'sword of the blossoming dawn',
+  'talisman of ascension',
+  'twilights edge',
+  "twilight's edge"
 ])
+
+const SUMMONERS_RIFT_MODE_NAMES = new Set(['classic', 'sr', 'summoners rift', "summoner's rift", 'summoners_rift'])
 
 export function canonicalItemName(raw: unknown): string {
   return typeof raw === 'string'
@@ -95,7 +128,22 @@ export function canonicalItemName(raw: unknown): string {
 }
 
 function hasNonstandardItemAccess(item: Record<string, unknown>): boolean {
-  return item.requiredAlly != null || item.requiredBuffCurrencyName != null || item.specialRecipe != null
+  return item.requiredAlly != null || item.requiredBuffCurrencyName != null || item.specialRecipe != null || item.requiredChampion != null
+}
+
+function isModeExclusiveItemId(id: number): boolean {
+  return (id >= 220000 && id < 230000) || (id >= 440000 && id < 450000)
+}
+
+function hasOnlyNonRiftModes(item: Record<string, unknown>): boolean {
+  const modes = Array.isArray(item.modes) ? item.modes : Array.isArray(item.requiredModes) ? item.requiredModes : null
+  if (!modes?.length) {
+    return false
+  }
+  const normalized = modes
+    .map((mode) => canonicalItemName(mode))
+    .filter(Boolean)
+  return normalized.length > 0 && normalized.every((mode) => !SUMMONERS_RIFT_MODE_NAMES.has(mode))
 }
 
 function itemQuality(item: ItemLite): number {
@@ -125,7 +173,14 @@ function preferItemForCanonicalName(next: ItemLite, current: ItemLite): ItemLite
 
 export function isCurrentSummonersRiftStoreItem(id: number, item: Record<string, unknown>): boolean {
   const maps = item.maps != null && typeof item.maps === 'object' ? item.maps as Record<string, unknown> : {}
-  if (maps['11'] !== true || item.hideFromAll === true || item.inStore === false || hasNonstandardItemAccess(item)) {
+  if (
+    maps['11'] !== true ||
+    item.hideFromAll === true ||
+    item.inStore === false ||
+    hasNonstandardItemAccess(item) ||
+    hasOnlyNonRiftModes(item) ||
+    isModeExclusiveItemId(id)
+  ) {
     return false
   }
   const gold = item.gold != null && typeof item.gold === 'object' ? item.gold as Record<string, unknown> : {}
@@ -134,6 +189,17 @@ export function isCurrentSummonersRiftStoreItem(id: number, item: Record<string,
   }
   const name = canonicalItemName(item.name)
   return id > 0 && !RETIRED_OR_OFFSTORE_ITEM_NAMES.has(name)
+}
+
+export function isRecommendableSummonersRiftItem(item: ItemLite): boolean {
+  return (
+    item.id > 0 &&
+    item.maps['11'] === true &&
+    item.gold.purchasable === true &&
+    item.requiredChampion == null &&
+    !isModeExclusiveItemId(item.id) &&
+    !RETIRED_OR_OFFSTORE_ITEM_NAMES.has(canonicalItemName(item.name))
+  )
 }
 
 const championCache = new Map<string, Map<string, number>>()

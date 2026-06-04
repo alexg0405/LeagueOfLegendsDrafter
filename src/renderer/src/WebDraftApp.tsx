@@ -80,7 +80,7 @@ const MAX_WEB_ROLLOUTS = 200
 const LS_WEB_CHAMPION_POOL_PREFS = 'nexusdraft.web.v1.championPoolPrefs'
 const LS_WEB_PLAYER_POOL_PROFILE = 'nexusdraft.web.v1.playerChampionPoolProfile'
 const LS_WEB_RECOMMENDATION_POOL_MODE = 'nexusdraft.web.v1.recommendationPoolMode'
-const EXE_DOWNLOAD_FILE = 'Nexus-Draft-Portable-4.0.0.exe'
+const EXE_DOWNLOAD_FILE = 'Nexus-Draft-Portable-4.1.0.exe'
 const EXE_DOWNLOAD_URL = `/downloads/${EXE_DOWNLOAD_FILE}`
 const GITHUB_PROFILE_URL = 'https://github.com/alexg0405'
 const LIVE_META_REFRESH_MS = 30 * 60 * 1000
@@ -2097,7 +2097,7 @@ export function WebDraftApp() {
               </a>
               <div className="mt-4 flex items-center gap-2 border-t border-nexus-line/50 pt-3 text-nexus-muted">
                 <NexusPlus className="text-[10px]" />
-                <span className="font-mono text-xs">Web build v4.0.0</span>
+                <span className="font-mono text-xs">Web build v4.1.0</span>
               </div>
             </NexusPanel>
           </aside>

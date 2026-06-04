@@ -2997,6 +2997,64 @@ fn canonical_item_name(value: &str) -> String {
     out.trim().to_string()
 }
 
+fn is_mode_exclusive_item_id(id: i32) -> bool {
+    (220000..230000).contains(&id) || (440000..450000).contains(&id)
+}
+
+fn is_retired_or_offstore_item_name(name: &str) -> bool {
+    matches!(
+        canonical_item_name(name).as_str(),
+        "prowler's claw"
+            | "prowlers claw"
+            | "galeforce"
+            | "everfrost"
+            | "crown of the shattered queen"
+            | "divine sunderer"
+            | "goredrinker"
+            | "duskblade of draktharr"
+            | "demon king's crown"
+            | "demon kings crown"
+            | "dragonheart"
+            | "darksteel talons"
+            | "detonation orb"
+            | "eleisa's miracle"
+            | "eleisas miracle"
+            | "empyrean promise"
+            | "force of entropy"
+            | "gambler's blade"
+            | "gambler s blade"
+            | "hemomancer's helm"
+            | "hemomancers helm"
+            | "hexbolt companion"
+            | "innervating locket"
+            | "kinslayer"
+            | "mirage blade"
+            | "moonflair spellblade"
+            | "perplexity"
+            | "protoplasm harness"
+            | "puppeteer"
+            | "reaper's toll"
+            | "reapers toll"
+            | "reverberation"
+            | "runecarver"
+            | "sanguine gift"
+            | "shield of molten stone"
+            | "sword of the blossoming dawn"
+            | "talisman of ascension"
+            | "twilight's edge"
+            | "twilights edge"
+    )
+}
+
+fn is_recommendable_sr_item(item: &ItemLite) -> bool {
+    item.id > 0
+        && item.maps.get("11").copied().unwrap_or(false)
+        && item.gold.purchasable
+        && item.required_champion.is_none()
+        && !is_mode_exclusive_item_id(item.id)
+        && !is_retired_or_offstore_item_name(&item.name)
+}
+
 fn champion_name(champion_id: i32, id_to_name: &HashMap<i32, String>) -> String {
     id_to_name
         .get(&champion_id)
@@ -4147,6 +4205,7 @@ fn get_ugg_default_item_build(
         .find(|entry| entry.champion_id == champion_id && entry.role == role)?;
     let by_id: HashMap<i32, ItemLite> = item_catalog
         .iter()
+        .filter(|item| is_recommendable_sr_item(item))
         .map(|item| (item.id, item.clone()))
         .collect();
     let starting = default_refs_for(row.starting.as_ref(), &by_id, "starting");
@@ -4977,6 +5036,7 @@ fn threat(label: &str, tone: &str, reason: &str) -> DraftItemThreat {
 fn build_adaptive_item_plan(items: &[ItemLite], ctx: AdaptiveItemContext) -> DraftItemPlan {
     let mut scored: Vec<(ItemLite, ItemProfile, f64)> = items
         .iter()
+        .filter(|item| is_recommendable_sr_item(item))
         .map(|item| {
             let profile = classify_item(item);
             let score = score_item(item, &profile, &ctx);
@@ -5344,6 +5404,8 @@ mod tests {
     use super::*;
 
     fn item(id: i32, name: &str, description: &str, tags: &[&str], total: f64) -> ItemLite {
+        let mut maps = HashMap::new();
+        maps.insert("11".to_string(), true);
         ItemLite {
             id,
             name: name.to_string(),
@@ -5359,7 +5421,7 @@ mod tests {
             },
             from: None,
             into: None,
-            maps: HashMap::new(),
+            maps,
             depth: None,
             required_champion: None,
             consumed: None,
@@ -5392,6 +5454,36 @@ mod tests {
         assert_eq!(profile.phase, "boots");
         assert!(profile.tags.contains(&"mr".to_string()));
         assert!(profile.tags.contains(&"anti-cc".to_string()));
+    }
+
+    #[test]
+    fn recommendable_item_filter_rejects_mode_only_rows() {
+        let black_cleaver = item(
+            3071,
+            "Black Cleaver",
+            "Attack damage and armor shred.",
+            &["Damage", "Health"],
+            3000.0,
+        );
+        let demon_crown = item(
+            443056,
+            "Demon King's Crown",
+            "Arena-only scaling crown.",
+            &["Health"],
+            2500.0,
+        );
+        let mut champion_locked = item(
+            9005,
+            "Champion Locked Item",
+            "Champion specific item.",
+            &["Damage"],
+            2600.0,
+        );
+        champion_locked.required_champion = Some("ModeOnly".to_string());
+
+        assert!(is_recommendable_sr_item(&black_cleaver));
+        assert!(!is_recommendable_sr_item(&demon_crown));
+        assert!(!is_recommendable_sr_item(&champion_locked));
     }
 
     #[test]

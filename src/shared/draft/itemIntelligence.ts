@@ -1,4 +1,4 @@
-import { canonicalItemName, type ItemLite } from '../dataDragon'
+import { canonicalItemName, isRecommendableSummonersRiftItem, type ItemLite } from '../dataDragon'
 import type { ChampionBuildProfile, DraftItemEnemyTarget, DraftItemPlan, DraftItemRef, DraftItemThreat, DraftRole } from './types'
 
 export type ItemPhase = DraftItemRef['phase']
@@ -400,6 +400,7 @@ function threatSummary(ctx: AdaptiveItemContext): DraftItemThreat[] {
 export function buildAdaptiveItemPlan(items: readonly ItemLite[], ctx: AdaptiveItemContext): DraftItemPlan {
   const scored = dedupeScoredItems(
     items
+      .filter(isRecommendableSummonersRiftItem)
       .map((item) => {
         const profile = classifyItem(item)
         const score = scoreItem(item, profile, ctx)

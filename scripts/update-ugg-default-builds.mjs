@@ -27,6 +27,63 @@ function unique(values) {
   return Array.from(new Set(values))
 }
 
+const retiredOrOffstoreItemNames = new Set([
+  "prowler's claw",
+  'galeforce',
+  'everfrost',
+  'crown of the shattered queen',
+  'divine sunderer',
+  'goredrinker',
+  'duskblade of draktharr',
+  "demon king's crown",
+  'dragonheart',
+  'darksteel talons',
+  'detonation orb',
+  "eleisa's miracle",
+  'empyrean promise',
+  'force of entropy',
+  "gambler's blade",
+  "hemomancer's helm",
+  'hexbolt companion',
+  'innervating locket',
+  'kinslayer',
+  'mirage blade',
+  'moonflair spellblade',
+  'perplexity',
+  'protoplasm harness',
+  'puppeteer',
+  "reaper's toll",
+  'reverberation',
+  'runecarver',
+  'sanguine gift',
+  'shield of molten stone',
+  'sword of the blossoming dawn',
+  'talisman of ascension',
+  "twilight's edge"
+])
+
+const summonersRiftModeNames = new Set(['classic', 'sr', 'summoners rift', "summoner's rift", 'summoners_rift'])
+
+function canonicalItemName(name) {
+  return String(name ?? '')
+    .toLowerCase()
+    .replace(/\u2019/g, "'")
+    .replace(/[â€™']/g, "'")
+    .replace(/[^a-z0-9']+/g, ' ')
+    .trim()
+}
+
+function isModeExclusiveItemId(id) {
+  return (id >= 220000 && id < 230000) || (id >= 440000 && id < 450000)
+}
+
+function hasOnlyNonRiftModes(item) {
+  const modes = Array.isArray(item.modes) ? item.modes : Array.isArray(item.requiredModes) ? item.requiredModes : null
+  if (!modes?.length) return false
+  const normalized = modes.map(canonicalItemName).filter(Boolean)
+  return normalized.length > 0 && normalized.every((mode) => !summonersRiftModeNames.has(mode))
+}
+
 function currentStoreItems(itemJson) {
   const byId = new Map()
   for (const [idText, item] of Object.entries(itemJson.data ?? {})) {
@@ -34,13 +91,17 @@ function currentStoreItems(itemJson) {
     const name = String(item.name ?? '').toLowerCase().replace(/[’']/g, "'")
     if (
       Number.isFinite(id) &&
+      !isModeExclusiveItemId(id) &&
       item.maps?.['11'] === true &&
       item.hideFromAll !== true &&
       item.inStore !== false &&
       item.gold?.purchasable === true &&
       item.requiredAlly == null &&
       item.requiredBuffCurrencyName == null &&
+      item.requiredChampion == null &&
       item.specialRecipe == null &&
+      !hasOnlyNonRiftModes(item) &&
+      !retiredOrOffstoreItemNames.has(canonicalItemName(item.name)) &&
       name !== "prowler's claw"
     ) {
       byId.set(id, item)

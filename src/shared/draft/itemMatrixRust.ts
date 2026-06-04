@@ -1,4 +1,5 @@
 import uggSeed from '../data/uggDefaultItemBuildsSeed.json'
+import { isRecommendableSummonersRiftItem } from '../dataDragon'
 import { championThreatOverrideRows } from './championThreatOverrides'
 import type { BuildDraftIntelArgs } from './draftIntel'
 import type { DraftItemMatrixRow, DraftMatchupPlan } from './types'
@@ -73,7 +74,7 @@ export function serializeItemMatrixInput(
     idToName: Array.from(args.idToName?.entries() ?? []).map(([id, name]) => ({ id, name })),
     championMetaById: focusedChampionMeta(args, options),
     enemyRoleInference: args.enemyRoleInference ?? [],
-    itemCatalog: args.itemCatalog ?? [],
+    itemCatalog: (args.itemCatalog ?? []).filter(isRecommendableSummonersRiftItem),
     uggSeed,
     championThreatOverrides: championThreatOverrideRows(),
     focusChampionId: options?.focusChampionId ?? null,

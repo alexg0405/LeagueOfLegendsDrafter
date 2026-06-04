@@ -4,7 +4,9 @@ const DB_NAME = 'nexusdraft-web-v1'
 const DB_VERSION = 2
 const CHAMPION_STORE = 'dd-champions'
 const ITEM_STORE = 'dd-items'
+const ITEM_FILTER_CACHE_VERSION = 'sr-items-v2'
 const keyFor = (version: string) => `v:${version}`
+const itemCacheVersionFor = (version: string) => `${version}:${ITEM_FILTER_CACHE_VERSION}`
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -78,9 +80,9 @@ export async function idbSetChampions(version: string, champions: ChampionLite[]
 }
 
 export async function idbGetItems(version: string): Promise<ItemLite[] | null> {
-  return idbGetRows<ItemLite>(ITEM_STORE, version)
+  return idbGetRows<ItemLite>(ITEM_STORE, itemCacheVersionFor(version))
 }
 
 export async function idbSetItems(version: string, items: ItemLite[]): Promise<void> {
-  return idbSetRows(ITEM_STORE, version, items)
+  return idbSetRows(ITEM_STORE, itemCacheVersionFor(version), items)
 }

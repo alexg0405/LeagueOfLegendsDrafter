@@ -254,4 +254,56 @@ describe('item intelligence', () => {
     }
     expect(plan.matrixRows?.find((row) => row.name === 'Ardent Censer')?.itemId).toBe(3504)
   })
+
+  it('does not score stale Arena or ARAM-only items even if they are in a cached catalog', () => {
+    const arenaItem = item(443056, "Demon King's Crown", 'Arena-only scaling crown.', ['Health'], { FlatHPPoolMod: 300 }, 2500)
+    const aramOnlyItem = item(9005, 'Mode Only Item', 'Mode-only item.', ['Damage'], { FlatPhysicalDamageMod: 45 }, 2600, { maps: { 11: true }, requiredChampion: 'ModeOnly' })
+    const plan = buildAdaptiveItemPlan([...catalog, arenaItem, aramOnlyItem], {
+      championName: 'Aatrox',
+      role: 'top',
+      buildProfile: {
+        damage: 'ad',
+        archetype: 'Fighter',
+        buildHint: 'Bruiser path.',
+        itemHint: 'Use current Summoner Rift items.',
+        tagsLine: 'Fighter',
+        partype: 'None'
+      },
+      ally: { magic: 1, physical: 2, frontline: 1, engage: 1, scaling: 2, slots: 4 },
+      enemy: {
+        magic: 1,
+        physical: 3,
+        frontline: 2,
+        tanks: 1,
+        assassins: 1,
+        supports: 1,
+        dive: 2,
+        poke: 2,
+        pick: 2,
+        sustain: 2,
+        marksmen: 1,
+        hardCc: 2,
+        healing: 2,
+        shielding: 1,
+        mobility: 1,
+        burst: 1
+      },
+      laneThreat: 'ad',
+      fallback: {
+        core: 'Fallback core',
+        boots: 'Fallback boots',
+        defensive: 'Fallback defense',
+        situational: [],
+        notes: []
+      }
+    })
+
+    const ids = new Set([
+      ...(plan.matrixRows ?? []).map((row) => row.itemId),
+      ...(plan.situationalItems ?? []).map((row) => row.itemId),
+      ...(plan.finalBuild ?? []).map((row) => row.itemId)
+    ])
+    expect(ids.has(443056)).toBe(false)
+    expect(ids.has(9005)).toBe(false)
+  })
 })

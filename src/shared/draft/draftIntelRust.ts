@@ -1,4 +1,5 @@
 import uggSeed from '../data/uggDefaultItemBuildsSeed.json'
+import { isRecommendableSummonersRiftItem } from '../dataDragon'
 import { BUNDLED_CHAMPION_NAMES } from './championNameFallback'
 import { championThreatOverrideRows } from './championThreatOverrides'
 import type { BuildDraftIntelArgs } from './draftIntel'
@@ -51,7 +52,7 @@ export function serializeDraftIntelInput(args: BuildDraftIntelArgs): RustDraftIn
     idToName: mergedNameRows(args.idToName),
     championMetaById: Array.from(args.championMetaById?.entries() ?? []).map(([id, meta]) => ({ id, meta })),
     enemyRoleInference: args.enemyRoleInference ?? [],
-    itemCatalog: args.itemCatalog ?? [],
+    itemCatalog: (args.itemCatalog ?? []).filter(isRecommendableSummonersRiftItem),
     uggSeed,
     championThreatOverrides: championThreatOverrideRows(),
     publicBaseStats: publicBaseStatRows(),

@@ -109,7 +109,6 @@
     background: color-mix(in srgb, var(--nexus-surface) 90%, #000 10%);
     -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
-    margin: 4px;
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
   }
   .nexus-overlay-drag {
@@ -142,6 +141,8 @@
   .nexus-overlay-scroll {
     -webkit-app-region: no-drag;
     app-region: no-drag;
+    min-height: 0;
+    overflow-y: auto;
     overscroll-behavior: contain;
     pointer-events: auto;
     scrollbar-width: thin;

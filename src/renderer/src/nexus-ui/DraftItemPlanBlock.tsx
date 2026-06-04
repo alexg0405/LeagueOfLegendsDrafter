@@ -8,6 +8,7 @@ type DraftItemPlanBlockProps = {
   limit?: number
   ddragonVersion?: string | null
   compact?: boolean
+  showHeader?: boolean
   onOpenMatrix?: () => void
 }
 
@@ -71,6 +72,7 @@ export function DraftItemPlanBlock({
   limit = 3,
   ddragonVersion,
   compact = false,
+  showHeader = true,
   onOpenMatrix
 }: DraftItemPlanBlockProps) {
   const matrixRows = itemPlan?.matrixRows ?? []
@@ -85,19 +87,21 @@ export function DraftItemPlanBlock({
   ], 6)
   if (buildRows.length || matrixRows.length || itemPlan.threatSummary?.length || compact) {
     return (
-      <div className="mt-2 grid gap-1.5 border border-nexus-line/60 bg-nexus-bg/30 p-2 text-nexus-muted/90">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[10px] uppercase tracking-[0.14em] text-nexus-lime/80">Build</span>
-          {onOpenMatrix ? (
-            <button
-              type="button"
-              className="nexus-focus border border-nexus-line/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/90 hover:border-nexus-lime/50"
-              onClick={onOpenMatrix}
-            >
-              Matrix
-            </button>
-          ) : null}
-        </div>
+      <div className={`${showHeader ? 'mt-2' : 'mt-0'} grid gap-1.5 border border-nexus-line/60 bg-nexus-bg/30 p-2 text-nexus-muted/90`}>
+        {showHeader ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[10px] uppercase tracking-[0.14em] text-nexus-lime/80">Build</span>
+            {onOpenMatrix ? (
+              <button
+                type="button"
+                className="nexus-focus border border-nexus-line/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/90 hover:border-nexus-lime/50"
+                onClick={onOpenMatrix}
+              >
+                Matrix
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         <div className="flex min-w-0 flex-wrap gap-1.5">
           {buildRows.length ? (
             buildRows.map((item) => (

@@ -622,7 +622,7 @@ export function OverlayPanel() {
   }, [lookupId, poolRole, lookupDdragon, lookupChampion])
 
   return (
-    <div className="nexus-overlay-root flex h-[calc(100dvh-8px)] max-h-[calc(100dvh-8px)] min-h-0 flex-col overflow-hidden font-body font-bold text-nexus-text text-sm relative">
+    <div className="nexus-overlay-root fixed inset-1 flex min-h-0 flex-col overflow-hidden font-body font-bold text-nexus-text text-sm">
       <div className="nexus-noise absolute inset-0 opacity-[0.35] pointer-events-none z-0" aria-hidden />
       <div
         className="nexus-overlay-drag relative z-10 flex items-center flex-wrap gap-x-2 gap-y-1 border-b border-nexus-line bg-nexus-surface-2 px-3 py-2.5"
@@ -939,80 +939,23 @@ export function OverlayPanel() {
                       {d.draftIntel.matchupPlans[0].championName} - {d.draftIntel.matchupPlans[0].summonerSpells}
                     </p>
                     <p className="m-0 text-nexus-muted">Start: {d.draftIntel.matchupPlans[0].startingItem}</p>
-                    <OverlayItemPlan itemPlan={d.draftIntel.matchupPlans[0].itemPlan} ddragonVersion={d.dataDragonVersion} compact limit={2} />
+                    {d.draftIntel.matchupPlans[0].itemPlan ? (
+                      <details className="group mt-1.5">
+                        <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 py-1 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
+                          <span>Build</span>
+                          <span className="text-nexus-lime/80 transition-transform group-open:rotate-45">+</span>
+                        </summary>
+                        <div className="pb-1">
+                          <OverlayItemPlan itemPlan={d.draftIntel.matchupPlans[0].itemPlan} ddragonVersion={d.dataDragonVersion} compact limit={2} showHeader={false} />
+                        </div>
+                      </details>
+                    ) : null}
                   </div>
                 )}
               </div>
             </details>
           </section>
         )}
-
-        <section className="mb-5">
-          <details className="group border border-nexus-line/70 bg-nexus-bg/25 font-mono">
-            <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 text-[10px] uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
-              <span>Personal pool</span>
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="text-nexus-lime/85">My Champs</span>
-                <span className={OVERLAY_PLAYER_POOL_IMPORT_ENABLED ? 'text-nexus-lime/85' : 'text-nexus-yellow/85'}>
-                  {OVERLAY_PLAYER_POOL_IMPORT_ENABLED ? 'Import' : 'Import WIP'}
-                </span>
-                <span className="text-nexus-lime/80 transition-transform group-open:rotate-45" aria-hidden>
-                  +
-                </span>
-              </span>
-            </summary>
-            <div className="border-t border-nexus-line/55 px-2 py-2">
-              <div className="grid grid-cols-[minmax(0,1fr)_5rem] gap-2">
-                <input
-                  type="text"
-                  className="nexus-focus min-w-0 font-mono text-xs py-1.5 px-2.5 border border-nexus-line bg-nexus-bg text-nexus-text placeholder:text-nexus-muted/70"
-                  placeholder={OVERLAY_PLAYER_POOL_IMPORT_ENABLED ? 'GameName#TagLine' : 'Import paused'}
-                  value={riotIdInput}
-                  onChange={(event) => setRiotIdInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      void importPlayerChampionPool()
-                    }
-                  }}
-                  aria-label="Riot ID"
-                  disabled={!OVERLAY_PLAYER_POOL_IMPORT_ENABLED}
-                />
-                <select
-                  className="nexus-focus min-w-0 font-mono text-xs py-1.5 px-2 border border-nexus-line bg-nexus-bg text-nexus-text"
-                  value={riotPlatform}
-                  onChange={(event) => setRiotPlatform(event.target.value as RiotPlatform)}
-                  aria-label="Riot platform"
-                  disabled={!OVERLAY_PLAYER_POOL_IMPORT_ENABLED}
-                >
-                  {RIOT_PLATFORMS.map((platform) => (
-                    <option key={`overlay-riot-platform-${platform}`} value={platform}>
-                      {platform.toUpperCase()}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="mt-2 flex items-center gap-2">
-                <button
-                  type="button"
-                  className="nexus-focus border border-nexus-lime/70 bg-nexus-lime/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime hover:bg-nexus-lime/18 disabled:opacity-45"
-                  disabled={playerPoolBusy || !OVERLAY_PLAYER_POOL_IMPORT_ENABLED}
-                  onClick={() => void importPlayerChampionPool()}
-                >
-                  {!OVERLAY_PLAYER_POOL_IMPORT_ENABLED ? 'WIP' : playerPoolBusy ? 'Importing' : 'Import'}
-                </button>
-                <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-nexus-muted">
-                  My Champs
-                </span>
-              </div>
-              {playerPoolStatus ? (
-                <p className="m-0 mt-2 font-mono text-xs text-nexus-muted" role="status">
-                  {playerPoolStatus}
-                </p>
-              ) : null}
-            </div>
-          </details>
-        </section>
 
         <section className="mb-5">
           <SectionLabel>Champion lookup</SectionLabel>
@@ -1325,16 +1268,25 @@ export function OverlayPanel() {
                       </details>
                     )}
                     {matchupPlan?.itemPlan && (
-                      <OverlayItemPlan
-                        itemPlan={matchupPlan.itemPlan}
-                        ddragonVersion={d.dataDragonVersion}
-                        compact
-                        limit={2}
-                        onOpenMatrix={() => {
-                          setItemMatrixPlan(matchupPlan)
-                          setItemMatrixOpen(true)
-                        }}
-                      />
+                      <details className="group border border-nexus-line/65 bg-nexus-bg/25 font-mono text-[11px] leading-snug text-nexus-text/75">
+                        <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
+                          <span>Build</span>
+                          <span className="text-nexus-lime/80 group-open:rotate-45 transition-transform">+</span>
+                        </summary>
+                        <div className="border-t border-nexus-line/55 px-2 py-1.5">
+                          <OverlayItemPlan
+                            itemPlan={matchupPlan.itemPlan}
+                            ddragonVersion={d.dataDragonVersion}
+                            compact
+                            limit={2}
+                            showHeader={false}
+                            onOpenMatrix={() => {
+                              setItemMatrixPlan(matchupPlan)
+                              setItemMatrixOpen(true)
+                            }}
+                          />
+                        </div>
+                      </details>
                     )}
                   <details className="group border border-nexus-line/65 bg-nexus-bg/25 font-mono text-[11px] leading-snug text-nexus-text/75">
                     <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">

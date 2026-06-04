@@ -5,7 +5,6 @@ import type { LcuDiagnosticResult, OverlayShortcutStatusResult } from '@shared/d
 import { getLatestDDragonVersion, loadChampionMaps, loadItemMaps, type ChampionLite, type ItemLite } from '@shared/dataDragon'
 import {
   applyChampionNames,
-  championIdsForMyPool,
   championPoolPreferenceToComfort,
   compileTrainedEffects,
   draftBoardSignature,
@@ -508,10 +507,7 @@ export function MainShell() {
     )
   }, [effectiveChampionPoolPrefs])
 
-  const candidateChampionIds = useMemo(
-    () => (recommendationPoolMode === 'my-champs' ? championIdsForMyPool(effectiveChampionPoolPrefs) : null),
-    [recommendationPoolMode, effectiveChampionPoolPrefs]
-  )
+  const candidateChampionIds = null
 
   const suggestionArgs = useMemo(() => {
     if (!activeSnapshot) {

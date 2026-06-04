@@ -20,7 +20,6 @@ import {
 import {
   bestAllySlotsForSuggestion,
   bestEnemySlotsForSuggestion,
-  championIdsForMyPool,
   championPoolPreferenceToComfort,
   ENGINE_V1_LABEL,
   focusedContextSlots,
@@ -667,14 +666,21 @@ function SuggestionRow({
           </details>
         )}
         {matchupPlan?.itemPlan && (
-          <div className="py-2">
+          <details className="group open:pb-0">
+            <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 py-2 uppercase tracking-[0.1em] text-nexus-muted marker:hidden hover:text-nexus-text/90">
+              <span>Build</span>
+              <span className="text-nexus-lime/70 transition-transform group-open:rotate-45">+</span>
+            </summary>
+            <div className="pb-2 pt-0.5">
             <ItemPlanBlock
               itemPlan={matchupPlan.itemPlan}
               ddragonVersion={ddragonVersion}
               limit={4}
+              showHeader={false}
               onOpenMatrix={() => onOpenItemMatrix?.(matchupPlan)}
             />
-          </div>
+            </div>
+          </details>
         )}
         <details className="group">
           <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 py-2 uppercase tracking-[0.1em] text-nexus-muted marker:hidden hover:text-nexus-text/90">
@@ -994,10 +1000,7 @@ export function WebDraftApp() {
       Object.entries(effectiveChampionPoolPrefs).map(([id, pref]) => [Number(id), championPoolPreferenceToComfort(pref)] as const)
     )
   }, [effectiveChampionPoolPrefs])
-  const candidateChampionIds = useMemo(
-    () => (recommendationPoolMode === 'my-champs' ? championIdsForMyPool(effectiveChampionPoolPrefs) : null),
-    [recommendationPoolMode, effectiveChampionPoolPrefs]
-  )
+  const candidateChampionIds = null
   const snapshot = useMemo(() => buildSnapshot(board, role, nameById), [board, role, nameById])
   const enemyRoleInference = useMemo(() => inferEnemyRoleAssignments(snapshot), [snapshot, liveDataRevision])
   const suggestionArgs = useMemo(() => {
@@ -1246,11 +1249,8 @@ export function WebDraftApp() {
     if (suggestions.length > 0) {
       return null
     }
-    if (recommendationPoolMode === 'my-champs') {
-      return 'No personal-pool champs are legal for this role and board. Switch to All Champs or import/add more champions.'
-    }
     return 'The engine has no recommended picks for this exact board state. Try another role, change the board, or reload if champion data is stale.'
-  }, [champions.length, loadError, suggestions.length, recommendationPoolMode])
+  }, [champions.length, loadError, suggestions.length])
 
   const copyTopSuggestions = useCallback(async () => {
     if (suggestions.length === 0) {
@@ -1554,6 +1554,83 @@ export function WebDraftApp() {
     }
   }
 
+  const screenshotAutofillPanel = (
+    <div className="mt-5 border border-nexus-lime/25 bg-gradient-to-br from-nexus-bg/55 to-nexus-surface-2/60 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="m-0 font-display text-base tracking-[0.14em] uppercase text-nexus-lime/90">
+            Screenshot autofill {!WEB_VISION_SCREENSHOT_ENABLED ? 'WIP' : ''}
+          </p>
+          <p className="m-0 mt-1 font-mono text-xs leading-relaxed text-nexus-muted">
+            {WEB_VISION_SCREENSHOT_ENABLED
+              ? 'Upload or paste a League champion select screenshot. Vision reads visible ally/enemy champions and fills the board.'
+              : 'This web OCR path is paused while it is being stabilized. Manual champion entry is available above.'}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <label
+            className={
+              'nexus-focus inline-flex items-center justify-center border border-nexus-line px-4 py-2 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 ' +
+              (WEB_VISION_SCREENSHOT_ENABLED
+                ? 'cursor-pointer hover:border-nexus-lime/60 hover:bg-nexus-lime/10'
+                : 'cursor-not-allowed opacity-45')
+            }
+            aria-disabled={!WEB_VISION_SCREENSHOT_ENABLED}
+          >
+            {!WEB_VISION_SCREENSHOT_ENABLED ? 'Upload WIP' : visionBusy ? 'Reading...' : 'Upload Screenshot'}
+            <input
+              className="sr-only"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              disabled={visionBusy || !WEB_VISION_SCREENSHOT_ENABLED}
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null
+                void parseDraftScreenshot(file)
+                event.currentTarget.value = ''
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            className="nexus-focus inline-flex items-center justify-center border border-nexus-line px-4 py-2 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10 disabled:cursor-not-allowed disabled:opacity-45"
+            disabled={!WEB_VISION_SCREENSHOT_ENABLED}
+            onClick={() => setVisionStatus(WEB_VISION_SCREENSHOT_ENABLED ? 'Paste target' : WEB_VISION_SCREENSHOT_WIP_MESSAGE)}
+          >
+            {WEB_VISION_SCREENSHOT_ENABLED ? 'Paste Screenshot' : 'Paste WIP'}
+          </button>
+        </div>
+      </div>
+      <div
+        className={
+          'mt-3 border border-dashed border-nexus-lime/40 bg-nexus-bg/30 px-3 py-2 font-mono text-xs text-nexus-muted transition-colors ' +
+          (WEB_VISION_SCREENSHOT_ENABLED ? 'hover:border-nexus-lime/70 hover:text-nexus-text' : 'opacity-60')
+        }
+        tabIndex={0}
+        role="button"
+        aria-disabled={!WEB_VISION_SCREENSHOT_ENABLED}
+        onPaste={handleScreenshotPaste}
+        onClick={() => setVisionStatus(WEB_VISION_SCREENSHOT_ENABLED ? 'Paste target' : WEB_VISION_SCREENSHOT_WIP_MESSAGE)}
+      >
+        {WEB_VISION_SCREENSHOT_ENABLED ? 'Paste target' : 'Paste target paused'}
+      </div>
+      {!WEB_VISION_SCREENSHOT_ENABLED ? (
+        <p className="m-0 mt-2 font-mono text-xs text-nexus-muted" aria-live="polite" aria-atomic="true">
+          {visionStatus}
+        </p>
+      ) : visionStatus.toLowerCase().includes('failed') ||
+        visionStatus.toLowerCase().includes('key') ||
+        visionStatus.toLowerCase().includes('error') ? (
+        <p className="m-0 mt-2 font-mono text-xs text-nexus-red/80" aria-live="polite" aria-atomic="true">
+          {visionStatus}
+        </p>
+      ) : (
+        <span className="sr-only" aria-live="polite" aria-atomic="true">
+          {visionStatus}
+        </span>
+      )}
+    </div>
+  )
+
   if (webRoute === 'suggestions') {
     return <WebSuggestionsPage onNavigateDraft={() => navigateWebRoute('draft')} />
   }
@@ -1674,85 +1751,12 @@ export function WebDraftApp() {
                 </p>
                 <button
                   type="button"
-                  className="nexus-focus inline-flex items-center justify-center border border-nexus-line px-4 py-2 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10"
+                  className="nexus-focus nexus-glitch-cta nexus-glitch-cta--outline inline-flex items-center justify-center border border-nexus-line px-4 py-2 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10"
+                  data-glitch-label="Reset Board"
                   onClick={resetBoard}
                 >
                   Reset Board
                 </button>
-              </div>
-              <div className="mb-5 border border-nexus-lime/25 bg-gradient-to-br from-nexus-bg/55 to-nexus-surface-2/60 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="m-0 font-display text-base tracking-[0.14em] uppercase text-nexus-lime/90">
-                      Screenshot autofill {!WEB_VISION_SCREENSHOT_ENABLED ? 'WIP' : ''}
-                    </p>
-                    <p className="m-0 mt-1 font-mono text-xs leading-relaxed text-nexus-muted">
-                      {WEB_VISION_SCREENSHOT_ENABLED
-                        ? 'Upload or paste a League champion select screenshot. Vision reads visible ally/enemy champions and fills the board.'
-                        : 'This web OCR path is paused while it is being stabilized. Manual champion entry is available below.'}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <label
-                      className={
-                        'nexus-focus inline-flex items-center justify-center border border-nexus-line px-4 py-2 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 ' +
-                        (WEB_VISION_SCREENSHOT_ENABLED
-                          ? 'cursor-pointer hover:border-nexus-lime/60 hover:bg-nexus-lime/10'
-                          : 'cursor-not-allowed opacity-45')
-                      }
-                      aria-disabled={!WEB_VISION_SCREENSHOT_ENABLED}
-                    >
-                      {!WEB_VISION_SCREENSHOT_ENABLED ? 'Upload WIP' : visionBusy ? 'Reading...' : 'Upload Screenshot'}
-                      <input
-                        className="sr-only"
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        disabled={visionBusy || !WEB_VISION_SCREENSHOT_ENABLED}
-                        onChange={(event) => {
-                          const file = event.target.files?.[0] ?? null
-                          void parseDraftScreenshot(file)
-                          event.currentTarget.value = ''
-                        }}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="nexus-focus inline-flex items-center justify-center border border-nexus-line px-4 py-2 font-display text-xs tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10 disabled:cursor-not-allowed disabled:opacity-45"
-                      disabled={!WEB_VISION_SCREENSHOT_ENABLED}
-                      onClick={() => setVisionStatus(WEB_VISION_SCREENSHOT_ENABLED ? 'Paste target' : WEB_VISION_SCREENSHOT_WIP_MESSAGE)}
-                    >
-                      {WEB_VISION_SCREENSHOT_ENABLED ? 'Paste Screenshot' : 'Paste WIP'}
-                    </button>
-                  </div>
-                </div>
-                <div
-                  className={
-                    'mt-3 border border-dashed border-nexus-lime/40 bg-nexus-bg/30 px-3 py-2 font-mono text-xs text-nexus-muted transition-colors ' +
-                    (WEB_VISION_SCREENSHOT_ENABLED ? 'hover:border-nexus-lime/70 hover:text-nexus-text' : 'opacity-60')
-                  }
-                  tabIndex={0}
-                  role="button"
-                  aria-disabled={!WEB_VISION_SCREENSHOT_ENABLED}
-                  onPaste={handleScreenshotPaste}
-                  onClick={() => setVisionStatus(WEB_VISION_SCREENSHOT_ENABLED ? 'Paste target' : WEB_VISION_SCREENSHOT_WIP_MESSAGE)}
-                >
-                  {WEB_VISION_SCREENSHOT_ENABLED ? 'Paste target' : 'Paste target paused'}
-                </div>
-                {!WEB_VISION_SCREENSHOT_ENABLED ? (
-                  <p className="m-0 mt-2 font-mono text-xs text-nexus-muted" aria-live="polite" aria-atomic="true">
-                    {visionStatus}
-                  </p>
-                ) : visionStatus.toLowerCase().includes('failed') ||
-                visionStatus.toLowerCase().includes('key') ||
-                visionStatus.toLowerCase().includes('error') ? (
-                  <p className="m-0 mt-2 font-mono text-xs text-nexus-red/80" aria-live="polite" aria-atomic="true">
-                    {visionStatus}
-                  </p>
-                ) : (
-                  <span className="sr-only" aria-live="polite" aria-atomic="true">
-                    {visionStatus}
-                  </span>
-                )}
               </div>
               <div className="grid gap-4 md:grid-cols-3">
                 <label className="flex flex-col gap-1.5">
@@ -1900,6 +1904,7 @@ export function WebDraftApp() {
                   </section>
                 ))}
               </div>
+              {screenshotAutofillPanel}
             </NexusPanel>
           </div>
 
@@ -1915,167 +1920,6 @@ export function WebDraftApp() {
               <p className="mb-3 mt-0 font-mono text-[11px] uppercase tracking-[0.12em] text-nexus-muted">
                 {livePublicDataStatusLine(liveDataStatus)}
               </p>
-              <div className="mb-3 rounded-md border border-white/[0.08] bg-nexus-bg/35 px-2 py-2 font-mono text-xs">
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <p className="m-0 uppercase tracking-[0.12em] text-nexus-lime/75">
-                    Personal pool
-                  </p>
-                  <div className="inline-flex overflow-hidden rounded-md border border-nexus-line/70">
-                    {(['my-champs', 'all-champs'] as const).map((mode) => (
-                      <button
-                        key={`web-pool-mode-${mode}`}
-                        type="button"
-                        className={
-                          'nexus-focus px-2 py-1 uppercase tracking-wide ' +
-                          (recommendationPoolMode === mode
-                            ? 'bg-nexus-lime text-nexus-bg'
-                            : 'bg-transparent text-nexus-muted hover:text-nexus-text')
-                        }
-                        onClick={() => setRecommendationPoolMode(mode)}
-                      >
-                        {mode === 'my-champs' ? 'My Champs' : 'All Champs'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <details className="group mb-2 rounded-sm border border-nexus-line/70 bg-nexus-bg/30">
-                  <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 text-[10px] uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
-                    <span>{WEB_PLAYER_POOL_IMPORT_ENABLED ? 'Riot import' : 'Riot import WIP'}</span>
-                    <span className="flex items-center gap-2">
-                      <span className="text-nexus-lime/75">{riotPlatform.toUpperCase()}</span>
-                      <span className="text-nexus-lime/80 transition-transform group-open:rotate-45" aria-hidden>
-                        +
-                      </span>
-                    </span>
-                  </summary>
-                  <div className="border-t border-nexus-line/60 p-2">
-                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_5.75rem_auto]">
-                      <input
-                        className={webFieldClassCompact}
-                        value={riotIdInput}
-                        onChange={(event) => setRiotIdInput(event.target.value)}
-                        placeholder={WEB_PLAYER_POOL_IMPORT_ENABLED ? 'GameName#TagLine' : 'Riot ID import paused'}
-                        autoComplete="off"
-                        disabled={!WEB_PLAYER_POOL_IMPORT_ENABLED}
-                      />
-                      <select
-                        className={webFieldClassCompact}
-                        value={riotPlatform}
-                        onChange={(event) => setRiotPlatform(event.target.value as RiotPlatform)}
-                        disabled={!WEB_PLAYER_POOL_IMPORT_ENABLED}
-                      >
-                        {RIOT_PLATFORMS.map((platform) => (
-                          <option key={`web-riot-platform-${platform}`} value={platform}>
-                            {platform.toUpperCase()}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        className="nexus-focus border border-nexus-line/70 px-2 py-1.5 text-[10px] uppercase tracking-wide text-nexus-lime/90 hover:border-nexus-lime/50 disabled:opacity-45"
-                        disabled={playerPoolBusy || !WEB_PLAYER_POOL_IMPORT_ENABLED}
-                        onClick={importPlayerChampionPool}
-                      >
-                        {!WEB_PLAYER_POOL_IMPORT_ENABLED ? 'WIP' : playerPoolBusy ? 'Importing' : 'Import'}
-                      </button>
-                    </div>
-                    {playerPoolStatus ? <p className="m-0 mt-2 text-nexus-muted" role="status">{playerPoolStatus}</p> : null}
-                  </div>
-                </details>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <div
-                    className={
-                      'nexus-focus inline-flex h-9 w-9 items-center justify-center rounded-md border text-nexus-muted transition-colors ' +
-                      (poolTrashActive
-                        ? 'border-nexus-red/80 bg-nexus-red/15 text-nexus-red'
-                        : 'border-nexus-line/70 bg-nexus-bg/40 hover:border-nexus-red/60 hover:text-nexus-red/85')
-                    }
-                    role="button"
-                    tabIndex={0}
-                    title="Drop a champion chip here to remove it from My Champs"
-                    aria-label="Drop a champion chip here to remove it from My Champs"
-                    onDragOver={(event) => {
-                      event.preventDefault()
-                      event.dataTransfer.dropEffect = 'move'
-                      setPoolTrashActive(true)
-                    }}
-                    onDragLeave={() => setPoolTrashActive(false)}
-                    onDrop={handlePoolTrashDrop}
-                  >
-                    <PoolTrashIcon className="h-4 w-4" />
-                  </div>
-                  {poolUndo ? (
-                    <button
-                      type="button"
-                      className="nexus-focus rounded-md border border-nexus-line/70 px-2.5 py-2 font-mono text-[10px] uppercase tracking-wide text-nexus-lime/90 hover:border-nexus-lime/50"
-                      onClick={undoChampionPoolRemoval}
-                    >
-                      Undo{poolUndoStack.length > 1 ? ` (${poolUndoStack.length})` : ''}
-                    </button>
-                  ) : null}
-                </div>
-                {playerPoolProfile ? (
-                  <div className="mt-2">
-                    <p className="m-0 text-nexus-muted">
-                      {playerPoolProfile.riotId} / {playerPoolProfile.platform.toUpperCase()} / {playerPoolProfile.entries.length} champs
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {visibleImportedPoolEntries.slice(0, 20).map((entry) => (
-                        <button
-                          key={`web-imported-pool-${entry.championId}`}
-                          type="button"
-                          draggable
-                          className="nexus-focus cursor-grab rounded-sm border border-nexus-line/70 px-1.5 py-0.5 text-[10px] text-nexus-muted hover:border-nexus-red/50 active:cursor-grabbing"
-                          title="Click or drag to trash to remove"
-                          onClick={() => removeChampionFromPool(entry.championId)}
-                          onDragStart={(event) => handlePoolChipDragStart(event, entry.championId)}
-                        >
-                          {nameById.get(entry.championId) ?? `Champion ${entry.championId}`} /{' '}
-                          {effectiveChampionPoolPrefs[String(entry.championId)] ?? entry.preference}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_7.5rem_auto]">
-                  <select className={webFieldClassCompact} value={poolChampionId ?? ''} onChange={(event) => setPoolChampionId(parseChampionId(event.target.value))}>
-                    <option value="">Champion</option>
-                    {sortedChampions.map((champion) => (
-                      <option key={`web-pool-${champion.id}`} value={champion.id}>{champion.name}</option>
-                    ))}
-                  </select>
-                  <select className={webFieldClassCompact} value={poolPreference} onChange={(event) => setPoolPreference(event.target.value as ChampionPoolPreference)}>
-                    {CHAMPION_POOL_PREFERENCES.map((pref) => (
-                      <option key={pref.value} value={pref.value}>{pref.label}</option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="nexus-focus border border-nexus-line/70 px-2 py-1.5 text-[10px] uppercase tracking-wide text-nexus-lime/90 hover:border-nexus-lime/50"
-                    disabled={poolChampionId == null}
-                    onClick={saveChampionPoolPreference}
-                  >
-                    Save
-                  </button>
-                </div>
-                {visibleManualPoolEntries.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {visibleManualPoolEntries.map(([id, pref]) => (
-                      <button
-                        key={`web-pool-chip-${id}`}
-                        type="button"
-                        draggable
-                        className="nexus-focus cursor-grab border border-nexus-line/70 px-1.5 py-0.5 text-[10px] text-nexus-muted hover:border-nexus-red/50 active:cursor-grabbing"
-                        title="Click or drag to trash to remove"
-                        onClick={() => removeChampionFromPool(Number(id))}
-                        onDragStart={(event) => handlePoolChipDragStart(event, Number(id))}
-                      >
-                        {(nameById.get(Number(id)) ?? `Champion ${id}`)} / {pref}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
               {draftIntel && hasLockedDraftContext && (
                 <details className="group mb-3 border-b border-nexus-line/60 pb-3 font-mono text-xs">
                   <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-white/[0.08] bg-nexus-bg/35 px-2 py-2 uppercase tracking-[0.12em] text-nexus-lime/85 marker:hidden hover:border-nexus-lime/35 hover:bg-nexus-lime/[0.06]">
@@ -2124,16 +1968,27 @@ export function WebDraftApp() {
                       </p>
                       <p className="m-0 mt-1">Start: {topMatchupPlan.startingItem}</p>
                       <p className="m-0">Recall: {topMatchupPlan.firstRecall}</p>
-                      <ItemPlanBlock
-                        itemPlan={topMatchupPlan.itemPlan}
-                        ddragonVersion={ddragonVersion}
-                        limit={4}
-                        onOpenMatrix={() => {
-                          ensureItemMatrixPlans(topMatchupPlan.championId)
-                          setItemMatrixPlan(topMatchupPlan)
-                          setItemMatrixOpen(true)
-                        }}
-                      />
+                      {topMatchupPlan.itemPlan ? (
+                        <details className="group mt-2">
+                          <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden hover:text-nexus-text/90">
+                            <span>Build</span>
+                            <span className="text-nexus-lime/70 transition-transform group-open:rotate-45">+</span>
+                          </summary>
+                          <div className="pb-1">
+                            <ItemPlanBlock
+                              itemPlan={topMatchupPlan.itemPlan}
+                              ddragonVersion={ddragonVersion}
+                              limit={4}
+                              showHeader={false}
+                              onOpenMatrix={() => {
+                                ensureItemMatrixPlans(topMatchupPlan.championId)
+                                setItemMatrixPlan(topMatchupPlan)
+                                setItemMatrixOpen(true)
+                              }}
+                            />
+                          </div>
+                        </details>
+                      ) : null}
                       {!topMatchupPlan.itemPlan && itemMatrixStatus === 'preparing' ? (
                         <p className="m-0 mt-2 text-nexus-muted">Preparing items...</p>
                       ) : null}

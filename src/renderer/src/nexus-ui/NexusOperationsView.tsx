@@ -526,16 +526,27 @@ export function NexusOperationsView({
                   <p className="m-0 mt-1">Start: {topPlan.startingItem}</p>
                   <p className="m-0">Recall: {topPlan.firstRecall}</p>
                   <p className="m-0">Plan: {topPlan.gamePlan}</p>
-                  <ItemPlanBlock
-                    itemPlan={topPlan.itemPlan}
-                    ddragonVersion={ddragonVersion}
-                    limit={4}
-                    onOpenMatrix={() => {
-                      onPrepareItemMatrixPlans?.(topPlan.championId)
-                      setItemMatrixPlan(topPlan)
-                      setItemMatrixOpen(true)
-                    }}
-                  />
+                  {topPlan.itemPlan ? (
+                    <details className="group mt-2">
+                      <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden hover:text-nexus-text/90">
+                        <span>Build</span>
+                        <span className="text-nexus-lime/70 transition-transform group-open:rotate-45">+</span>
+                      </summary>
+                      <div className="pb-1">
+                        <ItemPlanBlock
+                          itemPlan={topPlan.itemPlan}
+                          ddragonVersion={ddragonVersion}
+                          limit={4}
+                          showHeader={false}
+                          onOpenMatrix={() => {
+                            onPrepareItemMatrixPlans?.(topPlan.championId)
+                            setItemMatrixPlan(topPlan)
+                            setItemMatrixOpen(true)
+                          }}
+                        />
+                      </div>
+                    </details>
+                  ) : null}
                   {!topPlan.itemPlan && itemMatrixStatus === 'preparing' ? (
                     <p className="m-0 mt-2 text-nexus-muted">Preparing items...</p>
                   ) : null}
@@ -559,194 +570,6 @@ export function NexusOperationsView({
             </details>
           </div>
         )}
-      </CollapsibleOpsSection>
-
-      <CollapsibleOpsSection
-        id="CP_01"
-        kicker="personal"
-        title={`Champion pool${DESKTOP_PLAYER_POOL_IMPORT_ENABLED ? '' : ' import WIP'}`}
-        open={openSectionIds.has('CP_01')}
-        onToggle={() => toggleSection('CP_01')}
-      >
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex overflow-hidden border border-nexus-line/70">
-            {(['my-champs', 'all-champs'] as const).map((mode) => (
-              <button
-                key={`pool-mode-${mode}`}
-                type="button"
-                className={
-                  'nexus-focus px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] ' +
-                  (recommendationPoolMode === mode
-                    ? 'bg-nexus-lime text-nexus-bg'
-                    : 'bg-transparent text-nexus-muted hover:text-nexus-text')
-                }
-                onClick={() => onRecommendationPoolMode(mode)}
-              >
-                {mode === 'my-champs' ? 'My Champs' : 'All Champs'}
-              </button>
-            ))}
-          </div>
-          {playerPoolProfile ? (
-            <span className="font-mono text-xs text-nexus-muted">
-              {playerPoolProfile.riotId} / {playerPoolProfile.platform.toUpperCase()} / {playerPoolProfile.entries.length} champs
-            </span>
-          ) : null}
-        </div>
-        <details className="group mb-4 border border-nexus-line/60 bg-nexus-bg/25">
-          <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 font-mono text-xs uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
-            <span>{DESKTOP_PLAYER_POOL_IMPORT_ENABLED ? 'Riot import' : 'Riot import WIP'}</span>
-            <span className="flex items-center gap-2">
-              <span className="text-nexus-lime/75">{riotPlatform.toUpperCase()}</span>
-              <span className="text-nexus-lime/80 transition-transform group-open:rotate-45" aria-hidden>
-                +
-              </span>
-            </span>
-          </summary>
-          <div className="border-t border-nexus-line/55 p-3">
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem_auto] sm:items-end">
-              <label className="flex flex-col gap-1.5">
-                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Riot ID</span>
-                <input
-                  className={inField}
-                  value={riotIdInput}
-                  onChange={(e) => setRiotIdInput(e.target.value)}
-                  placeholder={DESKTOP_PLAYER_POOL_IMPORT_ENABLED ? 'GameName#TagLine' : 'Riot ID import paused'}
-                  autoComplete="off"
-                  disabled={!DESKTOP_PLAYER_POOL_IMPORT_ENABLED}
-                />
-              </label>
-              <label className="flex flex-col gap-1.5">
-                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Platform</span>
-                <select
-                  className={inField}
-                  value={riotPlatform}
-                  onChange={(e) => setRiotPlatform(e.target.value as RiotPlatform)}
-                  disabled={!DESKTOP_PLAYER_POOL_IMPORT_ENABLED}
-                >
-                  {RIOT_PLATFORMS.map((platform) => (
-                    <option key={`riot-platform-${platform}`} value={platform}>
-                      {platform.toUpperCase()}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                className={btnPrimary}
-                disabled={playerPoolBusy || !DESKTOP_PLAYER_POOL_IMPORT_ENABLED}
-                onClick={() => {
-                  setPoolActionStatus(null)
-                  setPoolUndoStack([])
-                  onImportPlayerChampionPool(riotIdInput, riotPlatform)
-                }}
-              >
-                {!DESKTOP_PLAYER_POOL_IMPORT_ENABLED ? 'WIP' : playerPoolBusy ? 'Importing' : 'Import'}
-              </button>
-            </div>
-            {poolStatusLine ? <p className={`${textMuted} mb-0 mt-3 font-mono text-sm`} role="status">{poolStatusLine}</p> : null}
-          </div>
-        </details>
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <div
-            className={
-              'nexus-focus inline-flex h-10 w-10 items-center justify-center border text-nexus-muted transition-colors ' +
-              (poolTrashActive
-                ? 'border-nexus-red/80 bg-nexus-red/15 text-nexus-red'
-                : 'border-nexus-line bg-nexus-bg/40 hover:border-nexus-red/60 hover:text-nexus-red/85')
-            }
-            role="button"
-            tabIndex={0}
-            title="Drop a champion chip here to remove it from My Champs"
-            aria-label="Drop a champion chip here to remove it from My Champs"
-            onDragOver={(event) => {
-              event.preventDefault()
-              event.dataTransfer.dropEffect = 'move'
-              setPoolTrashActive(true)
-            }}
-            onDragLeave={() => setPoolTrashActive(false)}
-            onDrop={handlePoolTrashDrop}
-          >
-            <PoolTrashIcon className="h-4 w-4" />
-          </div>
-          {poolUndo ? (
-            <button
-              type="button"
-              className="nexus-focus border border-nexus-line bg-nexus-bg/40 px-3 py-2 font-mono text-xs uppercase tracking-[0.12em] text-nexus-lime/90 hover:border-nexus-lime/50"
-              onClick={undoChampionPoolRemoval}
-            >
-              Undo{poolUndoStack.length > 1 ? ` (${poolUndoStack.length})` : ''}
-            </button>
-          ) : null}
-        </div>
-        {playerPoolProfile && playerPoolProfile.entries.length > 0 ? (
-          <div className="mb-4 flex flex-wrap gap-2">
-            {visibleImportedPoolEntries.slice(0, 20).map((entry) => (
-              <button
-                key={`imported-pool-${entry.championId}`}
-                type="button"
-                draggable
-                className="nexus-focus cursor-grab border border-nexus-line bg-nexus-bg/40 px-2 py-1 font-mono text-xs text-nexus-muted hover:border-nexus-red/50 hover:text-nexus-text active:cursor-grabbing"
-                title="Click or drag to trash to remove"
-                onClick={() => removeChampionFromPool(entry.championId)}
-                onDragStart={(event) => handlePoolChipDragStart(event, entry.championId)}
-              >
-                <span className="text-nexus-text/90">{championNameById.get(entry.championId) ?? `Champion ${entry.championId}`}</span> /{' '}
-                {championPoolPreferences[String(entry.championId)] ?? entry.preference}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem_auto] sm:items-end">
-          <label className="flex flex-col gap-1.5">
-            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Champion</span>
-            <select className={inField} value={poolChampionId ?? ''} onChange={(e) => setPoolChampionId(parseChampionSelectValue(e.target.value))}>
-              <option value="">Choose champion</option>
-              {sorted.map((c) => (
-                <option key={`pool-${c.id}`} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Preference</span>
-            <select className={inField} value={poolPreference} onChange={(e) => setPoolPreference(e.target.value as ChampionPoolPreference)}>
-              {CHAMPION_POOL_PREFERENCES.map((pref) => (
-                <option key={pref.value} value={pref.value}>{pref.label}</option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className={btnPrimary}
-            disabled={poolChampionId == null}
-            onClick={() => {
-              if (poolChampionId != null) {
-                onChampionPoolPreference(poolChampionId, poolPreference)
-                setPoolUndoStack([])
-                setPoolActionStatus(null)
-              }
-            }}
-          >
-            Save
-          </button>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {visibleManualPoolEntries.length === 0 && visibleImportedPoolEntries.length === 0 && (
-            <span className="font-mono text-sm text-nexus-muted">No personal pool weights yet. Mark mains to lift them in draft scoring.</span>
-          )}
-          {visibleManualPoolEntries.map(([id, pref]) => (
-            <button
-              key={id}
-              type="button"
-              draggable
-              className="nexus-focus cursor-grab border border-nexus-line bg-nexus-bg/40 px-2 py-1 font-mono text-xs text-nexus-muted hover:border-nexus-red/50 hover:text-nexus-text active:cursor-grabbing"
-              title="Click or drag to trash to remove"
-              onClick={() => removeChampionFromPool(Number(id))}
-              onDragStart={(event) => handlePoolChipDragStart(event, Number(id))}
-            >
-              <span className="text-nexus-text/90">{championNameById.get(Number(id)) ?? `Champion ${id}`}</span> / {pref}
-            </button>
-          ))}
-        </div>
       </CollapsibleOpsSection>
 
       <CollapsibleOpsSection
@@ -880,16 +703,25 @@ export function NexusOperationsView({
                 </div>
               )}
               {matchupPlan?.itemPlan && (
-                <ItemPlanBlock
-                  itemPlan={matchupPlan.itemPlan}
-                  ddragonVersion={ddragonVersion}
-                  limit={3}
-                  onOpenMatrix={() => {
-                    onPrepareItemMatrixPlans?.(matchupPlan.championId)
-                    setItemMatrixPlan(matchupPlan)
-                    setItemMatrixOpen(true)
-                  }}
-                />
+                <details className="group mt-1.5">
+                  <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden hover:text-nexus-text/90">
+                    <span>Build</span>
+                    <span className="text-nexus-lime/70 transition-transform group-open:rotate-45">+</span>
+                  </summary>
+                  <div className="pb-1">
+                    <ItemPlanBlock
+                      itemPlan={matchupPlan.itemPlan}
+                      ddragonVersion={ddragonVersion}
+                      limit={3}
+                      showHeader={false}
+                      onOpenMatrix={() => {
+                        onPrepareItemMatrixPlans?.(matchupPlan.championId)
+                        setItemMatrixPlan(matchupPlan)
+                        setItemMatrixOpen(true)
+                      }}
+                    />
+                  </div>
+                </details>
               )}
                 </div>
               </div>

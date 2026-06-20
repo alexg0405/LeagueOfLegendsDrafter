@@ -186,6 +186,10 @@ function isStringArray(x: unknown, max = 8): x is string[] {
   return Array.isArray(x) && x.length <= max && x.every((row) => typeof row === 'string')
 }
 
+function isOptionalFiniteNumber(x: unknown): boolean {
+  return x == null || (typeof x === 'number' && Number.isFinite(x))
+}
+
 const DRAFT_INTEL_MAX_PREVIEW_PLANS = 16
 const DRAFT_INTEL_MAX_MATRIX_PLANS = 40
 
@@ -252,7 +256,11 @@ function isDraftItemPlan(x: unknown): x is DraftItemPlan {
     typeof o.defensive === 'string' &&
     isStringArray(o.situational, 6) &&
     isStringArray(o.notes, 6) &&
-    (o.defaultBuildSource == null || o.defaultBuildSource === 'ugg' || o.defaultBuildSource === 'adaptive') &&
+    (o.defaultBuildSource == null || o.defaultBuildSource === 'coachless' || o.defaultBuildSource === 'ugg' || o.defaultBuildSource === 'adaptive') &&
+    (o.defaultBuildSourceUrl == null || typeof o.defaultBuildSourceUrl === 'string') &&
+    isOptionalFiniteNumber(o.defaultBuildWinRate) &&
+    isOptionalFiniteNumber(o.defaultBuildMatches) &&
+    isOptionalFiniteNumber(o.defaultBuildWpa) &&
     (o.defaultItemIds == null || (Array.isArray(o.defaultItemIds) && o.defaultItemIds.length <= 16 && o.defaultItemIds.every((id) => typeof id === 'number'))) &&
     (o.starting == null || isItemRefs(o.starting, 4)) &&
     (o.firstRecall == null || isItemRefs(o.firstRecall, 6)) &&

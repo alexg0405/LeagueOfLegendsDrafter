@@ -113,7 +113,12 @@ export type DraftItemPlan = {
   defensive: string
   situational: string[]
   notes: string[]
-  defaultBuildSource?: 'ugg' | 'adaptive'
+  defaultBuildSource?: 'coachless' | 'ugg' | 'adaptive'
+  defaultBuildSourceUrl?: string
+  defaultBuildWinRate?: number
+  defaultBuildMatches?: number
+  /** Coachless reports item value as win probability added, not direct build winrate. */
+  defaultBuildWpa?: number
   defaultItemIds?: number[]
   starting?: DraftItemRef[]
   firstRecall?: DraftItemRef[]

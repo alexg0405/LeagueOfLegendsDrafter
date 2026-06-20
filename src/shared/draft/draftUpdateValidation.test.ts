@@ -86,7 +86,11 @@ describe('DraftUpdate enemy role inference payload', () => {
               defensive: 'Buy MR if mid/jungle burst is fed.',
               situational: ['Anti-heal into sustain.', 'Anti-tank into frontline.'],
               notes: ['Team damage is mostly physical.'],
-              defaultBuildSource: 'ugg',
+              defaultBuildSource: 'coachless',
+              defaultBuildSourceUrl: 'https://coachless.gg/builds/ezreal?role=adc',
+              defaultBuildWinRate: 51.23,
+              defaultBuildMatches: 45678,
+              defaultBuildWpa: 0.37,
               defaultItemIds: [1055, 3111, 3071],
               starting: [
                 {
@@ -176,7 +180,11 @@ describe('DraftUpdate enemy role inference payload', () => {
     expect(sanitized.draftIntel?.matchupPlans[0]?.championName).toBe('Ezreal')
     expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.bootChoice?.itemId).toBe(3111)
     expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.matrixRows?.[0]?.goodInto).toContain('frontline')
-    expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.defaultBuildSource).toBe('ugg')
+    expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.defaultBuildSource).toBe('coachless')
+    expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.defaultBuildSourceUrl).toBe('https://coachless.gg/builds/ezreal?role=adc')
+    expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.defaultBuildWinRate).toBe(51.23)
+    expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.defaultBuildMatches).toBe(45678)
+    expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.defaultBuildWpa).toBe(0.37)
     expect(sanitized.draftIntel?.matchupPlans[0]?.itemPlan?.matrixRows?.[0]?.enemyTargets?.[0]?.championName).toBe('Malphite')
     expect(sanitized.draftIntel?.itemMatrixPlans).toHaveLength(40)
     expect(sanitized.draftIntel?.itemMatrixPlans?.[39]?.championName).toBe('Matrix Champ 39')

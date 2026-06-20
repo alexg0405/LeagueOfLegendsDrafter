@@ -41,6 +41,9 @@ describe('U.GG default item build seed', () => {
     ])
 
     expect(build?.source).toBe('ugg')
+    expect(build?.sourceType).toBe('ugg')
+    expect(build?.winRate).toBe(50.03)
+    expect(build?.matches).toBe(1278240)
     expect(build?.starting.map((row) => row.itemId)).toEqual([1086])
     expect(build?.boots.map((row) => row.itemId)).toEqual([3006])
     expect(build?.core.map((row) => row.itemId)).toEqual([6676, 3031, 6675])
@@ -67,17 +70,17 @@ describe('U.GG default item build seed', () => {
     expect(getUggDefaultItemBuild(145, 'bottom', items)?.core.map((row) => row.itemId)).toEqual([6672, 3124, 2510])
     expect(getUggDefaultItemBuild(202, 'bottom', items)?.core.map((row) => row.itemId)).toEqual([6697, 6676, 3031])
     expect(getUggDefaultItemBuild(222, 'bottom', items)?.core.map((row) => row.itemId)).toEqual([2523, 3046, 3031])
-    expect(getUggDefaultItemBuild(901, 'bottom', items)?.core.map((row) => row.itemId)).toEqual([3508, 3071, 3161])
+    expect(getUggDefaultItemBuild(901, 'bottom', items)?.core.map((row) => row.itemId)).toEqual([3508, 3071, 3094])
   })
 
   it('covers non-bottom roles with U.GG current-patch defaults', () => {
     const ids = [
       1055, 1056, 1101, 1103, 3047, 3020, 3008, 3111, 3118, 3158, 6610, 6333, 6692, 6697, 3068, 3075,
-      6653, 6655, 4645, 4646, 3157, 3089, 3869, 3871
+      6653, 6655, 4645, 4646, 3157, 3089, 3161, 3869, 3871
     ]
     const items = ids.map((id) => item(id, id === 3047 || id === 3020 || id === 3158 ? 'Boots' : `Item ${id}`, id === 3047 || id === 3020 || id === 3158 ? ['Boots'] : ['Damage']))
 
-    expect(getUggDefaultItemBuild(266, 'top', items)?.core.map((row) => row.itemId)).toEqual([6692, 6610, 6333])
+    expect(getUggDefaultItemBuild(266, 'top', items)?.core.map((row) => row.itemId)).toEqual([3161, 6610, 6333])
     expect(getUggDefaultItemBuild(32, 'jungle', items)?.core.map((row) => row.itemId)).toEqual([6653, 3068, 3075])
     expect(getUggDefaultItemBuild(103, 'middle', items)?.core.map((row) => row.itemId)).toEqual([3118, 4645, 3157])
     expect(getUggDefaultItemBuild(99, 'support', items)?.core.map((row) => row.itemId)).toEqual([6655, 4646, 4645])

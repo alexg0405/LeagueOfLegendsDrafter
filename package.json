@@ -39,6 +39,7 @@
     "release:stage-web": "node scripts/stage-desktop-update-feed.mjs",
     "release:bump-version": "node scripts/bump-release-version.mjs",
     "etl:riot-lane": "node scripts/riot-lane-etl.mjs",
+    "items:update:coachless": "node scripts/update-coachless-default-builds.mjs",
     "items:update:ugg": "node scripts/update-ugg-default-builds.mjs",
     "meta:update:mobalytics": "node scripts/update-public-meta-mobalytics.mjs",
     "train:score": "python training/score_v1.py --state training/examples/live_state.example.json",

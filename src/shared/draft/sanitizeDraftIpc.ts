@@ -151,6 +151,10 @@ function nullableText(v: unknown): string | null {
   return typeof v === 'string' ? v : null
 }
 
+function optionalFinite(v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined
+}
+
 function sanitizeStringArray(rows: unknown, max: number): string[] {
   return Array.isArray(rows) ? rows.filter((x): x is string => typeof x === 'string').slice(0, max) : []
 }
@@ -236,7 +240,14 @@ function sanitizeDraftItemPlan(plan: unknown): DraftItemPlan | undefined {
     defensive: p.defensive,
     situational: sanitizeStringArray(p.situational, 6),
     notes: sanitizeStringArray(p.notes, 6),
-    defaultBuildSource: p.defaultBuildSource === 'ugg' || p.defaultBuildSource === 'adaptive' ? p.defaultBuildSource : undefined,
+    defaultBuildSource:
+      p.defaultBuildSource === 'coachless' || p.defaultBuildSource === 'ugg' || p.defaultBuildSource === 'adaptive'
+        ? p.defaultBuildSource
+        : undefined,
+    defaultBuildSourceUrl: typeof p.defaultBuildSourceUrl === 'string' ? p.defaultBuildSourceUrl : undefined,
+    defaultBuildWinRate: optionalFinite(p.defaultBuildWinRate),
+    defaultBuildMatches: optionalFinite(p.defaultBuildMatches),
+    defaultBuildWpa: optionalFinite(p.defaultBuildWpa),
     defaultItemIds: Array.isArray(p.defaultItemIds)
       ? p.defaultItemIds.map((id) => finiteOr(id as number | null | undefined, 0)).filter((id) => id > 0).slice(0, 16)
       : undefined,

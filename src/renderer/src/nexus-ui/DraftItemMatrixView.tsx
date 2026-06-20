@@ -54,7 +54,7 @@ function defaultIdsFor(itemPlan: DraftItemPlan): Set<number> {
 function buildStatusFor(row: DraftItemMatrixRow, itemPlan: DraftItemPlan, defaultIds: ReadonlySet<number>): { label: ItemMatrixRow['buildStatus']; isDefault: boolean } {
   if (defaultIds.has(row.itemId)) {
     return {
-      label: itemPlan.defaultBuildSource === 'ugg' ? 'Default Build' : 'Adaptive Default',
+      label: itemPlan.defaultBuildSource === 'adaptive' ? 'Adaptive Default' : 'Default Build',
       isDefault: true
     }
   }

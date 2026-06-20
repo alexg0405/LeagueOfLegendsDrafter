@@ -46,6 +46,7 @@ describe('public meta stats seed', () => {
   it('exposes matchup overview rows from the current public source', () => {
     expect(publicMetaStatsSeed.counters.length).toBeGreaterThan(1000)
     expect(publicMetaStatsSeed.counters.every((row) => row.source === `mobalytics-emerald-plus-${publicMetaStatsSeed.patch}`)).toBe(true)
-    expect(publicMetaLaneRate('middle', 103, 238)).not.toBeNull()
+    const sample = publicMetaStatsSeed.counters[0]!
+    expect(publicMetaLaneRate(sample.role as Parameters<typeof publicMetaLaneRate>[0], sample.candidateId, sample.enemyId)).not.toBeNull()
   })
 })

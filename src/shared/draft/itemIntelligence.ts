@@ -65,7 +65,11 @@ export type AdaptiveItemContext = {
     defaultBuildTags?: string[]
   }[]
   defaultBuild?: {
-    source: 'ugg'
+    source: 'coachless' | 'ugg'
+    sourceUrl?: string
+    winRate?: number
+    matches?: number
+    wpaOverall?: number
     starting: DraftItemRef[]
     boots: DraftItemRef[]
     core: DraftItemRef[]
@@ -509,7 +513,11 @@ export function buildAdaptiveItemPlan(items: readonly ItemLite[], ctx: AdaptiveI
       threats.length ? `Threats: ${threats.map((threat) => threat.label).join(', ')}.` : null,
       ...ctx.fallback.notes
     ].filter((line): line is string => Boolean(line)).slice(0, 4),
-    defaultBuildSource: ctx.defaultBuild ? 'ugg' : 'adaptive',
+    defaultBuildSource: ctx.defaultBuild ? ctx.defaultBuild.source : 'adaptive',
+    ...(ctx.defaultBuild?.sourceUrl ? { defaultBuildSourceUrl: ctx.defaultBuild.sourceUrl } : {}),
+    ...(ctx.defaultBuild?.winRate != null ? { defaultBuildWinRate: ctx.defaultBuild.winRate } : {}),
+    ...(ctx.defaultBuild?.matches != null ? { defaultBuildMatches: ctx.defaultBuild.matches } : {}),
+    ...(ctx.defaultBuild?.wpaOverall != null ? { defaultBuildWpa: ctx.defaultBuild.wpaOverall } : {}),
     defaultItemIds,
     starting,
     firstRecall,

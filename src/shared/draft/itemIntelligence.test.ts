@@ -199,6 +199,66 @@ describe('item intelligence', () => {
     expect(antiHeal?.enemyTargets?.[0]).toMatchObject({ championId: 267, championName: 'Nami', source: 'defaultBuild' })
   })
 
+  it('preserves Coachless default build metadata', () => {
+    const plan = buildAdaptiveItemPlan(catalog, {
+      championName: 'Tristana',
+      role: 'bottom',
+      buildProfile: {
+        damage: 'ad',
+        archetype: 'Marksman',
+        buildHint: 'Crit carry.',
+        itemHint: 'Default crit path.',
+        tagsLine: 'Marksman',
+        partype: 'Mana'
+      },
+      ally: { magic: 1, physical: 2, frontline: 1, engage: 1, scaling: 2, slots: 4 },
+      enemy: {
+        magic: 1,
+        physical: 2,
+        frontline: 1,
+        tanks: 1,
+        assassins: 0,
+        supports: 1,
+        dive: 1,
+        poke: 1,
+        pick: 1,
+        sustain: 1,
+        marksmen: 1,
+        hardCc: 1,
+        healing: 1,
+        shielding: 1,
+        mobility: 1,
+        burst: 1
+      },
+      defaultBuild: {
+        source: 'coachless',
+        sourceUrl: 'https://coachless.gg/builds/tristana?role=adc',
+        winRate: 52.34,
+        matches: 123456,
+        wpaOverall: 0.42,
+        starting: [ref(catalog[0]!, 'starter')],
+        boots: [ref(catalog[3]!, 'boots')],
+        core: [ref(catalog[8]!)],
+        final: [ref(catalog[3]!, 'boots'), ref(catalog[8]!)],
+        defaultItemIds: [1055, 3047, 3031]
+      },
+      laneThreat: 'ad',
+      fallback: {
+        core: 'Fallback core',
+        boots: 'Fallback boots',
+        defensive: 'Fallback defense',
+        situational: [],
+        notes: []
+      }
+    })
+
+    expect(plan.defaultBuildSource).toBe('coachless')
+    expect(plan.defaultBuildSourceUrl).toBe('https://coachless.gg/builds/tristana?role=adc')
+    expect(plan.defaultBuildWinRate).toBe(52.34)
+    expect(plan.defaultBuildMatches).toBe(123456)
+    expect(plan.defaultBuildWpa).toBe(0.42)
+  })
+
   it('dedupes situational and final build items by display name with default rows winning', () => {
     const ardent = item(3504, 'Ardent Censer', 'Heal and shield power for allies.', ['SpellDamage', 'ManaRegen'], { FlatMagicDamageMod: 45 }, 2200)
     const duplicateArdent = item(9504, 'Ardent Censer', 'Heal and shield power for allies.', ['SpellDamage', 'ManaRegen'], { FlatMagicDamageMod: 45 }, 2200)

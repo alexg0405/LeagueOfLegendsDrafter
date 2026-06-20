@@ -7,7 +7,7 @@ type UggSeedRole = Exclude<DraftRole, 'unknown'>
 type UggSeedRow = {
   championId: number
   role: UggSeedRole
-  sourceType?: 'ugg' | 'ugg-fallback' | 'trusted' | 'generated' | 'pinned'
+  sourceType?: 'coachless' | 'ugg' | 'ugg-fallback' | 'trusted' | 'generated' | 'pinned'
   sourceUrl: string
   starting?: number[]
   boots?: number[]
@@ -15,12 +15,17 @@ type UggSeedRow = {
   final?: number[]
   winRate?: number
   matches?: number
+  wpaOverall?: number
 }
 
 export type UggDefaultItemBuild = {
-  source: 'ugg'
+  source: 'coachless' | 'ugg'
+  sourceType?: UggSeedRow['sourceType']
   patch: string
   sourceUrl: string
+  winRate?: number
+  matches?: number
+  wpaOverall?: number
   starting: DraftItemRef[]
   boots: DraftItemRef[]
   core: DraftItemRef[]
@@ -81,6 +86,10 @@ function dedupeIds(rows: readonly DraftItemRef[]): number[] {
 
 const seedRows = (seed.builds as UggSeedRow[]).filter((row) => Number.isFinite(row.championId))
 
+function finiteStat(value: number | null | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
 export function getUggDefaultItemBuild(
   championId: number,
   role: DraftRole,
@@ -103,10 +112,17 @@ export function getUggDefaultItemBuild(
   if (defaultItemIds.length === 0) {
     return null
   }
+  const winRate = finiteStat(row.winRate)
+  const matches = finiteStat(row.matches)
+  const wpaOverall = finiteStat(row.wpaOverall)
   return {
-    source: 'ugg',
+    source: row.sourceType === 'coachless' ? 'coachless' : 'ugg',
+    ...(row.sourceType != null ? { sourceType: row.sourceType } : {}),
     patch: typeof seed.patch === 'string' ? seed.patch : 'unknown',
     sourceUrl: row.sourceUrl,
+    ...(winRate != null ? { winRate } : {}),
+    ...(matches != null ? { matches } : {}),
+    ...(wpaOverall != null ? { wpaOverall } : {}),
     starting,
     boots,
     core,

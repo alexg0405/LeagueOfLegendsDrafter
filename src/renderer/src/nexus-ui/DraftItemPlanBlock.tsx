@@ -67,6 +67,30 @@ function dedupeItems(rows: (DraftItemRef | null | undefined)[], limit: number): 
   return out
 }
 
+function compactNumber(value: number): string {
+  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
+}
+
+function signedStat(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}`
+}
+
+function defaultBuildMeta(itemPlan: DraftItemPlan): string | null {
+  if (!itemPlan?.defaultBuildSource || itemPlan.defaultBuildSource === 'adaptive') {
+    return null
+  }
+  const parts: string[] = []
+  if (typeof itemPlan.defaultBuildWinRate === 'number' && Number.isFinite(itemPlan.defaultBuildWinRate)) {
+    parts.push(`${itemPlan.defaultBuildWinRate.toFixed(1)}% WR`)
+  } else if (typeof itemPlan.defaultBuildWpa === 'number' && Number.isFinite(itemPlan.defaultBuildWpa)) {
+    parts.push(`${signedStat(itemPlan.defaultBuildWpa)} WPA`)
+  }
+  if (typeof itemPlan.defaultBuildMatches === 'number' && Number.isFinite(itemPlan.defaultBuildMatches)) {
+    parts.push(`${compactNumber(itemPlan.defaultBuildMatches)} games`)
+  }
+  return parts.length ? parts.join(' / ') : null
+}
+
 export function DraftItemPlanBlock({
   itemPlan,
   limit = 3,
@@ -85,21 +109,32 @@ export function DraftItemPlanBlock({
     ...(itemPlan.coreBuild ?? []),
     ...(itemPlan.finalBuild ?? [])
   ], 6)
+  const buildMeta = defaultBuildMeta(itemPlan)
   if (buildRows.length || matrixRows.length || itemPlan.threatSummary?.length || compact) {
     return (
       <div className={`${showHeader ? 'mt-2' : 'mt-0'} grid gap-1.5 border border-nexus-line/60 bg-nexus-bg/30 p-2 text-nexus-muted/90`}>
         {showHeader ? (
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-[10px] uppercase tracking-[0.14em] text-nexus-lime/80">Build</span>
-            {onOpenMatrix ? (
-              <button
-                type="button"
-                className="nexus-focus border border-nexus-line/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/90 hover:border-nexus-lime/50"
-                onClick={onOpenMatrix}
-              >
-                Matrix
-              </button>
-            ) : null}
+            <span className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+              {buildMeta ? (
+                <span
+                  className="max-w-full truncate font-mono text-[10px] uppercase tracking-[0.08em] text-nexus-muted/80"
+                  title={buildMeta}
+                >
+                  {buildMeta}
+                </span>
+              ) : null}
+              {onOpenMatrix ? (
+                <button
+                  type="button"
+                  className="nexus-focus border border-nexus-line/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/90 hover:border-nexus-lime/50"
+                  onClick={onOpenMatrix}
+                >
+                  Matrix
+                </button>
+              ) : null}
+            </span>
           </div>
         ) : null}
         <div className="flex min-w-0 flex-wrap gap-1.5">

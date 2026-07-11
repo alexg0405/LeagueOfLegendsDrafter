@@ -1,7 +1,7 @@
 {
   "schema": "nexus_public_meta_manifest_v1",
   "patch": "16.13",
-  "updatedAt": "2026-07-10",
+  "updatedAt": "2026-07-11",
   "metaUrl": "publicMetaStatsSeed.json",
   "synergyUrl": "publicSynergyStatsSeed.json",
   "rankFilter": "emerald_plus",

@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   bump:
-    if: ${{ !startsWith(github.event.head_commit.message, 'chore: bump release version') }}
+    if: "${{ !startsWith(github.event.head_commit.message, 'chore: bump release version') }}"
     runs-on: windows-latest
 
     defaults:

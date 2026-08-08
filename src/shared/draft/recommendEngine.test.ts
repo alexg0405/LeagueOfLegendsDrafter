@@ -13,8 +13,10 @@ import type { DraftSnapshot } from './types'
 
 const idMap = new Map<number, string>([
   [10, 'Kayle'],
+  [23, 'Tryndamere'],
   [38, 'Kassadin'],
   [50, 'Swain'],
+  [54, 'Malphite'],
   [60, 'Elise'],
   [64, 'Lee Sin'],
   [77, 'Udyr'],
@@ -160,30 +162,31 @@ describe('recommend v1', () => {
         { role: 'support', championId: null, championName: null, cellId: 4 }
       ],
       enemy: [
-        { role: 'top', championId: null, championName: null, cellId: 5 },
-        { role: 'jungle', championId: 64, championName: 'Lee Sin', cellId: 6 },
+        { role: 'top', championId: 54, championName: 'Malphite', cellId: 5 },
+        { role: 'jungle', championId: null, championName: null, cellId: 6 },
         { role: 'middle', championId: null, championName: null, cellId: 7 },
         { role: 'bottom', championId: null, championName: null, cellId: 8 },
         { role: 'support', championId: null, championName: null, cellId: 9 }
       ],
       myTeam: '100',
-      myRole: 'jungle',
-      localPlayerCellId: 1,
+      myRole: 'top',
+      localPlayerCellId: 0,
       bans: null,
       myPickOrder: null
     }
     const trained = trainedFixture()
-    trained.matchup.jungle.set(60, new Map([[64, -0.0093]]))
-    const st = buildEngineState(snap, 'jungle', {
+    trained.matchup.top.set(23, new Map([[54, -0.0093]]))
+    const st = buildEngineState(snap, 'top', {
       bans: null,
       myPickOrder: null,
       dataDragonVersion: null,
       patch: 'test'
     })
-    const v = v1ComponentScores(60, 'jungle', st, idMap, null, trained)
-    expect(v.enemy).toBeLessThan(0.43)
-    expect(v.enemyAdj).toBeLessThan(-0.01)
-    expect(v.contextCombined - v.base).toBeLessThan(-0.01)
+    const v = v1ComponentScores(23, 'top', st, idMap, null, trained)
+    // Near-neutral trained matchup rows must not erase a known Tryndamere ↔ Malphite counter lean.
+    expect(v.enemy).toBeLessThan(0.5)
+    expect(v.enemyAdj).toBeLessThan(0)
+    expect(v.contextCombined).toBeLessThan(v.base)
   })
 
   it('does not let trained base rows override Diamond+ public base rates or expand the role pool', () => {

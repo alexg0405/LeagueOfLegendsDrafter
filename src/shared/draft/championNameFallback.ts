@@ -147,7 +147,8 @@ export const BUNDLED_CHAMPION_NAMES: Readonly<Record<number, string>> = {
   897: "K'Sante",
   902: 'Milio',
   910: 'Hwei',
-  950: 'Naafiri'
+  950: 'Naafiri',
+  805: 'Locke'
 }
 
 type ChampionSearchIndexRow = {

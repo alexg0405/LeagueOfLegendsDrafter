@@ -98,10 +98,14 @@ export {
   publicMetaCandidateIdsForRole,
   publicMetaCounterStat,
   publicMetaLaneRate,
+  publicMetaMatchupsAgainstRole,
+  publicMetaPrimaryRoleForChampion,
   publicMetaRoleDistributionForChampion,
   type PublicMetaBaseStat,
   type PublicMetaCounterStat,
-  type PublicMetaStatsInfo
+  type PublicMetaMatchupRow,
+  type PublicMetaStatsInfo,
+  type RoleKey
 } from './metaStats'
 export {
   applyLivePublicDataPayload,

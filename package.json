@@ -42,6 +42,7 @@
     "items:update:coachless": "node scripts/update-coachless-default-builds.mjs",
     "items:update:ugg": "node scripts/update-ugg-default-builds.mjs",
     "meta:update:mobalytics": "node scripts/update-public-meta-mobalytics.mjs",
+    "meta:update": "node scripts/update-public-meta-mobalytics.mjs",
     "train:score": "python training/score_v1.py --state training/examples/live_state.example.json",
     "train:init-db": "python -m training.scripts.init_nexus_db",
     "etl:ingest": "python training/etl/ingest.py --db training/nexus_training.db --schema training/schema.sql",

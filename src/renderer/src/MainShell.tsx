@@ -1077,6 +1077,7 @@ export function MainShell() {
             <NexusHomeDashboard
               ddragonVersion={ddVersion && ddVersion[0] !== '(' ? ddVersion : '—'}
               patchLabel={patchLabel ?? ENGINE_V1_LABEL}
+              champions={champions}
               onEnterOperations={() => goNav('operations')}
             />
           </NexusRoutePanel>

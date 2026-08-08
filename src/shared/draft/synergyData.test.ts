@@ -13,7 +13,7 @@ function tablePairCount(): number {
 describe('patch-aware ally synergy table', () => {
   it('generates a broad table from public role rows instead of a tiny curated list', () => {
     expect(ALLY_SYNERGY_TABLE_META.source).toBe(
-      `mobalytics-emerald-plus-${publicSynergyStatsSeed.patch}-duo-plus-class-heuristics`
+      `lolalytics-emerald-plus-${publicSynergyStatsSeed.patch}-duo-plus-class-heuristics`
     )
     expect(ALLY_SYNERGY_TABLE_META.pairCount).toBe(tablePairCount())
     expect(ALLY_SYNERGY_TABLE_META.pairCount).toBeGreaterThan(2000)

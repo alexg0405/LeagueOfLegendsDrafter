@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 import { ParticleWordMark } from '../ParticleWordLoader'
 import { emitNexusEffect } from '../effects'
 import { NexusCollapsible } from './NexusCollapsible'
+import { NexusMatchupExplorer, type MatchupChampionOption } from './NexusMatchupExplorer'
 import { MicroLabel, NexusPlus } from './NexusTick'
 import { NexusProgressSegmented } from './NexusProgressSegmented'
 import {
@@ -16,6 +17,7 @@ import {
 type Props = {
   ddragonVersion: string
   patchLabel: string
+  champions: MatchupChampionOption[]
   onEnterOperations: () => void
 }
 
@@ -30,6 +32,7 @@ type HomeModule = {
 export function NexusHomeDashboard({
   ddragonVersion,
   patchLabel,
+  champions,
   onEnterOperations
 }: Props) {
   const [openModuleIds, setOpenModuleIds] = useState<ReadonlySet<string>>(() => new Set())
@@ -230,6 +233,8 @@ export function NexusHomeDashboard({
           <div className="flex-1 bg-nexus-surface-2" />
         </div>
       </section>
+
+      <NexusMatchupExplorer champions={champions} ddragonVersion={ddragonVersion} />
 
     </div>
   )

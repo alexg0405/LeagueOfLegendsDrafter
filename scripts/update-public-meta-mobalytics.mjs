@@ -1,3 +1,7 @@
+/**
+ * Refresh bundled public meta seeds from Lolalytics Emerald+ pages.
+ * (Script name kept for workflow compatibility; Mobalytics HTML is Cloudflare-blocked.)
+ */
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -6,77 +10,26 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(__dirname, '..')
 const metaPath = resolve(repoRoot, 'src/shared/data/publicMetaStatsSeed.json')
 const synergyPath = resolve(repoRoot, 'src/shared/data/publicSynergyStatsSeed.json')
-const championIndexPath = resolve(repoRoot, 'src/shared/data/championSearchIndex.json')
 const publicDataDir = resolve(repoRoot, 'src/renderer/public/data')
 const publicMetaPath = resolve(publicDataDir, 'publicMetaStatsSeed.json')
 const publicSynergyPath = resolve(publicDataDir, 'publicSynergyStatsSeed.json')
 const publicManifestPath = resolve(publicDataDir, 'meta-manifest.json')
 
-const ROLE_TO_MOBALYTICS = {
-  top: 'top',
-  jungle: 'jungle',
-  middle: 'mid',
-  bottom: 'adc',
-  support: 'support'
-}
-
-const MOBALYTICS_TO_ROLE = {
-  Top: 'top',
-  Jungle: 'jungle',
-  Mid: 'middle',
-  Bot: 'bottom',
-  Support: 'support'
-}
-
-const SOURCE_PREFIX = 'mobalytics-emerald-plus'
-const MATCHUP_GAMES_FALLBACK = 1200
-const MIN_GAMES = 1000
-const FETCH_DELAY_MS = 125
+const LANES = ['top', 'jungle', 'middle', 'bottom', 'support']
+const TIER = 'emerald_plus'
+const SOURCE_PREFIX = 'lolalytics-emerald-plus'
+const MIN_FLEX_LANE_PCT = 5
+const MIN_FLEX_GAMES = 1000
+const MIN_COUNTER_GAMES = 80
+const FETCH_DELAY_MS = 110
 const DDRAGON_VERSIONS_URL = 'https://ddragon.leagueoflegends.com/api/versions.json'
-
+const USER_AGENT = 'Mozilla/5.0 NexusDraftMetaUpdater/3.0'
 const SLUG_OVERRIDES = {
-  'Cho\'Gath': 'chogath',
-  'Dr. Mundo': 'drmundo',
-  'Jarvan IV': 'jarvaniv',
-  'K\'Sante': 'ksante',
-  'Kha\'Zix': 'khazix',
-  'Kai\'Sa': 'kaisa',
-  'Kog\'Maw': 'kogmaw',
-  'LeBlanc': 'leblanc',
-  'Master Yi': 'masteryi',
-  'Miss Fortune': 'missfortune',
-  'Nunu & Willump': 'nunu',
-  'Rek\'Sai': 'reksai',
-  'Renata Glasc': 'renata',
-  'Tahm Kench': 'tahmkench',
-  'Twisted Fate': 'twistedfate',
-  'Vel\'Koz': 'velkoz',
-  'Wukong': 'monkeyking',
-  'Xin Zhao': 'xinzhao'
+  MonkeyKing: 'wukong'
 }
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10)
-}
-
-function patchParts(label) {
-  return String(label)
-    .split('.')
-    .map((part) => Number.parseInt(part, 10))
-    .map((part) => (Number.isFinite(part) ? part : 0))
-}
-
-function comparePatchLabels(a, b) {
-  const aa = patchParts(a)
-  const bb = patchParts(b)
-  const len = Math.max(aa.length, bb.length)
-  for (let i = 0; i < len; i += 1) {
-    const d = (aa[i] ?? 0) - (bb[i] ?? 0)
-    if (d !== 0) {
-      return d
-    }
-  }
-  return String(a).localeCompare(String(b))
 }
 
 function shortPatchLabel(version) {
@@ -84,11 +37,114 @@ function shortPatchLabel(version) {
   return major && minor ? `${major}.${minor}` : String(version)
 }
 
+function sleep(ms) {
+  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms))
+}
+
+function roundRate(n) {
+  return Math.round((n / 100) * 10000) / 10000
+}
+
+function plainObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function refValue(objs, ref) {
+  if (typeof ref !== 'string') {
+    return ref
+  }
+  const token = ref.replace(/!$/, '')
+  if (!/^[0-9a-z]+$/.test(token)) {
+    return ref
+  }
+  const id = Number.parseInt(token, 36)
+  return objs[String(id)]
+}
+
+function decodeRow(objs, raw) {
+  if (!plainObject(raw)) {
+    return null
+  }
+  const out = {}
+  for (const [key, value] of Object.entries(raw)) {
+    out[key] = refValue(objs, value)
+  }
+  return out
+}
+
+function extractQwikState(html) {
+  const match = /<script type="qwik\/json">([\s\S]*?)<\/script>/.exec(html)
+  if (!match) {
+    throw new Error('Could not find Qwik state in Lolalytics response.')
+  }
+  return JSON.parse(match[1])
+}
+
+function extractAverageWinRate(html) {
+  const match =
+    /Average Emerald\+\s*Win Rate:\s*(?:<!--[^>]*-->)?\s*([0-9]+(?:\.[0-9]+)?)/i.exec(html) ||
+    /Average Emerald\+\s*Win Rate:\s*([0-9]+(?:\.[0-9]+)?)/i.exec(html)
+  if (!match) {
+    throw new Error('Could not find Emerald+ average win rate.')
+  }
+  return Number(match[1])
+}
+
+function extractPatch(html) {
+  const match = /(?:EMERALD\+\s+)?Patch\s+([0-9.]+)/i.exec(html)
+  if (!match) {
+    throw new Error('Could not find patch label.')
+  }
+  return shortPatchLabel(match[1])
+}
+
+function findChampionRowMap(objs) {
+  let best = null
+  for (const value of Object.values(objs)) {
+    if (!plainObject(value)) {
+      continue
+    }
+    const entries = Object.entries(value).filter(([key]) => /^\d+$/.test(key))
+    if (entries.length < 100) {
+      continue
+    }
+    const hits = entries.filter(([, rowRef]) => {
+      const row = refValue(objs, rowRef)
+      return plainObject(row) && 'wr' in row && 'games' in row && 'lane' in row
+    }).length
+    if (!best || hits > best.hits) {
+      best = { hits, entries }
+    }
+  }
+  if (!best || best.hits < 100) {
+    throw new Error('Could not find champion stat row map.')
+  }
+  return best.entries
+}
+
+function normalizeLane(value) {
+  if (value === 'mid') return 'middle'
+  if (value === 'adc' || value === 'bot') return 'bottom'
+  if (value === 'sup' || value === 'utility') return 'support'
+  return value
+}
+
+async function fetchHtml(url) {
+  const response = await fetch(url, {
+    headers: {
+      'user-agent': USER_AGENT,
+      accept: 'text/html,application/xhtml+xml'
+    }
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${url}: ${response.status}`)
+  }
+  return response.text()
+}
+
 async function fetchCurrentDDragonPatch() {
   const response = await fetch(DDRAGON_VERSIONS_URL, {
-    headers: {
-      'user-agent': 'Mozilla/5.0 NexusDraftMetaUpdater/2.0'
-    }
+    headers: { 'user-agent': USER_AGENT }
   })
   if (!response.ok) {
     throw new Error(`Failed to fetch Data Dragon versions: ${response.status}`)
@@ -100,129 +156,102 @@ async function fetchCurrentDDragonPatch() {
   return shortPatchLabel(versions[0])
 }
 
-function sleep(ms) {
-  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms))
+async function fetchDDragonChampions(fullVersion) {
+  const response = await fetch(`https://ddragon.leagueoflegends.com/cdn/${fullVersion}/data/en_US/champion.json`, {
+    headers: { 'user-agent': USER_AGENT }
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Data Dragon champions: ${response.status}`)
+  }
+  const json = await response.json()
+  const byId = new Map()
+  for (const champion of Object.values(json.data ?? {})) {
+    const id = Number(champion.key)
+    if (!Number.isFinite(id)) continue
+    byId.set(id, {
+      id,
+      name: String(champion.name ?? ''),
+      slug: SLUG_OVERRIDES[String(champion.id)] ?? String(champion.id ?? '').toLowerCase()
+    })
+  }
+  return byId
 }
 
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+async function fetchLaneRows(lane) {
+  const url = `https://lolalytics.com/lol/tierlist/?lane=${lane}&tier=${TIER}&view=grid`
+  const html = await fetchHtml(url)
+  const qwik = extractQwikState(html)
+  const avgWinRate = extractAverageWinRate(html)
+  const patch = extractPatch(html)
+  const rowMap = findChampionRowMap(qwik.objs)
+  const rows = []
+
+  for (const [championId, rowRef] of rowMap) {
+    const row = decodeRow(qwik.objs, refValue(qwik.objs, rowRef))
+    if (!row) continue
+    const role = normalizeLane(row.lane)
+    if (role !== lane) continue
+    const games = Number(row.games)
+    const lanePct = Number(row.pctLane)
+    rows.push({
+      role: lane,
+      championId: Number(championId),
+      winRate: roundRate(Number(row.wr)),
+      pickRate: roundRate(Number(row.pr)),
+      banRate: roundRate(Number(row.br)),
+      games,
+      lanePct,
+      sourceAvgWinRate: roundRate(avgWinRate),
+      source: `${SOURCE_PREFIX}-${patch}`
+    })
+  }
+
+  return { patch, avgWinRate, rows }
 }
 
-function htmlToText(html) {
-  return html
+function extractCounterRows(html, role, candidateId, patch) {
+  const qwik = extractQwikState(html)
+  const pagePatch = extractPatch(html)
+  if (pagePatch !== patch) {
+    return { patch: pagePatch, rows: [] }
+  }
+  const rows = []
+  for (const value of Object.values(qwik.objs)) {
+    if (!plainObject(value) || !('vsWr' in value && 'cid' in value && 'n' in value)) {
+      continue
+    }
+    const row = decodeRow(qwik.objs, value)
+    if (!row) continue
+    const enemyId = Number(row.cid)
+    const games = Number(row.n)
+    const vsWr = Number(row.vsWr)
+    if (!Number.isFinite(enemyId) || enemyId <= 0 || enemyId === candidateId) continue
+    if (!Number.isFinite(games) || games < MIN_COUNTER_GAMES) continue
+    if (!Number.isFinite(vsWr) || vsWr <= 0 || vsWr >= 100) continue
+    rows.push({
+      role,
+      candidateId,
+      enemyId,
+      winRate: roundRate(vsWr),
+      games: Math.trunc(games),
+      source: `${SOURCE_PREFIX}-${patch}`
+    })
+  }
+  return { patch: pagePatch, rows }
+}
+
+function extractSynergyRows(html, championId, patch) {
+  const text = html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#x27;|&#39;/g, "'")
-    .replace(/&amp;/g, '&')
     .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function championSlug(name) {
-  return (
-    SLUG_OVERRIDES[name] ??
-    name
-      .toLowerCase()
-      .replace(/&/g, '')
-      .replace(/[^a-z0-9]/g, '')
-  )
-}
-
-function rateToDecimal(value) {
-  return Math.round((Number(value) / 100) * 10000) / 10000
-}
-
-function parseIntWithSpaces(value) {
-  return Number.parseInt(String(value).replace(/\s+/g, ''), 10)
-}
-
-function buildUrl(name, role) {
-  return `https://mobalytics.gg/lol/champions/${championSlug(name)}/build/${ROLE_TO_MOBALYTICS[role]}`
-}
-
-function section(text, start, end) {
-  const startIdx = text.indexOf(start)
-  if (startIdx < 0) {
-    return ''
-  }
-  const from = startIdx + start.length
-  const endIdx = end ? text.indexOf(end, from) : -1
-  return text.slice(from, endIdx >= 0 ? endIdx : undefined)
-}
-
-function parseChampionRates(segment, championsByName) {
-  const rows = []
-  for (const champion of championsByName.values()) {
-    const re = new RegExp(`${escapeRegExp(champion.name)}\\s+([0-9]+(?:\\.[0-9]+)?)%\\s+Win Rate`, 'i')
-    const match = re.exec(segment)
-    if (!match) {
-      continue
-    }
-    rows.push({ championId: champion.id, winRate: rateToDecimal(match[1]) })
-  }
-  rows.sort((a, b) => b.winRate - a.winRate)
-  return rows
-}
-
-function parseBuildPage(html, expectedRole, champion, championsByName) {
-  const text = htmlToText(html)
-  const header = new RegExp(
-    `${escapeRegExp(champion.name)}\\s*·\\s*(Top|Jungle|Mid|Bot|Support)\\s+Build[\\s\\S]*?Win rate\\s+([0-9]+(?:\\.[0-9]+)?)%[\\s\\S]*?Pick rate\\s+([0-9]+(?:\\.[0-9]+)?)%[\\s\\S]*?Ban rate\\s+([0-9]+(?:\\.[0-9]+)?)%[\\s\\S]*?Matches\\s+([0-9\\s]+)-[\\s\\S]*?patch\\s+([0-9.]+)`,
-    'i'
-  ).exec(text)
-  if (!header) {
-    return null
-  }
-
-  const role = MOBALYTICS_TO_ROLE[header[1]]
-  if (role !== expectedRole) {
-    return null
-  }
-
-  const games = parseIntWithSpaces(header[5])
-  if (!Number.isFinite(games) || games < MIN_GAMES) {
-    return null
-  }
-
-  const overview = section(text, `${champion.name} Matchups Overview`, `${champion.name} General information`)
-  const weak = parseChampionRates(section(overview, 'Weak Against', 'Strong Against'), championsByName)
-  const strong = parseChampionRates(section(overview, 'Strong Against', 'Best Synergy (DUO)'), championsByName)
-  const synergy = parseChampionRates(section(overview, 'Best Synergy (DUO)', ''), championsByName)
-
-  return {
-    role,
-    patch: header[6],
-    base: {
-      role,
-      championId: champion.id,
-      winRate: rateToDecimal(header[2]),
-      pickRate: rateToDecimal(header[3]),
-      banRate: rateToDecimal(header[4]),
-      games,
-      sourceAvgWinRate: 0.5,
-      source: `${SOURCE_PREFIX}-${header[6]}`,
-      candidate: true
-    },
-    counters: [
-      ...weak.map((row) => ({ enemyId: row.championId, winRate: row.winRate })),
-      ...strong.map((row) => ({ enemyId: row.championId, winRate: row.winRate }))
-    ].map((row) => ({
-      role,
-      candidateId: champion.id,
-      enemyId: row.enemyId,
-      winRate: row.winRate,
-      games: Math.min(games, MATCHUP_GAMES_FALLBACK),
-      source: `${SOURCE_PREFIX}-${header[6]}`
-    })),
-    synergy: synergy.map((row) => ({
-      championId: champion.id,
-      allyId: row.championId,
-      winRate: row.winRate,
-      source: `${SOURCE_PREFIX}-${header[6]}`
-    }))
-  }
+  // Qwik counters pages expose Good Synergy as vsWr-like objects without a stable duo section in HTML.
+  // Prefer structured objects tagged via defaultLane + high vsWr only when we also see a synergy marker nearby — skip noisy HTML.
+  void text
+  void championId
+  void patch
+  return []
 }
 
 function formatMetaSeed(seed) {
@@ -276,7 +305,7 @@ function formatManifest({ patch, updatedAt, roleBaseCount, counterCount, synergy
       updatedAt,
       metaUrl: 'publicMetaStatsSeed.json',
       synergyUrl: 'publicSynergyStatsSeed.json',
-      rankFilter: 'emerald_plus',
+      rankFilter: TIER,
       roleBaseCount,
       counterCount,
       synergyCount
@@ -288,92 +317,111 @@ function formatManifest({ patch, updatedAt, roleBaseCount, counterCount, synergy
 
 const current = JSON.parse(await readFile(metaPath, 'utf8'))
 const targetPatch = await fetchCurrentDDragonPatch()
-const championIndex = JSON.parse(await readFile(championIndexPath, 'utf8'))
-const champions = championIndex.champions
-const championsById = new Map(champions.map((champion) => [champion.id, champion]))
-const championsByName = new Map(champions.map((champion) => [champion.name, champion]))
+const versionsResponse = await fetch(DDRAGON_VERSIONS_URL, { headers: { 'user-agent': USER_AGENT } })
+const versions = await versionsResponse.json()
+const championsById = await fetchDDragonChampions(versions[0])
 
-const rolePairs = current.roleBase
-  .map((row) => ({ role: row.role, championId: row.championId, candidate: row.candidate !== false }))
-  .filter((row, idx, arr) => arr.findIndex((other) => other.role === row.role && other.championId === row.championId) === idx)
+const fetchedLanes = []
+for (const lane of LANES) {
+  fetchedLanes.push(await fetchLaneRows(lane))
+  await sleep(FETCH_DELAY_MS)
+}
 
-const fetched = []
+const lanePatches = Array.from(new Set(fetchedLanes.map((x) => x.patch)))
+if (lanePatches.length !== 1) {
+  throw new Error(`Expected one patch across Lolalytics lanes, saw: ${lanePatches.join(', ')}`)
+}
+const lolalyticsPatch = lanePatches[0]
+if (lolalyticsPatch !== targetPatch) {
+  throw new Error(`Expected Lolalytics data for current patch ${targetPatch}, saw: ${lolalyticsPatch}`)
+}
+
+const allRows = fetchedLanes.flatMap((x) => x.rows)
+const rowsByChampion = new Map()
+for (const row of allRows) {
+  const rows = rowsByChampion.get(row.championId) ?? []
+  rows.push(row)
+  rowsByChampion.set(row.championId, rows)
+}
+
+const roleBase = []
+for (const rows of rowsByChampion.values()) {
+  const primary = rows.slice().sort((a, b) => b.lanePct - a.lanePct || b.games - a.games)[0]
+  for (const row of rows) {
+    const includePrimary = row.role === primary.role
+    const includeFlex = row.lanePct >= MIN_FLEX_LANE_PCT && row.games >= MIN_FLEX_GAMES
+    if (!includePrimary && !includeFlex) continue
+    const { lanePct, ...baseRow } = row
+    void lanePct
+    roleBase.push({ ...baseRow, candidate: includePrimary })
+  }
+}
+roleBase.sort((a, b) => LANES.indexOf(a.role) - LANES.indexOf(b.role) || a.championId - b.championId)
+
+const primaryPairs = roleBase.filter((row) => row.candidate)
+const counters = []
+const synergyRows = []
 const failed = []
-for (const pair of rolePairs) {
+
+for (const pair of primaryPairs) {
   const champion = championsById.get(pair.championId)
-  if (!champion) {
+  if (!champion?.slug) {
+    failed.push(`${pair.championId}/${pair.role}: missing slug`)
     continue
   }
-  const url = buildUrl(champion.name, pair.role)
+  const url = `https://lolalytics.com/lol/${champion.slug}/counters/?lane=${pair.role}&tier=${TIER}`
   try {
-    const response = await fetch(url, {
-      headers: {
-        'user-agent': 'Mozilla/5.0 NexusDraftMetaUpdater/2.0'
-      }
-    })
-    if (!response.ok) {
-      failed.push(`${champion.name}/${pair.role}: ${response.status}`)
-      continue
+    const html = await fetchHtml(url)
+    const parsed = extractCounterRows(html, pair.role, pair.championId, targetPatch)
+    if (parsed.patch !== targetPatch) {
+      failed.push(`${champion.name}/${pair.role}: stale patch ${parsed.patch}`)
+    } else if (parsed.rows.length === 0) {
+      failed.push(`${champion.name}/${pair.role}: no counters`)
+    } else {
+      counters.push(...parsed.rows)
     }
-    const parsed = parseBuildPage(await response.text(), pair.role, champion, championsByName)
-    if (!parsed) {
-      failed.push(`${champion.name}/${pair.role}: parse`)
-      continue
-    }
-    parsed.base.candidate = pair.candidate
-    fetched.push(parsed)
+    synergyRows.push(...extractSynergyRows(html, pair.championId, targetPatch))
   } catch (error) {
     failed.push(`${champion.name}/${pair.role}: ${error instanceof Error ? error.message : String(error)}`)
   }
   await sleep(FETCH_DELAY_MS)
 }
 
-const patches = Array.from(new Set(fetched.map((row) => row.patch))).sort(comparePatchLabels)
-if (!patches.includes(targetPatch)) {
-  throw new Error(`Expected Mobalytics data for current patch ${targetPatch}, saw: ${patches.join(', ')}`)
+counters.sort(
+  (a, b) =>
+    LANES.indexOf(a.role) - LANES.indexOf(b.role) ||
+    a.candidateId - b.candidateId ||
+    a.enemyId - b.enemyId
+)
+
+if (roleBase.length < 100) {
+  throw new Error(`Too few role rows parsed (${roleBase.length}).`)
 }
-
-const staleFetched = fetched.filter((row) => row.patch !== targetPatch)
-const currentFetched = fetched.filter((row) => row.patch === targetPatch)
-if (currentFetched.length === 0) {
-  throw new Error(`No Mobalytics rows parsed for current patch ${targetPatch}.`)
+if (counters.length < 1000) {
+  throw new Error(`Too few counter rows parsed (${counters.length}).`)
 }
-
-const roleBase = currentFetched
-  .map((row) => row.base)
-  .sort((a, b) => Object.keys(ROLE_TO_MOBALYTICS).indexOf(a.role) - Object.keys(ROLE_TO_MOBALYTICS).indexOf(b.role) || a.championId - b.championId)
-
-const counters = currentFetched
-  .flatMap((row) => row.counters)
-  .filter((row) => row.candidateId !== row.enemyId)
-  .sort((a, b) => Object.keys(ROLE_TO_MOBALYTICS).indexOf(a.role) - Object.keys(ROLE_TO_MOBALYTICS).indexOf(b.role) || a.candidateId - b.candidateId || a.enemyId - b.enemyId)
-
-const synergyRows = currentFetched
-  .flatMap((row) => row.synergy)
-  .filter((row) => row.championId !== row.allyId)
-  .sort((a, b) => a.championId - b.championId || a.allyId - b.allyId)
 
 const updatedAt = todayIsoDate()
 const nextMetaSeed = formatMetaSeed({
-    schema: current.schema,
-    patch: targetPatch,
-    rankFilter: 'emerald_plus',
-    updatedAt,
-    notes:
-      'Current-patch public meta seed. roleBase, counters, and matchup overview rows use Mobalytics Emerald+ public champion build pages; sourceAvgWinRate is 50% because Mobalytics exposes champion rates without a global source average.',
-    roleBase,
-    counters
-  })
+  schema: current.schema,
+  patch: targetPatch,
+  rankFilter: TIER,
+  updatedAt,
+  notes:
+    'Current-patch public meta seed. roleBase and counters use Lolalytics Emerald+ public tier list and counters pages; sourceAvgWinRate is the Lolalytics Emerald+ average.',
+  roleBase,
+  counters
+})
 
 const nextSynergySeed = formatSynergySeed({
-    schema: 'nexus_public_synergy_seed_v1',
-    patch: targetPatch,
-    rankFilter: 'emerald_plus',
-    updatedAt,
-    notes:
-      'Mobalytics Emerald+ Best Synergy (DUO) rows scraped from public champion build pages; win rates are exposed without per-pair sample counts.',
-    rows: synergyRows
-  })
+  schema: 'nexus_public_synergy_seed_v1',
+  patch: targetPatch,
+  rankFilter: TIER,
+  updatedAt,
+  notes:
+    'Duo win-rate rows optional; ally synergy table is primarily generated from Emerald+ role rows plus class/threat heuristics.',
+  rows: synergyRows
+})
 
 await mkdir(publicDataDir, { recursive: true })
 await writeFile(metaPath, nextMetaSeed, 'utf8')
@@ -392,15 +440,12 @@ await writeFile(
   'utf8'
 )
 
+const covered = new Set(roleBase.map((row) => row.championId))
 console.log(
-  `Fetched ${roleBase.length} role rows, ${counters.length} matchup rows, ${synergyRows.length} synergy rows for patch ${targetPatch}.`
+  `Fetched ${roleBase.length} role rows (${covered.size} champions), ${counters.length} matchup rows, ${synergyRows.length} synergy rows for patch ${targetPatch}.`
 )
-if (staleFetched.length > 0) {
-  const stalePatches = Array.from(new Set(staleFetched.map((row) => row.patch))).sort(comparePatchLabels)
-  console.warn(`Skipped ${staleFetched.length} stale role page(s) from patch ${stalePatches.join(', ')}.`)
-}
 if (failed.length > 0) {
-  console.warn(`Skipped ${failed.length} role pages:`)
+  console.warn(`Skipped ${failed.length} counter pages:`)
   for (const line of failed.slice(0, 30)) {
     console.warn(`  ${line}`)
   }

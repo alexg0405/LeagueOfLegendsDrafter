@@ -6,12 +6,14 @@ import {
   publicMetaBaseStatsForChampion,
   publicMetaCandidateIdsForRole,
   publicMetaLaneRate,
+  publicMetaMatchupsAgainstRole,
+  publicMetaPrimaryRoleForChampion,
   publicMetaRoleDistributionForChampion
 } from './metaStats'
 
 describe('public meta stats seed', () => {
   it('uses current public base win rates normalized by source average and sample size', () => {
-    const expectedSource = `mobalytics-emerald-plus-${publicMetaStatsSeed.patch}`
+    const expectedSource = `lolalytics-emerald-plus-${publicMetaStatsSeed.patch}`
     expect(publicMetaStatsSeed.patch).toMatch(/^\d+\.\d+$/)
     expect(publicMetaStatsSeed.rankFilter).toBe('emerald_plus')
     expect(publicMetaStatsSeed.roleBase.every((row) => row.source === expectedSource)).toBe(true)
@@ -45,8 +47,19 @@ describe('public meta stats seed', () => {
 
   it('exposes matchup overview rows from the current public source', () => {
     expect(publicMetaStatsSeed.counters.length).toBeGreaterThan(1000)
-    expect(publicMetaStatsSeed.counters.every((row) => row.source === `mobalytics-emerald-plus-${publicMetaStatsSeed.patch}`)).toBe(true)
+    expect(publicMetaStatsSeed.counters.every((row) => row.source === `lolalytics-emerald-plus-${publicMetaStatsSeed.patch}`)).toBe(true)
     const sample = publicMetaStatsSeed.counters[0]!
     expect(publicMetaLaneRate(sample.role as Parameters<typeof publicMetaLaneRate>[0], sample.candidateId, sample.enemyId)).not.toBeNull()
+  })
+
+  it('lists role-filtered matchup win rates for a champion', () => {
+    expect(publicMetaPrimaryRoleForChampion(103)).toBe('middle')
+    const rows = publicMetaMatchupsAgainstRole(103, 'middle', 'middle')
+    expect(rows.length).toBeGreaterThan(10)
+    expect(rows.every((row) => row.enemyId !== 103)).toBe(true)
+    expect(rows.every((row) => row.winRate > 0.3 && row.winRate < 0.7)).toBe(true)
+    for (let i = 1; i < rows.length; i += 1) {
+      expect(rows[i]!.winRate).toBeGreaterThanOrEqual(rows[i - 1]!.winRate)
+    }
   })
 })

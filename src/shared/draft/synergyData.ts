@@ -282,7 +282,7 @@ const CURATED_PAIR_BONUSES: Array<[number, number, number]> = [
 export const ALLY_SYNERGY_BONUS: SynergyTable = {}
 
 export const ALLY_SYNERGY_TABLE_META = {
-  source: `mobalytics-emerald-plus-${publicSynergyStatsSeed.patch}-duo-plus-class-heuristics`,
+  source: `lolalytics-emerald-plus-${publicSynergyStatsSeed.patch}-duo-plus-class-heuristics`,
   minScore: MIN_SYNERGY_SCORE,
   pairCount: 0
 }
@@ -301,7 +301,7 @@ function seedInfo(seed: PublicSynergyStatsSeed, source: string, pairCount: numbe
   if (!patch || !rows) {
     return null
   }
-  const baseSource = `mobalytics-emerald-plus-${patch}-duo-plus-class-heuristics`
+  const baseSource = `lolalytics-emerald-plus-${patch}-duo-plus-class-heuristics`
   return {
     patch,
     rankFilter: stringField(seed.rankFilter),
@@ -402,7 +402,7 @@ currentSynergyInfo = (() => {
     patch: String(publicSynergyStatsSeed.patch ?? 'unknown'),
     rankFilter: null,
     updatedAt: null,
-    source: `mobalytics-emerald-plus-${String(publicSynergyStatsSeed.patch ?? 'unknown')}-duo-plus-class-heuristics`,
+    source: `lolalytics-emerald-plus-${String(publicSynergyStatsSeed.patch ?? 'unknown')}-duo-plus-class-heuristics`,
     rowCount: 0,
     pairCount: 0
   }

@@ -382,3 +382,63 @@ export function publicMetaCandidateIdsForRole(role: DraftRole): number[] {
   }
   return Array.from(tables.candidateIdsByRole[r])
 }
+
+export type PublicMetaMatchupRow = {
+  enemyId: number
+  winRate: number
+  rawWinRate: number
+  games: number
+  candidate: boolean
+}
+
+/**
+ * Win rates for `championId` in `myRole` against champions commonly played in `opposingRole`.
+ * Uses bundled/live public counter rows (`publicMetaLaneRate`); missing pairs are omitted.
+ */
+export function publicMetaMatchupsAgainstRole(
+  championId: number,
+  myRole: DraftRole,
+  opposingRole: DraftRole
+): PublicMetaMatchupRow[] {
+  const mine = normalizeRole(myRole)
+  const theirs = normalizeRole(opposingRole)
+  if (!mine || !theirs || championId <= 0) {
+    return []
+  }
+
+  const enemies = publicMetaBaseStatsForRole(theirs)
+    .slice()
+    .sort((a, b) => Number(b.candidate) - Number(a.candidate) || b.games - a.games)
+
+  const seen = new Set<number>()
+  const rows: PublicMetaMatchupRow[] = []
+  for (const enemy of enemies) {
+    if (enemy.championId === championId || seen.has(enemy.championId)) {
+      continue
+    }
+    seen.add(enemy.championId)
+    const counter = publicMetaCounterStat(mine, championId, enemy.championId)
+    const adjusted = publicMetaLaneRate(mine, championId, enemy.championId)
+    if (!counter || adjusted == null) {
+      continue
+    }
+    rows.push({
+      enemyId: enemy.championId,
+      winRate: adjusted,
+      rawWinRate: counter.winRate,
+      games: counter.games,
+      candidate: enemy.candidate
+    })
+  }
+
+  return rows.sort((a, b) => a.winRate - b.winRate || b.games - a.games)
+}
+
+export function publicMetaPrimaryRoleForChampion(championId: number): RoleKey | null {
+  const rows = publicMetaBaseStatsForChampion(championId)
+  if (rows.length === 0) {
+    return null
+  }
+  const primary = rows.find((row) => row.candidate) ?? rows.slice().sort((a, b) => b.games - a.games)[0]
+  return primary?.role ?? null
+}

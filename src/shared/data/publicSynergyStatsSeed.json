@@ -2,7 +2,7 @@
   "schema": "nexus_public_synergy_seed_v1",
   "patch": "16.16",
   "rankFilter": "emerald_plus",
-  "updatedAt": "2026-08-20",
+  "updatedAt": "2026-08-21",
   "notes": "Duo win-rate rows optional; ally synergy table is primarily generated from Emerald+ role rows plus class/threat heuristics.",
   "rows": [
 

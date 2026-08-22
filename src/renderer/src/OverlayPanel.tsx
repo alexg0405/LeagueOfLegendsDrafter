@@ -29,6 +29,8 @@ import {
 import { scoreChampionAsync } from './recommend/championScoreClient'
 import { DraftItemPlanBlock as OverlayItemPlan } from './nexus-ui/DraftItemPlanBlock'
 import { DraftItemMatrixView } from './nexus-ui/DraftItemMatrixView'
+import { NexusInfoTip } from './nexus-ui/NexusInfoTip'
+import { pickVerdict } from './nexus-ui/pickVerdict'
 import {
   livePublicDataStatusLine,
   refreshLivePublicData,
@@ -175,6 +177,27 @@ function fitClass(v: number): string {
     return 'text-nexus-muted'
   }
   return 'text-nexus-red/80'
+}
+
+/** Five-segment bar for a 0..1 fit score — replaces sentences like "lane baseline is good". */
+function FitBar({ value, label, tip }: { value: number; label: string; tip: string }) {
+  const filled = Math.max(0, Math.min(5, Math.round((value - 0.4) / 0.05)))
+  const tone = value >= 0.52 ? 'bg-nexus-lime/80' : value >= 0.48 ? 'bg-nexus-muted/70' : 'bg-nexus-red/70'
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="w-[52px] shrink-0 uppercase tracking-[0.1em] text-nexus-muted">{label}</span>
+      <span className="flex gap-[2px]" role="img" aria-label={`${label}: ${fitLabel(value)}`}>
+        {[0, 1, 2, 3, 4].map((i) => (
+          <span
+            key={i}
+            className={['h-2 w-2.5 border border-nexus-line/60', i < filled ? tone : 'bg-transparent'].join(' ')}
+          />
+        ))}
+      </span>
+      <span className={['tabular-nums', fitClass(value)].join(' ')}>{pct(value)}</span>
+      <NexusInfoTip label={`What ${label} means`}>{tip}</NexusInfoTip>
+    </div>
+  )
 }
 
 type OverlaySlot = { role: DraftRole; championName: string | null; championId: number | null }
@@ -325,6 +348,10 @@ export function OverlayPanel() {
   const [trainedEffects, setTrainedEffects] = useState<CompiledTrainedEffects | null>(null)
   const [pickMatrixOpen, setPickMatrixOpen] = useState(false)
   const [itemMatrixOpen, setItemMatrixOpen] = useState(false)
+  /** Engine knobs stay hidden until asked for — default view is pick-and-go. */
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  /** Hotkeys Windows actually granted, so the footer never advertises a dead key. */
+  const [activeHotkeys, setActiveHotkeys] = useState<string[]>([])
   const [itemMatrixPlan, setItemMatrixPlan] = useState<NonNullable<DraftUpdate['draftIntel']>['matchupPlans'][number] | null>(null)
   const [riotIdInput, setRiotIdInput] = useState('')
   const [riotPlatform, setRiotPlatform] = useState<RiotPlatform>('na1')
@@ -346,6 +373,27 @@ export function OverlayPanel() {
 
   useEffect(() => {
     pushOverlayPrefs({ roleOverride: null })
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void window.drafter
+      .getOverlayShortcutStatus()
+      .then((status) => {
+        if (!cancelled) {
+          setActiveHotkeys(status.registered)
+        }
+      })
+      .catch(() => {
+        /* leave empty — the ✕ button is always available */
+      })
+    const un = window.drafter.onOverlayHotkeysChanged((status) => {
+      setActiveHotkeys(status.registered)
+    })
+    return () => {
+      cancelled = true
+      un()
+    }
   }, [])
 
   useEffect(() => {
@@ -629,94 +677,169 @@ export function OverlayPanel() {
         title="Nexus Draft overlay - drag to move"
       >
         <span className="font-display font-bold text-base sm:text-lg tracking-[0.15em] text-nexus-lime">NEXUS//DRAFT</span>
-        <span className="font-mono font-bold text-xs text-nexus-muted uppercase">overlay</span>
         {d.dataDragonVersion && d.dataDragonVersion[0] !== '(' && (
-          <span className="font-mono font-bold text-sm text-nexus-muted tabular-nums">DGV {d.dataDragonVersion}</span>
+          <span className="font-mono text-[10px] text-nexus-muted tabular-nums">{d.dataDragonVersion}</span>
         )}
-        <span className="font-mono font-bold text-[10px] uppercase tracking-[0.12em] text-nexus-muted">
+        {/* Window controls: the big window is hidden at launch, so this is how you reach it. */}
+        <span className="nexus-overlay-nodrag ml-auto flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            title="Open the full window (settings, champion pool, draft lab)"
+            aria-label="Open main window"
+            className="nexus-focus border border-nexus-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-nexus-muted hover:border-nexus-lime/50 hover:text-nexus-text"
+            onClick={() => {
+              void window.drafter.showMainWindow().catch(() => {
+                /* main window may be mid-teardown */
+              })
+            }}
+          >
+            ☰ Menu
+          </button>
+          <button
+            type="button"
+            title="Hide the overlay"
+            aria-label="Hide overlay"
+            className="nexus-focus border border-nexus-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-nexus-muted hover:border-nexus-red/60 hover:text-nexus-red/90"
+            onClick={() => {
+              void window.drafter.toggleOverlay().catch(() => {
+                /* overlay may be closing */
+              })
+            }}
+          >
+            ✕
+          </button>
+        </span>
+      </div>
+      <div className="nexus-overlay-drag relative z-10 border-b border-nexus-line/60 bg-nexus-surface-2/80 px-3 py-1">
+        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-muted">
           {livePublicDataStatusLine(liveDataStatus)}
         </span>
       </div>
 
-      <div className="nexus-overlay-nodrag border-b border-nexus-line/80 bg-nexus-surface-2/95 px-3 py-2 flex flex-col gap-2 text-[11px] sm:text-xs font-mono">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-          <span className="text-nexus-lime/90 uppercase tracking-wide">Role</span>
-          <span className="px-2 py-0.5 border border-nexus-line text-nexus-text uppercase">
+      {/*
+        One glanceable strip. Everything an average player never touches (delta ordering,
+        Monte Carlo rollouts, override reset) is behind the gear.
+      */}
+      <div className="nexus-overlay-nodrag border-b border-nexus-line/80 bg-nexus-surface-2/95 px-3 py-2 text-[11px] sm:text-xs font-mono">
+        <div className="flex items-center gap-2">
+          <span className="text-nexus-muted uppercase tracking-wide">You</span>
+          <span className="px-2 py-0.5 border border-nexus-lime/50 bg-nexus-lime/10 text-nexus-lime uppercase">
             {poolRole ?? 'auto'}
           </span>
-          <span className="text-nexus-line hidden sm:inline">|</span>
-          <span className="text-nexus-muted uppercase tracking-wide">Δ order</span>
+          <NexusInfoTip label="How your role is chosen">
+            Taken from the League client when it is connected, otherwise from the role you set in
+            the main window. Every pick below is scored for this role.
+          </NexusInfoTip>
+
+          <span className="ml-auto inline-flex items-center gap-1.5">
+            <span
+              className={[
+                'h-1.5 w-1.5 rounded-full',
+                lcuUi === 'ready' ? 'bg-nexus-lime' : 'bg-nexus-yellow/90'
+              ].join(' ')}
+              aria-hidden
+            />
+            <span className={lcuClass}>{lcuUi === 'ready' ? 'Live' : 'Waiting'}</span>
+            <NexusInfoTip label="Connection status">
+              {lcuUi === 'ready'
+                ? 'Reading champ select straight from your League client.'
+                : 'League client not detected yet. Start champ select, or enter the draft manually in the main window.'}
+            </NexusInfoTip>
+          </span>
+
           <button
             type="button"
-            className={
-              resolvedDeltaList === 'best'
-                ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
-                : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
-            }
-            title="Strongest lobby lift first"
-            onClick={() => pushOverlayPrefs({ deltaListModeOverride: 'best' })}
+            aria-label="Advanced engine settings"
+            aria-expanded={advancedOpen}
+            title="Advanced settings"
+            className={[
+              'nexus-focus ml-1 h-6 w-6 shrink-0 border text-[13px] leading-none transition-colors',
+              advancedOpen
+                ? 'border-nexus-lime/70 bg-nexus-lime/15 text-nexus-lime'
+                : 'border-nexus-line text-nexus-muted hover:border-nexus-lime/45 hover:text-nexus-text'
+            ].join(' ')}
+            onClick={() => setAdvancedOpen((v) => !v)}
           >
-            Best
-          </button>
-          <button
-            type="button"
-            className={
-              resolvedDeltaList === 'worst'
-                ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
-                : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
-            }
-            title="Weakest in this lobby first"
-            onClick={() => pushOverlayPrefs({ deltaListModeOverride: 'worst' })}
-          >
-            Worst
-          </button>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-nexus-line/50 pt-1.5 sm:border-0 sm:pt-0">
-          <span className="text-nexus-lime/90 uppercase tracking-wide">Rollouts</span>
-          <button
-            type="button"
-            className={
-              rolloutsOffActive
-                ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
-                : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
-            }
-            title="Fast V1 blend only (no random completed boards)"
-            onClick={() => pushOverlayPrefs({ monteCarloOverride: 0 })}
-          >
-            Off
-          </button>
-          <button
-            type="button"
-            className={
-              rolloutsMainActive
-                ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
-                : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
-            }
-            title={
-              resolvedMc > 0
-                ? `Follow Operations tab (${resolvedMc} rollout(s) per candidate).`
-                : 'Follow Operations tab — set rollouts above 0 there to enable lookahead.'
-            }
-            onClick={() => pushOverlayPrefs({ monteCarloOverride: null })}
-          >
-            Main ({resolvedMc})
-          </button>
-          <button
-            type="button"
-            className="ml-auto px-2 py-0.5 border border-nexus-line text-nexus-muted hover:border-nexus-lime/40 hover:text-nexus-text"
-            title="Clear overlay overrides; match Operations tab"
-            onClick={() =>
-              pushOverlayPrefs({
-                roleOverride: null,
-                sortByOverride: null,
-                monteCarloOverride: null,
-                deltaListModeOverride: null
-              })
-            }
-          >
-            Reset
+            ⚙
           </button>
         </div>
+
+        {advancedOpen && (
+          <div className="mt-2 flex flex-col gap-2 border-t border-nexus-line/50 pt-2">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+              <span className="text-nexus-muted uppercase tracking-wide">Order</span>
+              <NexusInfoTip label="About list order">
+                <b>Best</b> puts the champions that gain the most from this lobby on top.
+                <b> Worst</b> flips it — useful for spotting what to ban or avoid.
+              </NexusInfoTip>
+              <button
+                type="button"
+                className={
+                  resolvedDeltaList === 'best'
+                    ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
+                    : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
+                }
+                onClick={() => pushOverlayPrefs({ deltaListModeOverride: 'best' })}
+              >
+                Best
+              </button>
+              <button
+                type="button"
+                className={
+                  resolvedDeltaList === 'worst'
+                    ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
+                    : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
+                }
+                onClick={() => pushOverlayPrefs({ deltaListModeOverride: 'worst' })}
+              >
+                Worst
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+              <span className="text-nexus-muted uppercase tracking-wide">Lookahead</span>
+              <NexusInfoTip label="About lookahead">
+                Simulates how the rest of the draft might fill in before scoring a pick. More
+                accurate, slower. <b>Off</b> uses the fast blend only.
+              </NexusInfoTip>
+              <button
+                type="button"
+                className={
+                  rolloutsOffActive
+                    ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
+                    : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
+                }
+                onClick={() => pushOverlayPrefs({ monteCarloOverride: 0 })}
+              >
+                Off
+              </button>
+              <button
+                type="button"
+                className={
+                  rolloutsMainActive
+                    ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
+                    : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
+                }
+                onClick={() => pushOverlayPrefs({ monteCarloOverride: null })}
+              >
+                Match main ({resolvedMc})
+              </button>
+              <button
+                type="button"
+                className="ml-auto px-2 py-0.5 border border-nexus-line text-nexus-muted hover:border-nexus-lime/40 hover:text-nexus-text"
+                onClick={() =>
+                  pushOverlayPrefs({
+                    roleOverride: null,
+                    sortByOverride: null,
+                    monteCarloOverride: null,
+                    deltaListModeOverride: null
+                  })
+                }
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {pickMatrixOpen && (
@@ -1055,57 +1178,67 @@ export function OverlayPanel() {
                 </div>
               )}
 
+              {/* Four bars instead of four sentences — same data, no reading required. */}
               {lookupScores && (
-                <details className="group mt-2 border border-nexus-line/65 bg-nexus-bg/25 font-mono text-[11px] leading-snug text-nexus-text/75">
-                  <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
-                    <span>Fit summary</span>
-                    <span className="text-nexus-lime/80 group-open:rotate-45 transition-transform">+</span>
-                  </summary>
-                  <div className="border-t border-nexus-line/55 px-2 py-1.5 space-y-1">
-                    <p className="m-0">
-                      <span className="uppercase tracking-[0.12em] text-nexus-lime/80">Overall</span>
-                      <span className="text-nexus-line"> · </span>
-                      <span className={fitClass(lookupScores.combined)}>{fitLabel(lookupScores.combined)}</span>
-                      <span className="text-nexus-muted"> pick for {poolRole} ({pct(lookupScores.combined)})</span>
+                <div className="mt-2 space-y-1 border border-nexus-line/65 bg-nexus-bg/25 px-2 py-1.5 font-mono text-[10px] leading-snug">
+                  <FitBar
+                    label="Lane"
+                    value={lookupScores.base}
+                    tip="How this champion does in this role generally, ignoring who else is in the game."
+                  />
+                  <FitBar
+                    label="Vs them"
+                    value={lookupScores.enemy}
+                    tip="How this champion fares against the enemy champions already locked in."
+                  />
+                  <FitBar
+                    label="With us"
+                    value={lookupScores.ally}
+                    tip="How well this champion works alongside your currently locked teammates."
+                  />
+                  <FitBar
+                    label="Comp"
+                    value={lookupScores.comp}
+                    tip="Whether this pick gives your team a balanced composition — damage types, frontline, engage."
+                  />
+                  {lookupScores.blindP > 0 && (
+                    <p className="m-0 flex items-center gap-1 text-nexus-red/80">
+                      <span>Blind-pick risk −{(lookupScores.blindP * 100).toFixed(0)}%</span>
+                      <NexusInfoTip label="Blind-pick risk">
+                        You are picking before the enemy laner, so they can counter you. The score is
+                        reduced to account for that.
+                      </NexusInfoTip>
                     </p>
-                    <p className="m-0 text-nexus-muted">
-                      Lane baseline is <span className={fitClass(lookupScores.base)}>{fitLabel(lookupScores.base)}</span>; current allies are{' '}
-                      <span className={fitClass(lookupScores.ally)}>{fitLabel(lookupScores.ally)}</span>.
-                    </p>
-                    <p className="m-0 text-nexus-muted">
-                      Enemy matchup is <span className={fitClass(lookupScores.enemy)}>{fitLabel(lookupScores.enemy)}</span>; team comp fit is{' '}
-                      <span className={fitClass(lookupScores.comp)}>{fitLabel(lookupScores.comp)}</span>.
-                    </p>
-                    {lookupScores.blindP > 0 && (
-                      <p className="m-0 text-nexus-red/80">
-                        Early blind risk: -{(lookupScores.blindP * 100).toFixed(0)}%.
-                      </p>
-                    )}
-                  </div>
-                </details>
+                  )}
+                </div>
               )}
 
               {lookupBuild && (
-                <details className="group mt-2 border border-nexus-line/65 bg-nexus-bg/25 font-mono text-[11px] leading-snug text-nexus-text/75">
-                  <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
-                    <span>Tips</span>
-                    <span className="text-nexus-lime/80 group-open:rotate-45 transition-transform">+</span>
-                  </summary>
-                  <div className="border-t border-nexus-line/55 px-2 py-1.5">
-                    {lookupBuild.buildHint}
-                    {lookupBuild.itemHint && (
-                      <div className="mt-1 text-nexus-muted">
-                        <span className="text-nexus-lime/80">Items:</span> {lookupBuild.itemHint}
-                      </div>
-                    )}
-                    {lookupBuild.tagsLine !== '—' && <div className="mt-1 text-nexus-muted">Riot: {lookupBuild.tagsLine}</div>}
-                  </div>
-                </details>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 font-mono text-[10px]">
+                  <span className="inline-flex items-center gap-1 border border-nexus-line/70 bg-nexus-bg/25 px-1.5 py-[2px] text-nexus-muted">
+                    <span className="uppercase tracking-[0.1em]">Tips</span>
+                    <NexusInfoTip label={`How to play ${lookupChampion?.name ?? 'this champion'}`}>
+                      <span>{lookupBuild.buildHint}</span>
+                      {lookupBuild.itemHint ? (
+                        <span className="mt-1 block text-nexus-muted">
+                          <b className="text-nexus-lime/80">Items:</b> {lookupBuild.itemHint}
+                        </span>
+                      ) : null}
+                      {lookupBuild.tagsLine !== '—' ? (
+                        <span className="mt-1 block text-nexus-muted">{lookupBuild.tagsLine}</span>
+                      ) : null}
+                    </NexusInfoTip>
+                  </span>
+                </div>
               )}
 
               {!inRolePool(lookupId, poolRole) && (
-                <p className="font-mono text-nexus-red/80 text-[11px] m-0 mt-2">
-                  Not in the curated {poolRole} pool — base is approximate.
+                <p className="m-0 mt-2 flex items-center gap-1 font-mono text-[10px] text-nexus-yellow/85">
+                  <span>Estimate only</span>
+                  <NexusInfoTip label="Why this is an estimate" tone="lime">
+                    {lookupChampion?.name ?? 'This champion'} is not in the tracked {poolRole} pool, so
+                    there is not enough data for a confident score.
+                  </NexusInfoTip>
                 </p>
               )}
             </div>
@@ -1114,22 +1247,27 @@ export function OverlayPanel() {
         </section>
 
         <section className="mb-5">
-          <div className="flex items-center justify-between gap-2 mb-2.5 border-b border-nexus-line pb-1.5">
-            <h3 className="font-mono font-bold text-sm uppercase tracking-[0.12em] text-nexus-lime/95 m-0">
-              Top picks
+          <div className="mb-2.5 flex items-center gap-2 border-b border-nexus-line pb-1.5">
+            <h3 className="m-0 mr-auto flex items-center gap-1.5 font-mono text-sm font-bold uppercase tracking-[0.12em] text-nexus-lime/95">
+              Best picks
+              <NexusInfoTip label="How picks are ranked" tone="lime">
+                Ranked by how much each champion raises your win chance <i>in this exact lobby</i> —
+                not by overall popularity.
+              </NexusInfoTip>
             </h3>
             <button
               type="button"
-              className="nexus-focus border border-nexus-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide text-nexus-muted hover:border-nexus-lime/50 hover:text-nexus-text disabled:opacity-45"
+              className="nexus-focus border border-nexus-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-nexus-muted hover:border-nexus-lime/50 hover:text-nexus-text disabled:opacity-45"
               onClick={() => setPickMatrixOpen(true)}
               disabled={d.suggestions.length === 0}
               aria-expanded={pickMatrixOpen}
+              title="Show the full ranked champion table"
             >
-              Champs
+              See all
             </button>
             <button
               type="button"
-              className="nexus-focus border border-nexus-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide text-nexus-muted hover:border-nexus-lime/50 hover:text-nexus-text disabled:opacity-45"
+              className="nexus-focus border border-nexus-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-nexus-muted hover:border-nexus-lime/50 hover:text-nexus-text disabled:opacity-45"
               onClick={() => {
                 if (topItemPlan) {
                   setItemMatrixPlan(topItemPlan)
@@ -1138,12 +1276,15 @@ export function OverlayPanel() {
               }}
               disabled={!topItemPlan}
               aria-expanded={itemMatrixOpen}
+              title="Show the full item build table"
             >
               Items
             </button>
           </div>
           {topPicks.length === 0 && (
-            <p className="font-mono font-bold text-sm text-nexus-muted m-0">Open the main app for draft data.</p>
+            <p className="m-0 font-mono text-sm text-nexus-muted">
+              Waiting for champ select. Start a game, or enter the draft manually in the main window.
+            </p>
           )}
           <ul
             className="list-none m-0 p-0 space-y-2.5"
@@ -1165,111 +1306,133 @@ export function OverlayPanel() {
                 p.buildProfile?.buildHint ?? 'Matchup notes locked until board has more context.'
               )
               const matchupPlan = d.draftIntel?.matchupPlans.find((plan) => plan.championId === p.championId) ?? null
+              const verdict = pickVerdict(p.winRateDelta)
               return (
                 <li
                   key={`${d.boardSignature ?? d.updatedAt}-${i}-${p.championId}`}
                   className="relative border border-nexus-line/85 bg-nexus-surface-2/90 px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex gap-2">
-                      {championIconUrl(p.championId) && (
-                        <img
-                          className="h-10 w-10 shrink-0 border border-nexus-line/80 object-cover"
-                          src={championIconUrl(p.championId)!}
-                          alt=""
-                          width={40}
-                          height={40}
-                        />
-                      )}
-                      <div className="min-w-0">
-                      <div className="font-mono font-bold text-sm sm:text-base leading-tight">
-                        <span className="text-nexus-lime/95">{p.championName}</span>
-                        <span className="text-nexus-muted"> · </span>
-                        <span className="text-nexus-text/90 tabular-nums">{p.score}</span>
+                  {/* Row 1: rank, portrait, name, verdict. Readable in one glance. */}
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 shrink-0 text-center font-mono text-xs tabular-nums text-nexus-muted">
+                      {i + 1}
+                    </span>
+                    {championIconUrl(p.championId) && (
+                      <img
+                        className="h-10 w-10 shrink-0 border border-nexus-line/80 object-cover"
+                        src={championIconUrl(p.championId)!}
+                        alt=""
+                        width={40}
+                        height={40}
+                      />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 font-mono font-bold text-sm sm:text-base leading-tight">
+                        <span className="truncate text-nexus-lime/95">{p.championName}</span>
                         {p.isLockedPick && (
-                          <span className="ml-2 border border-nexus-lime/70 px-1 py-0.5 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/90">
+                          <span className="shrink-0 border border-nexus-lime/70 px-1 text-[9px] uppercase tracking-[0.12em] text-nexus-lime/90">
                             Picked
                           </span>
                         )}
                       </div>
-                      {p.baseWinRate != null && p.contextWinRate != null && p.winRateDelta != null && (
-                        <div className="font-mono font-bold text-xs text-nexus-muted mt-1 tabular-nums">
-                          {(p.baseWinRate * 100).toFixed(1)}% -&gt; {(p.contextWinRate * 100).toFixed(1)}%
-                          <span className={p.winRateDelta >= 0 ? 'text-nexus-lime/85' : 'text-nexus-red/80'}>
-                            {' '}
-                            ({p.winRateDelta >= 0 ? '+' : ''}
-                            {(p.winRateDelta * 100).toFixed(1)}%)
+                      <div className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.1em]">
+                        <span className={['border px-1.5 py-[1px]', verdict.chip].join(' ')}>{verdict.word}</span>
+                        {p.winRateDelta != null && (
+                          <span className={['tabular-nums font-bold', verdict.cls].join(' ')}>
+                            {signedPct(p.winRateDelta)}
                           </span>
-                        </div>
-                      )}
+                        )}
+                        <NexusInfoTip label={`Why ${p.championName} is rated ${verdict.word}`}>
+                          <b>{verdict.word}</b> for this lobby.
+                          {p.baseWinRate != null && p.contextWinRate != null ? (
+                            <>
+                              {' '}
+                              Normally wins <b>{pct(p.baseWinRate)}</b> in {poolRole ?? 'this role'}; against
+                              this specific draft it is <b>{pct(p.contextWinRate)}</b>.
+                            </>
+                          ) : null}
+                          {p.buildProfile ? (
+                            <>
+                              {' '}
+                              Deals <b>{p.buildProfile.damage}</b> damage as a {p.buildProfile.archetype}.
+                            </>
+                          ) : null}
+                        </NexusInfoTip>
                       </div>
                     </div>
-                    <div className="flex shrink-0 gap-1 opacity-90">
-                      {p.buildProfile && (
-                        <span
-                          className="inline-flex h-5 min-w-6 items-center justify-center border border-nexus-line px-1.5 font-mono text-[10px] uppercase text-nexus-text/85"
-                          title={p.buildProfile.buildHint}
-                        >
-                          {p.buildProfile.damage}
-                        </span>
+                  </div>
+
+                  {/* Row 2: who it beats / pairs with, as portraits only. */}
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 pl-6 font-mono text-[10px]">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="uppercase tracking-[0.1em] text-nexus-red/80">Beats</span>
+                      {goodVsSlots.length ? (
+                        goodVsSlots.map((slot) => (
+                          <ContextPortrait
+                            key={`vs-${p.championId}-${slot.role}-${slot.championId}`}
+                            slot={slot}
+                            imageUrl={championIconUrl(slot.championId)}
+                            tone="enemy"
+                          />
+                        ))
+                      ) : (
+                        <span className="text-nexus-muted">—</span>
                       )}
-                    </div>
-                  </div>
+                      <NexusInfoTip label="Beats">
+                        Enemy champions already locked in that this pick matches up well against.
+                      </NexusInfoTip>
+                    </span>
 
-                  <div className={['mt-2 grid gap-1.5 font-mono text-[10px] leading-snug', showTeamSynergy ? 'grid-cols-2' : 'grid-cols-1'].join(' ')}>
                     {showTeamSynergy && (
-                    <div className="border-l-2 border-[#23d5b0] bg-nexus-bg/20 pl-1.5 pr-1 py-0.5 min-w-0">
-                      <span className="uppercase tracking-[0.12em] text-nexus-lime/80">Team synergy</span>
-                      <span className="text-nexus-line"> · </span>
-                      <span className="inline-flex max-w-[75%] align-middle items-center gap-1">
-                        {synergySlots.length
-                          ? synergySlots.map((slot) => (
-                              <ContextPortrait
-                                key={`syn-${p.championId}-${slot.role}-${slot.championId}`}
-                                slot={slot}
-                                imageUrl={championIconUrl(slot.championId)}
-                                tone="ally"
-                              />
-                            ))
-                          : <span className="text-nexus-text/80">pending</span>}
+                      <span className="inline-flex items-center gap-1">
+                        <span className="uppercase tracking-[0.1em] text-nexus-lime/80">Pairs</span>
+                        {synergySlots.length ? (
+                          synergySlots.map((slot) => (
+                            <ContextPortrait
+                              key={`syn-${p.championId}-${slot.role}-${slot.championId}`}
+                              slot={slot}
+                              imageUrl={championIconUrl(slot.championId)}
+                              tone="ally"
+                            />
+                          ))
+                        ) : (
+                          <span className="text-nexus-muted">—</span>
+                        )}
+                        <NexusInfoTip label="Pairs">
+                          Teammates this pick combos with — their kits amplify each other.
+                        </NexusInfoTip>
                       </span>
-                    </div>
                     )}
-                    <div className="border-l-2 border-[#f87171] bg-nexus-bg/20 pl-1.5 pr-1 py-0.5 min-w-0">
-                      <span className="uppercase tracking-[0.12em] text-nexus-red/80">Good vs</span>
-                      <span className="text-nexus-line"> · </span>
-                      <span className="inline-flex max-w-[75%] align-middle items-center gap-1">
-                        {goodVsSlots.length
-                          ? goodVsSlots.map((slot) => (
-                              <ContextPortrait
-                                key={`vs-${p.championId}-${slot.role}-${slot.championId}`}
-                                slot={slot}
-                                imageUrl={championIconUrl(slot.championId)}
-                                tone="enemy"
-                              />
-                            ))
-                          : <span className="text-nexus-text/80">pending</span>}
-                      </span>
-                    </div>
                   </div>
 
-                  <div className="mt-2 grid grid-cols-1 gap-1.5">
+                  {/* Row 3: runes + tips collapse into badges; only Build keeps a panel (it draws item icons). */}
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-6 font-mono text-[10px]">
                     {p.runes && (
-                      <details className="group border border-nexus-line/65 bg-nexus-bg/25 font-mono text-[11px] leading-snug text-nexus-text/75">
-                        <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
-                          <span>Runes</span>
-                          <span className="text-nexus-lime/80 group-open:rotate-45 transition-transform">+</span>
-                        </summary>
-                        <div className="border-t border-nexus-line/55 px-2 py-1.5">
-                          <span className="text-nexus-lime/85">{p.runes.keystone}</span>
-                          <span className="text-nexus-muted"> / {p.runes.primaryTree}</span>
-                          <div className="mt-0.5 text-nexus-muted/85">{p.runes.secondary}</div>
-                        </div>
-                      </details>
+                      <span className="inline-flex max-w-full items-center gap-1 border border-nexus-line/70 bg-nexus-bg/25 px-1.5 py-[2px]">
+                        <span className="truncate text-nexus-lime/85">{p.runes.keystone}</span>
+                        <NexusInfoTip label="Full rune page">
+                          Keystone <b>{p.runes.keystone}</b> in {p.runes.primaryTree}, secondary{' '}
+                          {p.runes.secondary}.
+                        </NexusInfoTip>
+                      </span>
                     )}
+                    <span className="inline-flex items-center gap-1 border border-nexus-line/70 bg-nexus-bg/25 px-1.5 py-[2px] text-nexus-muted">
+                      <span className="uppercase tracking-[0.1em]">Tips</span>
+                      <NexusInfoTip label={`How to play ${p.championName}`}>
+                        <span>{intel}</span>
+                        {p.buildProfile?.itemHint ? (
+                          <span className="mt-1 block text-nexus-muted">
+                            <b className="text-nexus-lime/80">Items:</b> {p.buildProfile.itemHint}
+                          </span>
+                        ) : null}
+                        {p.buildProfile && p.buildProfile.tagsLine !== '—' ? (
+                          <span className="mt-1 block text-nexus-muted">{p.buildProfile.tagsLine}</span>
+                        ) : null}
+                      </NexusInfoTip>
+                    </span>
                     {matchupPlan?.itemPlan && (
-                      <details className="group border border-nexus-line/65 bg-nexus-bg/25 font-mono text-[11px] leading-snug text-nexus-text/75">
-                        <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
+                      <details className="group w-full border border-nexus-line/65 bg-nexus-bg/25 leading-snug text-nexus-text/75">
+                        <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1 uppercase tracking-[0.1em] text-nexus-muted marker:hidden">
                           <span>Build</span>
                           <span className="text-nexus-lime/80 group-open:rotate-45 transition-transform">+</span>
                         </summary>
@@ -1288,26 +1451,6 @@ export function OverlayPanel() {
                         </div>
                       </details>
                     )}
-                  <details className="group border border-nexus-line/65 bg-nexus-bg/25 font-mono text-[11px] leading-snug text-nexus-text/75">
-                    <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 uppercase tracking-[0.12em] text-nexus-muted marker:hidden">
-                      <span>Tips</span>
-                      <span className="text-nexus-lime/80 group-open:rotate-45 transition-transform">+</span>
-                    </summary>
-                    <div className="border-t border-nexus-line/55 px-2 py-1.5">
-                      <span>{intel}</span>
-                      {p.buildProfile?.itemHint && (
-                        <div className="mt-1 text-nexus-muted">
-                          <span className="text-nexus-lime/80">Items:</span> {p.buildProfile.itemHint}
-                        </div>
-                      )}
-                      {p.buildProfile && (
-                        <div className="mt-1 text-nexus-muted">
-                          {p.buildProfile.archetype}
-                          {p.buildProfile.tagsLine !== '—' && <span> · {p.buildProfile.tagsLine}</span>}
-                        </div>
-                      )}
-                    </div>
-                  </details>
                   </div>
                 </li>
               )
@@ -1324,22 +1467,44 @@ export function OverlayPanel() {
           </section>
         )}
 
-        <div className="border-t border-nexus-line pt-3 flex flex-col gap-1.5">
-          <p className="font-mono font-bold text-xs text-nexus-text/85 m-0">
-            <span className={lcuClass}>{lcuLabel}</span>
-            <span className="text-nexus-line"> · </span>
-            <span className="text-nexus-muted">{d.source}</span>
-          </p>
-          {d.patchLabel && (
-            <p className="font-mono text-[11px] text-nexus-muted m-0 leading-snug">
-              {d.patchLabel}
-              {d.trainedEffectsStatus && d.trainedEffectsStatus.hasAnyData && (
-                <span> · trained {d.trainedEffectsStatus.basePairs}/{d.trainedEffectsStatus.matchupPairs}/{d.trainedEffectsStatus.synergyPairs}</span>
+        <div className="flex flex-col gap-1.5 border-t border-nexus-line pt-3">
+          {d.error && <p className="m-0 font-mono text-xs font-bold leading-snug text-nexus-red">{d.error}</p>}
+          {/* Show the key that actually registered — never advertise a dead hotkey. */}
+          <p className="m-0 flex flex-wrap items-center gap-x-1.5 font-mono text-[11px] text-nexus-muted">
+            {activeHotkeys.length > 0 ? (
+              <span>
+                Press{' '}
+                <kbd className="border border-nexus-line/70 bg-nexus-bg px-1 text-nexus-text/90">
+                  {activeHotkeys[0]}
+                </kbd>{' '}
+                to hide
+              </span>
+            ) : (
+              <span className="text-nexus-yellow/90">No hotkey — use ✕ above</span>
+            )}
+            <NexusInfoTip label="Overlay details">
+              {activeHotkeys.length > 0 ? (
+                <span className="block">
+                  <b>{activeHotkeys.join(' / ')}</b> shows and hides this window.
+                </span>
+              ) : (
+                <span className="block text-nexus-yellow/90">
+                  Windows would not give this app any of its toggle keys — another program already
+                  owns them. Open <b>☰ Menu → Overlay → Toggle key</b> and pick a different one.
+                </span>
               )}
-            </p>
-          )}
-          {d.error && <p className="font-mono font-bold text-xs text-nexus-red m-0 leading-snug">{d.error}</p>}
-          <p className="font-mono font-bold text-sm text-nexus-muted m-0">Insert / F9 / F10</p>
+              <span className="mt-1 block">
+                Drag the title bar to move the overlay; it remembers where you put it.
+              </span>
+              <span className="mt-1 block">
+                Source: {d.source} · {lcuLabel}
+                {d.patchLabel ? ` · ${d.patchLabel}` : ''}
+                {d.trainedEffectsStatus?.hasAnyData
+                  ? ` · trained ${d.trainedEffectsStatus.basePairs}/${d.trainedEffectsStatus.matchupPairs}/${d.trainedEffectsStatus.synergyPairs}`
+                  : ''}
+              </span>
+            </NexusInfoTip>
+          </p>
         </div>
       </div>
     </div>

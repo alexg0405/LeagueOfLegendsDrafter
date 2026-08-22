@@ -1,0 +1,12 @@
+{
+  "version": "4.3.0",
+  "releasedAt": "2026-08-22T23:38:29.871Z",
+  "installer": {
+    "file": "Nexus-Draft-Setup-4.3.0.exe",
+    "bytes": 84759065
+  },
+  "portable": {
+    "file": "Nexus-Draft-Portable-4.3.0.exe",
+    "bytes": 84550991
+  }
+}

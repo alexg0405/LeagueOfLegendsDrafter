@@ -44,7 +44,15 @@ import {
   type RiotPlatform,
   type SuggestionContextSlot
 } from '@shared/draft'
-import { DraftItemMatrixView, DraftItemPlanBlock as ItemPlanBlock, MicroLabel, NexusPanel, NexusPlus } from './nexus-ui'
+import {
+  DraftItemMatrixView,
+  DraftItemPlanBlock as ItemPlanBlock,
+  MicroLabel,
+  NexusInfoTip,
+  NexusPanel,
+  NexusPlus,
+  pickVerdict
+} from './nexus-ui'
 import { idbGetChampions, idbGetItems, idbSetChampions, idbSetItems } from './web/ddragonIndexedDbCache'
 import {
   clearPersistedWebDraft,
@@ -80,8 +88,25 @@ const MAX_WEB_ROLLOUTS = 200
 const LS_WEB_CHAMPION_POOL_PREFS = 'nexusdraft.web.v1.championPoolPrefs'
 const LS_WEB_PLAYER_POOL_PROFILE = 'nexusdraft.web.v1.playerChampionPoolProfile'
 const LS_WEB_RECOMMENDATION_POOL_MODE = 'nexusdraft.web.v1.recommendationPoolMode'
+/**
+ * Fallback only — kept in this exact shape because `scripts/bump-release-version.mjs`
+ * rewrites the literal. The live filename comes from `/downloads/downloads.json`, which
+ * `release:stage-web` writes alongside the real artifacts, so a version bump can never
+ * point the button at an exe that has not been published yet.
+ */
 const EXE_DOWNLOAD_FILE = 'Nexus-Draft-Portable-4.3.0.exe'
 const EXE_DOWNLOAD_URL = `/downloads/${EXE_DOWNLOAD_FILE}`
+const APP_VERSION = /(\d+\.\d+\.\d+)/.exec(EXE_DOWNLOAD_FILE)?.[1] ?? ''
+
+type DownloadsManifest = {
+  version?: string
+  portable?: { file?: string; bytes?: number } | null
+  installer?: { file?: string; bytes?: number } | null
+}
+
+function formatMb(bytes: number | undefined): string | null {
+  return bytes && bytes > 0 ? `${Math.round(bytes / 1_000_000)} MB` : null
+}
 const GITHUB_PROFILE_URL = 'https://github.com/alexg0405'
 const LIVE_META_REFRESH_MS = 30 * 60 * 1000
 const WEB_PLAYER_POOL_IMPORT_ENABLED = false
@@ -554,6 +579,7 @@ function SuggestionRow({
     suggestion.buildProfile?.buildHint ?? 'Use this pick when it fits your lane matchup and team damage profile.'
   )
   const badges = useMemo(() => suggestionBadges(suggestion, matchupPlan), [matchupPlan, suggestion])
+  const webVerdict = pickVerdict(suggestion.winRateDelta)
   return (
     <li className="relative overflow-hidden rounded-lg border border-white/[0.07] border-l-2 border-l-nexus-lime/45 bg-gradient-to-br from-nexus-surface-2/95 to-nexus-bg/90 px-3 py-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.2)] transition-colors hover:border-nexus-lime/30">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-nexus-lime/55 via-transparent to-transparent" aria-hidden />
@@ -563,14 +589,34 @@ function SuggestionRow({
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-2 font-mono text-sm font-bold leading-tight">
             <div className="min-w-0">
               <span className="text-nexus-lime/95">{suggestion.championName}</span>
-            <span className="text-nexus-muted"> · </span>
-              <span className="text-nexus-text/90 tabular-nums">{suggestion.score}</span>
             </div>
             {suggestion.isLockedPick && (
               <span className="shrink-0 rounded-sm border border-nexus-lime/60 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">
                 Picked
               </span>
             )}
+          </div>
+          {/* Verdict word + one number. The raw base/context/score triple moves into the tip. */}
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.1em]">
+            <span className={`border px-1.5 py-[1px] ${webVerdict.chip}`}>{webVerdict.word}</span>
+            {suggestion.winRateDelta != null && (
+              <span className={`tabular-nums font-bold ${webVerdict.cls}`}>
+                {suggestion.winRateDelta >= 0 ? '+' : ''}
+                {(suggestion.winRateDelta * 100).toFixed(1)}%
+              </span>
+            )}
+            <NexusInfoTip label={`Why ${suggestion.championName} is rated ${webVerdict.word}`}>
+              <b>{webVerdict.word}</b> for this lobby.
+              {suggestion.baseWinRate != null && suggestion.contextWinRate != null ? (
+                <>
+                  {' '}
+                  Normally wins <b>{(suggestion.baseWinRate * 100).toFixed(1)}%</b>; against this
+                  draft it is <b>{(suggestion.contextWinRate * 100).toFixed(1)}%</b>.
+                </>
+              ) : null}
+              {suggestion.buildProfile ? <> Plays as a {suggestion.buildProfile.archetype}.</> : null}{' '}
+              Model score {suggestion.score}.
+            </NexusInfoTip>
           </div>
           {badges.length > 0 ? (
             <div className="mt-1.5 flex flex-wrap gap-1">
@@ -584,21 +630,6 @@ function SuggestionRow({
               ))}
             </div>
           ) : null}
-          {suggestion.buildProfile && (
-            <p className="m-0 mt-1.5 text-[11px] font-mono uppercase tracking-[0.16em] text-nexus-muted/75">
-              {suggestion.buildProfile.archetype}
-            </p>
-          )}
-          {suggestion.baseWinRate != null && suggestion.contextWinRate != null && suggestion.winRateDelta != null && (
-            <div className="mt-1.5 font-mono text-xs text-nexus-muted tabular-nums">
-              {(suggestion.baseWinRate * 100).toFixed(1)}% → {(suggestion.contextWinRate * 100).toFixed(1)}%
-              <span className={suggestion.winRateDelta >= 0 ? ' text-nexus-lime/80' : ' text-nexus-red/75'}>
-                {' '}
-                ({suggestion.winRateDelta >= 0 ? '+' : ''}
-                {(suggestion.winRateDelta * 100).toFixed(1)}%)
-              </span>
-            </div>
-          )}
         </div>
       </div>
       <div className="mt-2.5 divide-y divide-white/[0.07] border-t border-white/[0.07] font-mono text-[11px] leading-snug text-nexus-text/85">
@@ -616,7 +647,12 @@ function SuggestionRow({
           >
             {showTeamSynergy && (
               <div className="min-w-0 border-l-4 border-nexus-lime bg-nexus-surface-2/40 py-1 pl-2 pr-1">
-                <div className="text-[0.65rem] uppercase tracking-[0.1em] text-nexus-lime/90">Team synergy</div>
+                <div className="flex items-center gap-1 text-[0.65rem] uppercase tracking-[0.1em] text-nexus-lime/90">
+                  Pairs with
+                  <NexusInfoTip label="Pairs with">
+                    Teammates already locked in whose kits combo with this pick.
+                  </NexusInfoTip>
+                </div>
                 <div className="mt-1 inline-flex min-h-7 max-w-full flex-wrap items-center gap-1 text-nexus-text/90">
                   {synergySlots.length
                     ? synergySlots.map((slot) => (
@@ -629,12 +665,17 @@ function SuggestionRow({
                           tone="ally"
                         />
                       ))
-                    : 'pending'}
+                    : '—'}
                 </div>
               </div>
             )}
             <div className="min-w-0 border-l-4 border-nexus-red bg-nexus-surface-2/40 py-1 pl-2 pr-1">
-              <div className="text-[0.65rem] uppercase tracking-[0.1em] text-nexus-red/85">Good vs</div>
+              <div className="flex items-center gap-1 text-[0.65rem] uppercase tracking-[0.1em] text-nexus-red/85">
+                Beats
+                <NexusInfoTip label="Beats">
+                  Enemy champions already locked in that this pick matches up well against.
+                </NexusInfoTip>
+              </div>
               <div className="mt-1 inline-flex min-h-7 max-w-full flex-wrap items-center gap-1 text-nexus-text/90">
                 {goodVsSlots.length
                   ? goodVsSlots.map((slot) => (
@@ -647,24 +688,43 @@ function SuggestionRow({
                         tone="enemy"
                       />
                     ))
-                  : 'pending'}
+                  : '—'}
               </div>
             </div>
           </div>
         </div>
-        {suggestion.runes && (
-          <details className="group open:pb-0">
-            <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 py-2 uppercase tracking-[0.1em] text-nexus-muted marker:hidden hover:text-nexus-text/90">
-              <span>Runes</span>
-              <span className="text-nexus-lime/70 transition-transform group-open:rotate-45">+</span>
-            </summary>
-            <div className="pb-2 pt-0.5 pl-0">
-              <span className="text-nexus-lime/80">{suggestion.runes.keystone}</span>
-              <span className="text-nexus-muted/90"> / {suggestion.runes.primaryTree}</span>
-              <div className="mt-0.5 text-nexus-muted/80">{suggestion.runes.secondary}</div>
-            </div>
-          </details>
-        )}
+        {/* Runes + tips are one-line badges; the detail lives in the hover tip. */}
+        <div className="flex flex-wrap items-center gap-1.5 py-2">
+          {suggestion.runes && (
+            <span className="inline-flex max-w-full items-center gap-1 rounded-sm border border-white/[0.12] bg-nexus-bg/40 px-1.5 py-[2px]">
+              <span className="truncate text-nexus-lime/80">{suggestion.runes.keystone}</span>
+              <NexusInfoTip label="Full rune page">
+                Keystone <b>{suggestion.runes.keystone}</b> in {suggestion.runes.primaryTree}, secondary{' '}
+                {suggestion.runes.secondary}.
+              </NexusInfoTip>
+            </span>
+          )}
+          <span className="inline-flex items-center gap-1 rounded-sm border border-white/[0.12] bg-nexus-bg/40 px-1.5 py-[2px] uppercase tracking-[0.1em] text-nexus-muted">
+            Tips
+            <NexusInfoTip label={`How to play ${suggestion.championName}`}>
+              <span>{tip}</span>
+              {suggestion.buildProfile?.itemHint ? (
+                <span className="mt-1 block text-nexus-muted">
+                  <b className="text-nexus-lime/80">Items:</b> {suggestion.buildProfile.itemHint}
+                </span>
+              ) : null}
+              {matchupPlan ? (
+                <span className="mt-1 block text-nexus-muted">
+                  <b className="text-nexus-lime/80">Plan:</b> {matchupPlan.summonerSpells};{' '}
+                  {matchupPlan.startingItem}
+                </span>
+              ) : null}
+              {suggestion.buildProfile && suggestion.buildProfile.tagsLine !== '—' ? (
+                <span className="mt-1 block text-nexus-muted">{suggestion.buildProfile.tagsLine}</span>
+              ) : null}
+            </NexusInfoTip>
+          </span>
+        </div>
         {matchupPlan?.itemPlan && (
           <details className="group open:pb-0">
             <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 py-2 uppercase tracking-[0.1em] text-nexus-muted marker:hidden hover:text-nexus-text/90">
@@ -682,28 +742,6 @@ function SuggestionRow({
             </div>
           </details>
         )}
-        <details className="group">
-          <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 py-2 uppercase tracking-[0.1em] text-nexus-muted marker:hidden hover:text-nexus-text/90">
-            <span>Tips</span>
-            <span className="text-nexus-lime/70 transition-transform group-open:rotate-45">+</span>
-          </summary>
-          <div className="pb-2 text-nexus-text/80">
-            <span>{tip}</span>
-            {suggestion.buildProfile?.itemHint && (
-              <p className="m-0 mt-1.5 text-nexus-muted/90">
-                <span className="text-nexus-lime/80">Items:</span> {suggestion.buildProfile.itemHint}
-              </p>
-            )}
-            {matchupPlan && (
-              <p className="m-0 mt-1.5 text-nexus-muted/90">
-                <span className="text-nexus-lime/80">Plan:</span> {matchupPlan.summonerSpells}; {matchupPlan.startingItem}
-              </p>
-            )}
-            {suggestion.buildProfile && suggestion.buildProfile.tagsLine !== '—' && (
-              <p className="m-0 mt-1.5 text-nexus-muted/85">{suggestion.buildProfile.tagsLine}</p>
-            )}
-          </div>
-        </details>
       </div>
     </li>
   )
@@ -712,6 +750,30 @@ function SuggestionRow({
 export function WebDraftApp() {
   const initialPersistedDraft = useMemo(() => loadPersistedWebDraft(), [])
   const initialPlayerPoolProfile = useMemo(readPlayerChampionPoolProfile, [])
+  const [downloads, setDownloads] = useState<DownloadsManifest | null>(null)
+
+  /** Resolve the real published artifact so the button never links at a missing file. */
+  useEffect(() => {
+    let cancelled = false
+    void fetch('/downloads/downloads.json', { cache: 'no-cache' })
+      .then((res) => (res.ok ? (res.json() as Promise<DownloadsManifest>) : null))
+      .then((manifest) => {
+        if (!cancelled && manifest?.portable?.file) {
+          setDownloads(manifest)
+        }
+      })
+      .catch(() => {
+        /* fall back to the compiled-in filename */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const exeFile = downloads?.portable?.file ?? EXE_DOWNLOAD_FILE
+  const exeUrl = downloads?.portable?.file ? `/downloads/${downloads.portable.file}` : EXE_DOWNLOAD_URL
+  const exeVersion = downloads?.version ?? APP_VERSION
+  const exeSize = formatMb(downloads?.portable?.bytes)
   const [ddragonVersion, setDdragonVersion] = useState<string | null>(null)
   const [champions, setChampions] = useState<ChampionLite[]>([])
   const [items, setItems] = useState<ItemLite[]>([])
@@ -1691,24 +1753,52 @@ export function WebDraftApp() {
                   maxFontSize={160}
                 />
               </h1>
-              <p className="mt-3 max-w-2xl font-mono text-sm text-nexus-muted leading-relaxed">
-                Browser draft assistant with manual board entry.
+              <p className="mt-3 max-w-2xl font-mono text-sm leading-relaxed text-nexus-muted">
+                Tells you who to pick. Type in the draft, get ranked champions.
               </p>
+              {/* Three steps, no paragraph. Anything longer lives behind an info tip. */}
+              <ol className="mt-3 flex max-w-2xl flex-wrap gap-x-4 gap-y-1.5 p-0 font-mono text-xs text-nexus-muted">
+                {[
+                  { n: 1, t: 'Pick your role' },
+                  { n: 2, t: 'Add locked champions' },
+                  { n: 3, t: 'Pick the top result' }
+                ].map((step) => (
+                  <li key={step.n} className="flex list-none items-center gap-1.5">
+                    <span className="inline-flex h-4 w-4 items-center justify-center border border-nexus-lime/50 text-[10px] text-nexus-lime/90">
+                      {step.n}
+                    </span>
+                    {step.t}
+                  </li>
+                ))}
+                <li className="flex list-none items-center">
+                  <NexusInfoTip label="How the ranking works" tone="lime">
+                    Each champion is scored on lane strength, the enemies already locked in, synergy
+                    with your team, and overall comp balance. The percentage is how much the pick
+                    moves your win chance <i>in this specific lobby</i>.
+                  </NexusInfoTip>
+                </li>
+              </ol>
               {loadError ? (
                 <p className="mt-2 m-0 max-w-2xl font-mono text-xs text-nexus-red/80 leading-relaxed">{loadError}</p>
               ) : null}
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <a
                 className={solidGlitchCtaClass}
-                data-glitch-label="Download EXE"
-                href={EXE_DOWNLOAD_URL}
-                download={EXE_DOWNLOAD_FILE}
+                data-glitch-label="Get the Windows app"
+                href={exeUrl}
+                download={exeFile}
                 onPointerEnter={(event) => emitNexusEffect('button:hover', { x: event.clientX, y: event.clientY })}
                 onPointerDown={(event) => emitNexusEffect('button:press', { x: event.clientX, y: event.clientY })}
               >
-                Download EXE
+                Get the Windows app
               </a>
+              <NexusInfoTip label="What the Windows app adds">
+                The browser version needs you to type the draft in by hand. The Windows app reads
+                champ select straight from your League client and shows an overlay on top of the
+                game. Portable <b>{exeVersion}</b>
+                {exeSize ? ` (${exeSize})` : ''} — no installer, just run it.
+              </NexusInfoTip>
               <a
                 className={outlineGlitchCtaClass}
                 data-glitch-label="Suggestions"
@@ -1771,7 +1861,14 @@ export function WebDraftApp() {
                   </select>
                 </label>
                 <label className="flex flex-col gap-1.5">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Rollouts</span>
+                  <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">
+                    Lookahead
+                    <NexusInfoTip label="About lookahead">
+                      How many times the app simulates the rest of the draft filling in before
+                      scoring each champion. Higher is a little more accurate and a little slower.
+                      <b> 0</b> turns it off. Default {DEFAULT_WEB_ROLLOUTS}.
+                    </NexusInfoTip>
+                  </span>
                   <input
                     className={webFieldClass}
                     type="number"
@@ -1788,7 +1885,13 @@ export function WebDraftApp() {
                   />
                 </label>
                 <label className="flex flex-col gap-1.5">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">Delta order</span>
+                  <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">
+                    Sort
+                    <NexusInfoTip label="About sorting">
+                      <b>Best first</b> shows the champions that gain the most from this lobby.
+                      <b> Worst first</b> flips it — handy for deciding what to ban.
+                    </NexusInfoTip>
+                  </span>
                   <select className={webFieldClass} value={deltaMode} onChange={(e) => setDeltaMode(e.target.value === 'worst' ? 'worst' : 'best')}>
                     <option value="best">Best first</option>
                     <option value="worst">Worst first</option>

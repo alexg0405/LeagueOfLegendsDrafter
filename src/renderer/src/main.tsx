@@ -9,11 +9,6 @@ import './App.css'
 const isWeb = import.meta.env.VITE_NEXUS_WEB === '1'
 
 async function bootstrap() {
-  if (import.meta.env.VITE_NEXUS_TAURI === '1') {
-    const { installTauriBridge } = await import('./tauri/bridge')
-    installTauriBridge()
-  }
-
   const root = document.getElementById('root')
   if (!root) {
     throw new Error('no #root')

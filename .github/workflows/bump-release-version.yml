@@ -28,9 +28,6 @@ jobs:
         with:
           node-version: 22
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
       - name: Install dependencies
         run: npm ci
 
@@ -44,10 +41,6 @@ jobs:
           const versionFiles = new Set([
             'package.json',
             'package-lock.json',
-            'Cargo.lock',
-            'src-tauri/Cargo.toml',
-            'src-tauri/tauri.conf.json',
-            'src-tauri/src/lib.rs',
             'src/renderer/src/MainShell.tsx',
             'src/renderer/src/WebDraftApp.tsx'
           ])
@@ -63,15 +56,14 @@ jobs:
         if: ${{ steps.inspect.outputs.skip != 'true' }}
         run: npm run release:bump-version -- --count ${{ steps.inspect.outputs.count }}
 
-      - name: Build website portable download
-        if: ${{ steps.inspect.outputs.skip != 'true' }}
-        run: npm run tauri:portable:web
-
+      # Desktop artifacts are NOT built here: packaging is ~165 MB and committing it on
+      # every push is what let a stale installer sit on the site for months. Ship a release
+      # with `npm run dist:win && npm run release:stage-web` instead.
       - name: Commit version bump
         if: ${{ steps.inspect.outputs.skip != 'true' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json Cargo.lock src-tauri/Cargo.toml src-tauri/tauri.conf.json src-tauri/src/lib.rs src/renderer/src/MainShell.tsx src/renderer/src/WebDraftApp.tsx src/renderer/public/downloads
+          git add package.json package-lock.json src/renderer/src/MainShell.tsx src/renderer/src/WebDraftApp.tsx
           git diff --cached --quiet || git commit -m "chore: bump release version"
           git push

@@ -6,6 +6,7 @@ import {
   type RoleKey
 } from '../../../shared/draft'
 import { MicroLabel } from './NexusTick'
+import { NexusInfoTip } from './NexusInfoTip'
 import { NexusPanel } from './NexusPanel'
 
 export type MatchupChampionOption = {
@@ -84,9 +85,12 @@ export function NexusMatchupExplorer({ champions, ddragonVersion }: Props) {
 
   return (
     <NexusPanel kicker={`meta // patch ${patch}`} title="Champion matchups" accent>
-      <p className="mb-4 font-mono text-xs sm:text-sm text-nexus-muted">
-        Pick your champion and an opposing role. Win rates come from the Emerald+ public counter seed (same data the
-        draft scorer uses).
+      <p className="mb-4 flex items-center gap-1.5 font-mono text-sm text-nexus-text/80">
+        Who beats who.
+        <NexusInfoTip label="Where these win rates come from">
+          Pick your champion and an enemy role to see the matchup. Win rates come from the Emerald+
+          public counter seed — the same data the draft scorer uses.
+        </NexusInfoTip>
       </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] gap-4">

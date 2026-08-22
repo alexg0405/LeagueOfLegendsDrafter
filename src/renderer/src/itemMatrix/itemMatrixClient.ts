@@ -3,7 +3,6 @@ import {
   type BuildDraftIntelArgs,
   type DraftMatchupPlan
 } from '../../../shared/draft'
-import { invokeTauriCommand, isTauriBuild } from '../tauri/commands'
 
 export type ItemMatrixResult = {
   plans: DraftMatchupPlan[]
@@ -65,23 +64,6 @@ export function buildDraftItemMatrixPlansAsync(
   args: BuildDraftIntelArgs,
   options?: ItemMatrixRequestOptions
 ): Promise<ItemMatrixResult> {
-  if (isTauriBuild()) {
-    return invokeTauriCommand<string>('build_item_matrix_plans_native', {
-      inputJson: JSON.stringify(serializeItemMatrixInput(args, options))
-    })
-      .then((raw) => {
-        const parsed = JSON.parse(raw) as unknown
-        if (!Array.isArray(parsed)) {
-          return { plans: [], status: 'error' as const, error: 'Rust item matrix returned invalid data.' }
-        }
-        return { plans: parsed as DraftMatchupPlan[], status: 'ready' as const }
-      })
-      .catch((error) => ({
-        plans: [],
-        status: 'error' as const,
-        error: error instanceof Error ? error.message : String(error)
-      }))
-  }
   if (typeof Worker === 'undefined') {
     return Promise.resolve({ plans: [], status: 'error', error: 'Browser workers are unavailable.' })
   }

@@ -11,7 +11,12 @@
     /* Pale mint: light panels and high-readability body text on dark */
     --nexus-panel-light: #c5e4d6;
     --nexus-text: #e8f3ee;
-    --nexus-muted: #7fa896;
+    /*
+     * Secondary body text. Was #7fa896, which fell below comfortable reading contrast
+     * once combined with the /75–/85 opacity modifiers and 10–12px sizes used across the
+     * UI. Brightened so even `text-nexus-muted/75` stays legible on --nexus-bg.
+     */
+    --nexus-muted: #a8c9ba;
     /* Primary accent (UI still uses the “lime” token name) */
     --nexus-lime: #1dd4a8;
     --nexus-blue: #3db8a0;
@@ -19,6 +24,24 @@
     /* Golden orange: queue / wait / high-contrast highlights */
     --nexus-yellow: #e89a2c;
     --nexus-line: rgba(200, 240, 224, 0.12);
+  }
+
+  /*
+   * Readability floor. The UI leans on `text-[10px]`/`text-[11px]` for dense HUD rows;
+   * below ~12px those become hard to read on a 1080p monitor at arm's length, so clamp
+   * the smallest steps up rather than hunting every utility class.
+   */
+  .text-\[10px\] {
+    font-size: 12px;
+  }
+  .text-\[11px\] {
+    font-size: 12.5px;
+  }
+  .text-\[0\.65rem\] {
+    font-size: 12px;
+  }
+  .text-\[9px\] {
+    font-size: 11px;
   }
 
   /* Slightly above default 16px so body copy and rem-based UI read clearly */

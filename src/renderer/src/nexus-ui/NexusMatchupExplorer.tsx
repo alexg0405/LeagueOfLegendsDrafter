@@ -107,7 +107,7 @@ export function NexusMatchupExplorer({ champions, ddragonVersion }: Props) {
                   selectChampion(exact)
                 }
               }}
-              className="nexus-focus w-full border border-nexus-line bg-nexus-bg/60 px-3 py-2 font-mono text-sm text-nexus-text"
+              className="nexus-focus w-full border border-nexus-line bg-nexus-bg/60 px-3 py-2 font-mono text-sm text-nexus-text [color-scheme:dark] placeholder:text-nexus-muted/70"
               placeholder="Search champions"
               autoComplete="off"
             />
@@ -142,7 +142,7 @@ export function NexusMatchupExplorer({ champions, ddragonVersion }: Props) {
               <select
                 value={myRole}
                 onChange={(event) => setMyRole(event.target.value as RoleKey)}
-                className="nexus-focus w-full border border-nexus-line bg-nexus-bg/60 px-3 py-2 font-mono text-sm text-nexus-text"
+                className="nexus-focus w-full border border-nexus-line bg-nexus-bg/60 px-3 py-2 font-mono text-sm text-nexus-text [color-scheme:dark] placeholder:text-nexus-muted/70"
               >
                 {ROLE_OPTIONS.map((role) => (
                   <option key={role.id} value={role.id}>
@@ -156,7 +156,7 @@ export function NexusMatchupExplorer({ champions, ddragonVersion }: Props) {
               <select
                 value={opposingRole}
                 onChange={(event) => setOpposingRole(event.target.value as RoleKey)}
-                className="nexus-focus w-full border border-nexus-line bg-nexus-bg/60 px-3 py-2 font-mono text-sm text-nexus-text"
+                className="nexus-focus w-full border border-nexus-line bg-nexus-bg/60 px-3 py-2 font-mono text-sm text-nexus-text [color-scheme:dark] placeholder:text-nexus-muted/70"
               >
                 {ROLE_OPTIONS.map((role) => (
                   <option key={role.id} value={role.id}>
@@ -191,7 +191,7 @@ export function NexusMatchupExplorer({ champions, ddragonVersion }: Props) {
             <MicroLabel>
               {selected ? `${selected.name} · ${myRole} vs ${opposingRole}` : 'Select a champion'}
             </MicroLabel>
-            <span className="font-mono text-[11px] text-nexus-muted tabular-nums">{rows.length} matchups</span>
+            <span className="font-mono text-xs text-nexus-text/75 tabular-nums">{rows.length} matchups</span>
           </div>
           <ul className="max-h-[360px] overflow-auto divide-y divide-nexus-line/50">
             {rows.length === 0 && (
@@ -217,7 +217,7 @@ export function NexusMatchupExplorer({ champions, ddragonVersion }: Props) {
                       {enemy?.name ?? `Champion ${row.enemyId}`}
                       {!row.candidate && <span className="ml-2 text-[10px] uppercase text-nexus-muted">flex</span>}
                     </div>
-                    <div className="font-mono text-[11px] text-nexus-muted tabular-nums">{row.games} games</div>
+                    <div className="font-mono text-xs text-nexus-text/70 tabular-nums">{row.games} games</div>
                   </div>
                   <div
                     className={[

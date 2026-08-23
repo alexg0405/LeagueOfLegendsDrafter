@@ -12,10 +12,14 @@ export function NexusPlus({ className = '' }: { className?: string }) {
   )
 }
 
+/**
+ * Small caps label. Doubles as a form label, so it stays at readable contrast rather
+ * than the dim tone used for de-emphasised body copy.
+ */
 export function MicroLabel({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
     <span
-      className={`font-mono text-[11px] uppercase tracking-[0.14em] text-nexus-muted ${className}`}
+      className={`font-mono text-xs uppercase tracking-[0.14em] text-nexus-text/85 ${className}`}
     >
       {children}
     </span>

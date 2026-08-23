@@ -30,6 +30,7 @@ import { scoreChampionAsync } from './recommend/championScoreClient'
 import { DraftItemPlanBlock as OverlayItemPlan } from './nexus-ui/DraftItemPlanBlock'
 import { DraftItemMatrixView } from './nexus-ui/DraftItemMatrixView'
 import { NexusInfoTip } from './nexus-ui/NexusInfoTip'
+import { OverlayMatchupList } from './nexus-ui/OverlayMatchupList'
 import { pickVerdict } from './nexus-ui/pickVerdict'
 import {
   livePublicDataStatusLine,
@@ -525,6 +526,30 @@ export function OverlayPanel() {
       : s?.myRole && s.myRole !== 'unknown'
         ? s.myRole
         : null
+  /**
+   * The champion the player is actually on: their locked pick if the engine flagged one,
+   * otherwise whatever sits in their own lane slot on the board.
+   */
+  const myChampion = useMemo((): { id: number; name: string } | null => {
+    const locked = d.suggestions.find((p) => p.isLockedPick)
+    if (locked) {
+      return { id: locked.championId, name: locked.championName }
+    }
+    if (!s || !poolRole) {
+      return null
+    }
+    const slot = s.ally.find((a) => a.role === poolRole && a.championId != null && a.championId > 0)
+    if (!slot?.championId) {
+      return null
+    }
+    return { id: slot.championId, name: slotName(slot) }
+  }, [d.suggestions, s, poolRole])
+
+  const lockedEnemyIds = useMemo(
+    () => (s?.enemy ?? []).flatMap((e) => (e.championId && e.championId > 0 ? [e.championId] : [])),
+    [s?.enemy]
+  )
+
   const topItemPlan = d.draftIntel?.matchupPlans[0] ?? null
   const itemMatrixPlans = (d.draftIntel?.itemMatrixPlans?.length ? d.draftIntel.itemMatrixPlans : d.draftIntel?.matchupPlans ?? [])
     .filter((plan) => plan.itemPlan?.matrixRows?.length)
@@ -1037,6 +1062,17 @@ export function OverlayPanel() {
           </section>
         )}
 
+        {myChampion && (
+          <OverlayMatchupList
+            championId={myChampion.id}
+            championName={myChampion.name}
+            myRole={poolRole}
+            nameById={nameByIdLookup}
+            iconUrl={championIconUrl}
+            lockedEnemyIds={lockedEnemyIds}
+          />
+        )}
+
         {d.draftIntel && (
           <section className="mb-5">
             <details className="group font-mono">
@@ -1329,6 +1365,8 @@ export function OverlayPanel() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 font-mono font-bold text-sm sm:text-base leading-tight">
                         <span className="truncate text-nexus-lime/95">{p.championName}</span>
+                        <span className="text-nexus-line">·</span>
+                        <span className="shrink-0 tabular-nums text-nexus-text/90">{p.score.toFixed(2)}</span>
                         {p.isLockedPick && (
                           <span className="shrink-0 border border-nexus-lime/70 px-1 text-[9px] uppercase tracking-[0.12em] text-nexus-lime/90">
                             Picked

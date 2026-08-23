@@ -14,9 +14,9 @@
     /*
      * Secondary body text. Was #7fa896, which fell below comfortable reading contrast
      * once combined with the /75–/85 opacity modifiers and 10–12px sizes used across the
-     * UI. Brightened so even `text-nexus-muted/75` stays legible on --nexus-bg.
+     * UI. Brightened so even `text-nexus-muted/70` stays legible on --nexus-bg.
      */
-    --nexus-muted: #a8c9ba;
+    --nexus-muted: #b7d4c5;
     /* Primary accent (UI still uses the “lime” token name) */
     --nexus-lime: #1dd4a8;
     --nexus-blue: #3db8a0;

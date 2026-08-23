@@ -589,6 +589,8 @@ function SuggestionRow({
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-2 font-mono text-sm font-bold leading-tight">
             <div className="min-w-0">
               <span className="text-nexus-lime/95">{suggestion.championName}</span>
+              <span className="text-nexus-muted"> · </span>
+              <span className="tabular-nums text-nexus-text/90">{suggestion.score.toFixed(2)}</span>
             </div>
             {suggestion.isLockedPick && (
               <span className="shrink-0 rounded-sm border border-nexus-lime/60 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-nexus-lime/85">

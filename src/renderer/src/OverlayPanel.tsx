@@ -1268,6 +1268,17 @@ export function OverlayPanel() {
                 </div>
               )}
 
+              {/* Matchups for the champion being looked up, collapsed by default. */}
+              <OverlayMatchupList
+                championId={lookupId}
+                championName={lookupChampion?.name ?? `Champion ${lookupId}`}
+                myRole={poolRole}
+                nameById={nameByIdLookup}
+                iconUrl={championIconUrl}
+                lockedEnemyIds={lockedEnemyIds}
+                collapsible
+              />
+
               {!inRolePool(lookupId, poolRole) && (
                 <p className="m-0 mt-2 flex items-center gap-1 font-mono text-[10px] text-nexus-yellow/85">
                   <span>Estimate only</span>

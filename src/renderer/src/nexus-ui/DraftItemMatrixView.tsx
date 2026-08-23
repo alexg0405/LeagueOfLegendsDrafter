@@ -402,7 +402,7 @@ export function DraftItemMatrixView({
     >
       <NexusEffectsLayer surface="matrix" quality="high" className="z-0 opacity-35" />
       <header className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-b border-nexus-lime/35 bg-nexus-surface-2 px-3 py-2.5">
-        <div className="min-w-0 cursor-move select-none nexus-overlay-drag nexus-window-drag" data-tauri-drag-region>
+        <div className="min-w-0 cursor-move select-none nexus-overlay-drag nexus-window-drag">
           <p className="m-0 font-mono text-[10px] uppercase tracking-[0.22em] text-nexus-lime/75">item matrix</p>
           <h2 className="m-0 truncate font-display text-lg uppercase tracking-[0.12em] text-nexus-text">{activeChampionName}</h2>
         </div>

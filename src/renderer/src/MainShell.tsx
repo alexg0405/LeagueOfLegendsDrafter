@@ -305,6 +305,7 @@ export function MainShell() {
   const [overlayStatusLine, setOverlayStatusLine] = useState<string | null>(null)
   const [overlayError, setOverlayError] = useState<string | null>(null)
   const [overlayShortcuts, setOverlayShortcuts] = useState<OverlayShortcutStatusResult | null>(null)
+  const [overlayDiagnostics, setOverlayDiagnostics] = useState<string | null>(null)
 
   const effectiveMyRole: DraftRole = useMemo(() => {
     if (lcu?.snapshot?.myRole && lcu.snapshot.myRole !== 'unknown') {
@@ -833,6 +834,14 @@ export function MainShell() {
     }
   }, [])
 
+  /** The overlay cannot report its own failure once its renderer is dead — the main window does it. */
+  useEffect(() => {
+    return window.drafter.onOverlayLoadError(({ message }) => {
+      setOverlayError(`Overlay failed to load: ${message}`)
+      setOverlayStatusLine('Overlay is showing a fallback page. Try Reset overlay.')
+    })
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     const refresh = async () => {
@@ -970,6 +979,73 @@ export function MainShell() {
     }
   }, [])
 
+  const handleSetOverlayHotkey = useCallback(async (accelerators: string[]) => {
+    setOverlayError(null)
+    try {
+      const status = await window.drafter.setOverlayHotkeys(accelerators)
+      setOverlayShortcuts(status)
+      if (status.registered.length === 0) {
+        setOverlayError(status.error ?? 'That key is unavailable. Try another.')
+        setOverlayStatusLine('No overlay hotkey is active.')
+        return
+      }
+      setOverlayStatusLine(`Overlay hotkey set to ${status.registered.join(' / ')}.`)
+    } catch (error) {
+      setOverlayError(error instanceof Error ? error.message : String(error))
+    }
+  }, [])
+
+  const handleResetOverlay = useCallback(async () => {
+    setOverlayError(null)
+    setOverlayStatusLine('Rebuilding overlay...')
+    try {
+      const result = await window.drafter.resetOverlay()
+      if (!result.ok) {
+        setOverlayError(result.error ?? 'Overlay reset failed.')
+        setOverlayStatusLine('Overlay failed.')
+        return
+      }
+      const b = result.bounds
+      setOverlayStatusLine(
+        b ? `Overlay reset to ${b.width}x${b.height} at ${b.x},${b.y}.` : 'Overlay reset.'
+      )
+    } catch (error) {
+      setOverlayError(error instanceof Error ? error.message : String(error))
+      setOverlayStatusLine('Overlay reset failed.')
+    }
+  }, [])
+
+  /** Flattens the main-process probe into copy-pasteable text for bug reports. */
+  const handleShowOverlayDiagnostics = useCallback(async () => {
+    if (overlayDiagnostics) {
+      setOverlayDiagnostics(null)
+      return
+    }
+    try {
+      const d = await window.drafter.getOverlayDiagnostics()
+      const lines = [
+        `window exists : ${d.exists}`,
+        `visible       : ${d.visible}`,
+        `always on top : ${d.alwaysOnTop}`,
+        `bounds        : ${d.bounds ? `${d.bounds.width}x${d.bounds.height} @ ${d.bounds.x},${d.bounds.y}` : 'none'}`,
+        `saved bounds  : ${d.savedBounds ? `${d.savedBounds.width}x${d.savedBounds.height} @ ${d.savedBounds.x},${d.savedBounds.y}` : 'none'}`,
+        `loaded url    : ${d.url ?? 'none'}`,
+        `load error    : ${d.loadError ?? 'none'}`,
+        `hotkeys ok    : ${d.shortcutsRegistered.join(', ') || 'none'}`,
+        `hotkeys failed: ${d.shortcutsFailed.join(', ') || 'none'}`,
+        `displays      : ${d.displays
+          .map((s) => `${s.bounds.width}x${s.bounds.height}@${s.bounds.x},${s.bounds.y} (${s.scale}x)`)
+          .join(' | ')}`,
+        `log file      : ${d.logPath}`,
+        '',
+        ...d.recent
+      ]
+      setOverlayDiagnostics(lines.join('\n'))
+    } catch (error) {
+      setOverlayDiagnostics(error instanceof Error ? error.message : String(error))
+    }
+  }, [overlayDiagnostics])
+
   useEffect(() => {
     void (async () => {
       try {
@@ -1013,6 +1089,9 @@ export function MainShell() {
     },
     onCloseApp: () => {
       void window.drafter.closeApp()
+    },
+    onCollapseToOverlay: () => {
+      void window.drafter.hideMainWindow()
     }
   } as const
 
@@ -1127,6 +1206,16 @@ export function MainShell() {
               overlayStatusLine={overlayStatusLine}
               overlayError={overlayError}
               overlayShortcutStatus={overlayShortcuts}
+              overlayDiagnosticsText={overlayDiagnostics}
+              onResetOverlay={() => {
+                void handleResetOverlay()
+              }}
+              onShowOverlayDiagnostics={() => {
+                void handleShowOverlayDiagnostics()
+              }}
+              onSetOverlayHotkey={(accelerators) => {
+                void handleSetOverlayHotkey(accelerators)
+              }}
               playerPoolBusy={playerPoolBusy}
               recommendationPoolMode={recommendationPoolMode}
               onRecommendationPoolMode={setRecommendationPoolMode}

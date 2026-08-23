@@ -5,7 +5,6 @@ import {
   type RustRecommendOutput,
   type SuggestPicksArgs
 } from '../../../shared/draft'
-import { invokeTauriCommand, isTauriBuild } from '../tauri/commands'
 
 type RecommendResult = {
   suggestions: PickSuggestion[]
@@ -56,31 +55,7 @@ function createWorker(): Worker {
   return worker
 }
 
-async function suggestPicksNative(args: SuggestPicksArgs): Promise<RecommendResult | null> {
-  try {
-    const raw = await invokeTauriCommand<string>('recommend_picks_native', {
-      inputJson: JSON.stringify(serializeRecommendInput(args))
-    })
-    const parsed = JSON.parse(raw) as RustRecommendOutput
-    if (!parsed.ok || !Array.isArray(parsed.rows)) {
-      return null
-    }
-    return {
-      suggestions: hydrateRustRecommendations(parsed.rows, args),
-      patchLabel: parsed.patchLabel ?? 'engine-v1'
-    }
-  } catch {
-    return null
-  }
-}
-
 export async function suggestPicksAsync(args: SuggestPicksArgs): Promise<RecommendResult> {
-  if (isTauriBuild()) {
-    const native = await suggestPicksNative(args)
-    if (native) {
-      return native
-    }
-  }
   if (typeof Worker === 'undefined') {
     return Promise.resolve(emptyRecommendResult())
   }

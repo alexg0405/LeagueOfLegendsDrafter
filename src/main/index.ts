@@ -46,7 +46,18 @@ import { setupAppUpdater } from './appUpdater'
 import { fetchChampSelectSession, getLcuDiagnostics } from './lcuClient'
 import { fetchLivePublicDataPayload } from './livePublicDataFetcher'
 import { getPlayerChampionPool } from './riotPlayerChampionPool'
-import { getCaptureSourceId, setCaptureSourceId } from './settingsStore'
+import {
+  clearOverlayBounds,
+  DEFAULT_OVERLAY_HOTKEYS,
+  getCaptureSourceId,
+  getOverlayBounds,
+  getOverlayHotkeys,
+  isValidAccelerator,
+  setCaptureSourceId,
+  setOverlayBounds,
+  setOverlayHotkeys
+} from './settingsStore'
+import { diagLog, diagnosticsLogPath, recentDiagnostics } from './diagnosticsLog'
 import { type DraftUpdate } from '../shared/draft/types'
 import { isDraftUpdate, isOverlayEnginePrefsPatch } from '../shared/draft/validate'
 import {
@@ -172,6 +183,15 @@ function wireNavigationGuards(wc: WebContents, label: string) {
 }
 
 const OVERLAY_WIDTH = 380
+/**
+ * `ready-to-show` fires on first paint. If the renderer never paints (failed load, crashed
+ * chunk, GPU stall) the overlay would stay hidden forever with `skipTaskbar: true` and no
+ * error — the shipped `.exe` symptom. Force it visible past this deadline instead.
+ */
+const OVERLAY_SHOW_WATCHDOG_MS = 4000
+/** League taking focus (or another topmost app) can bury a `screen-saver` window. */
+const OVERLAY_TOPMOST_REASSERT_MS = 2000
+const OVERLAY_BOUNDS_SAVE_DEBOUNCE_MS = 400
 
 let mainWindow: BrowserWindow | null = null
 let overlayWindow: BrowserWindow | null = null
@@ -179,10 +199,15 @@ let overlayCompactBounds: Rectangle | null = null
 let overlayProjectionOpen = false
 let registeredOverlayShortcuts: string[] = []
 let failedOverlayShortcuts: string[] = []
+let overlayShown = false
+let overlayLoadError: string | null = null
+let overlayShowWatchdog: ReturnType<typeof setTimeout> | null = null
+let overlayTopmostTimer: ReturnType<typeof setInterval> | null = null
+let overlayBoundsSaveTimer: ReturnType<typeof setTimeout> | null = null
 
 function overlayStatusResult() {
   if (!overlayWindow || overlayWindow.isDestroyed()) {
-    return { ok: true as const, exists: false, visible: false }
+    return { ok: true as const, exists: false, visible: false, loadError: overlayLoadError }
   }
   return {
     ok: true as const,
@@ -190,7 +215,8 @@ function overlayStatusResult() {
     visible: overlayWindow.isVisible(),
     focused: overlayWindow.isFocused(),
     title: overlayWindow.getTitle(),
-    bounds: overlayWindow.getBounds()
+    bounds: overlayWindow.getBounds(),
+    loadError: overlayLoadError
   }
 }
 
@@ -199,6 +225,159 @@ function applyOverlayPriority(win: BrowserWindow) {
   if (process.platform === 'darwin') {
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   }
+}
+
+/** Top-right of the primary work area, using its real origin (not just its size). */
+function defaultOverlayBounds(): Rectangle {
+  const work = screen.getPrimaryDisplay().workArea
+  const height = Math.max(320, Math.min(Math.floor(work.height * 0.62), work.height - 48))
+  const width = Math.min(OVERLAY_WIDTH, Math.max(320, work.width - 32))
+  return {
+    width,
+    height,
+    x: work.x + Math.max(0, work.width - width - 16),
+    y: work.y + 24
+  }
+}
+
+/**
+ * Keep the overlay reachable: a saved rect from an unplugged monitor (or a negative-origin
+ * display that is gone) must not strand the window off every screen.
+ */
+function clampOverlayBounds(bounds: Rectangle): Rectangle {
+  const displays = screen.getAllDisplays()
+  const intersects = displays.some((display) => {
+    const w = display.workArea
+    return (
+      bounds.x < w.x + w.width &&
+      bounds.x + bounds.width > w.x &&
+      bounds.y < w.y + w.height &&
+      bounds.y + bounds.height > w.y
+    )
+  })
+  if (!intersects) {
+    diagLog('[overlay] saved bounds are off-screen; using default', bounds)
+    return defaultOverlayBounds()
+  }
+  const work = screen.getDisplayMatching(bounds).workArea
+  const width = Math.max(320, Math.min(bounds.width, work.width))
+  const height = Math.max(200, Math.min(bounds.height, work.height))
+  return {
+    width,
+    height,
+    // Keep at least a title-bar's worth of window on the work area so it stays draggable.
+    x: Math.min(Math.max(bounds.x, work.x - width + 80), work.x + work.width - 80),
+    y: Math.min(Math.max(bounds.y, work.y), work.y + work.height - 40)
+  }
+}
+
+function initialOverlayBounds(): Rectangle {
+  const saved = getOverlayBounds()
+  if (!saved) {
+    return defaultOverlayBounds()
+  }
+  return clampOverlayBounds(saved)
+}
+
+function queueOverlayBoundsSave() {
+  if (overlayBoundsSaveTimer) {
+    clearTimeout(overlayBoundsSaveTimer)
+  }
+  overlayBoundsSaveTimer = setTimeout(() => {
+    overlayBoundsSaveTimer = null
+    // Projection mode temporarily balloons the window; never persist that rect.
+    if (!overlayWindow || overlayWindow.isDestroyed() || overlayProjectionOpen) {
+      return
+    }
+    setOverlayBounds(overlayWindow.getBounds())
+  }, OVERLAY_BOUNDS_SAVE_DEBOUNCE_MS)
+}
+
+function clearOverlayShowWatchdog() {
+  if (overlayShowWatchdog) {
+    clearTimeout(overlayShowWatchdog)
+    overlayShowWatchdog = null
+  }
+}
+
+/** The single place that makes the overlay visible, so no path can forget the z-order reassert. */
+function showOverlay(reason: string) {
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    return
+  }
+  clearOverlayShowWatchdog()
+  applyOverlayPriority(overlayWindow)
+  if (!overlayWindow.isVisible()) {
+    diagLog(`[overlay] show (${reason})`)
+    overlayWindow.showInactive()
+  }
+  overlayShown = true
+  startOverlayTopmostReassert()
+}
+
+function startOverlayTopmostReassert() {
+  if (overlayTopmostTimer) {
+    return
+  }
+  overlayTopmostTimer = setInterval(() => {
+    if (!overlayWindow || overlayWindow.isDestroyed()) {
+      stopOverlayTopmostReassert()
+      return
+    }
+    if (overlayWindow.isVisible() && !overlayWindow.isAlwaysOnTop()) {
+      overlayWindow.setAlwaysOnTop(true, 'screen-saver')
+    }
+  }, OVERLAY_TOPMOST_REASSERT_MS)
+  overlayTopmostTimer.unref()
+}
+
+function stopOverlayTopmostReassert() {
+  if (overlayTopmostTimer) {
+    clearInterval(overlayTopmostTimer)
+    overlayTopmostTimer = null
+  }
+}
+
+/**
+ * Last-resort visible surface. Without this a failed renderer load leaves a frameless,
+ * taskbar-less, invisible window and the user has no way to tell the app is broken.
+ */
+function overlayFallbackHtml(message: string): string {
+  const safe = message.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] as string)
+  return `<!doctype html><html><head><meta charset="utf-8">
+<style>
+  html,body{margin:0;height:100%;background:#060f0c;color:#e8f3ee;
+    font:13px/1.5 "Segoe UI",system-ui,sans-serif}
+  .wrap{padding:14px;-webkit-app-region:drag}
+  h1{margin:0 0 8px;font-size:14px;color:#f07167;letter-spacing:.04em}
+  p{margin:0 0 8px;color:#7fa896}
+  code{color:#1dd4a8;word-break:break-all}
+</style></head><body><div class="wrap">
+<h1>Overlay failed to load</h1>
+<p>${safe}</p>
+<p>Press <code>Insert</code> / <code>F9</code> to hide, or use <b>Reset overlay</b> in the main window.</p>
+<p>Log: <code>${diagnosticsLogPath().replace(/[&<>]/g, '')}</code></p>
+</div></body></html>`
+}
+
+function showOverlayLoadFailure(message: string) {
+  // `did-fail-load` fires for the fallback page too; never re-enter and loop.
+  if (overlayLoadError != null) {
+    diagLog('[overlay] additional load failure (already in fallback):', message)
+    return
+  }
+  overlayLoadError = message
+  diagLog('[overlay] load failure:', message)
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    return
+  }
+  void overlayWindow.loadURL(
+    'data:text/html;charset=utf-8,' + encodeURIComponent(overlayFallbackHtml(message))
+  )
+  // Make a broken overlay findable instead of an invisible ghost window.
+  overlayWindow.setSkipTaskbar(false)
+  showOverlay('load-failure')
+  mainWindow?.webContents.send('overlay:loadError', { message })
 }
 
 function setOverlayProjectionMode(open: boolean): { ok: boolean; open: boolean } {
@@ -219,6 +398,8 @@ function setOverlayProjectionMode(open: boolean): { ok: boolean; open: boolean }
     const minH = Math.min(560, maxH)
     const targetW = Math.min(Math.max(minW, Math.floor(work.width * 0.72)), maxW)
     const targetH = Math.min(Math.max(minH, Math.floor(work.height * 0.74)), maxH)
+    // Set before `setBounds` so the resulting resize/moved events never persist the big rect.
+    overlayProjectionOpen = true
     overlayWindow.setMinimumSize(minW, minH)
     overlayWindow.setBounds(
       {
@@ -229,17 +410,16 @@ function setOverlayProjectionMode(open: boolean): { ok: boolean; open: boolean }
       },
       true
     )
-    overlayProjectionOpen = true
-    overlayWindow.showInactive()
+    showOverlay('projection-open')
     return { ok: true, open: true }
   }
 
   overlayWindow.setMinimumSize(320, 200)
   if (overlayCompactBounds) {
-    overlayWindow.setBounds(overlayCompactBounds, true)
+    overlayWindow.setBounds(clampOverlayBounds(overlayCompactBounds), true)
   }
   overlayProjectionOpen = false
-  overlayWindow.showInactive()
+  showOverlay('projection-close')
   return { ok: true, open: false }
 }
 
@@ -268,11 +448,43 @@ function fallbackDevHtml(): string {
   </body></html>`
 }
 
+/**
+ * The overlay is the product; the big window is the settings/lab surface behind it.
+ * Launch shows only the overlay and keeps this window alive but hidden, because the
+ * renderer here owns the draft engine that feeds the overlay.
+ */
+function setMainWindowVisible(visible: boolean): { ok: true; visible: boolean } {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    if (visible) {
+      createMainWindow()
+      mainWindow?.show()
+      mainWindow?.focus()
+    }
+    return { ok: true, visible }
+  }
+  if (visible) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore()
+    }
+    mainWindow.show()
+    mainWindow.focus()
+  } else {
+    mainWindow.hide()
+    // Never leave the user with nothing on screen.
+    if (!overlayWindow || overlayWindow.isDestroyed() || !overlayWindow.isVisible()) {
+      showOverlay('main-collapsed')
+    }
+  }
+  diagLog(`[main-window] ${visible ? 'shown' : 'hidden'}`)
+  return { ok: true, visible }
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 900,
     height: 700,
-    show: true,
+    // Hidden at launch: the overlay is the front door.
+    show: false,
     frame: false,
     autoHideMenuBar: true,
     resizable: false,
@@ -335,14 +547,16 @@ function createMainWindow() {
 }
 
 function createOverlayWindow() {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize
-  const overlayH = Math.max(320, Math.floor(height * 0.62))
+  const startBounds = initialOverlayBounds()
+  overlayShown = false
+  overlayLoadError = null
+  diagLog('[overlay] creating window', startBounds)
   overlayWindow = new BrowserWindow({
     title: 'Nexus Draft Overlay',
-    width: OVERLAY_WIDTH,
-    height: overlayH,
-    x: width - OVERLAY_WIDTH - 16,
-    y: 24,
+    width: startBounds.width,
+    height: startBounds.height,
+    x: startBounds.x,
+    y: startBounds.y,
     frame: false,
     /**
      * `transparent: true` on Windows often composes to a solid black webview. Use a solid background;
@@ -364,33 +578,82 @@ function createOverlayWindow() {
   wireNavigationGuards(overlayWindow.webContents, 'overlay')
   wirePreloadErrorLogging(overlayWindow, 'overlay')
   wireWebContentsStabilityLogging(overlayWindow.webContents, 'overlay')
+
   overlayWindow.once('ready-to-show', () => {
-    if (overlayWindow && !overlayWindow.isDestroyed()) {
-      applyOverlayPriority(overlayWindow)
-      overlayWindow.showInactive()
-    }
+    showOverlay('ready-to-show')
   })
+
+  /**
+   * Belt and braces: if first paint never happens the overlay used to stay hidden forever
+   * (no frame, no taskbar entry, no error). Show it anyway and log why.
+   */
+  clearOverlayShowWatchdog()
+  overlayShowWatchdog = setTimeout(() => {
+    overlayShowWatchdog = null
+    if (overlayShown || !overlayWindow || overlayWindow.isDestroyed()) {
+      return
+    }
+    diagLog(
+      `[overlay] ready-to-show did not fire within ${OVERLAY_SHOW_WATCHDOG_MS}ms; forcing show`,
+      { url: overlayWindow.webContents.getURL(), loading: overlayWindow.webContents.isLoading() }
+    )
+    showOverlay('watchdog')
+  }, OVERLAY_SHOW_WATCHDOG_MS)
+  overlayShowWatchdog.unref()
+
+  // Registered for dev *and* production — a silent packaged failure is the bug we are fixing.
+  overlayWindow.webContents.on('did-fail-load', (_e, code, desc, failedUrl, isMainFrame) => {
+    if (!isMainFrame || code === -3 /* ERR_ABORTED, fired on normal navigations */) {
+      return
+    }
+    diagLog('[overlay] did-fail-load', { code, desc, failedUrl })
+    if (isDev) {
+      void overlayWindow?.webContents.openDevTools({ mode: 'detach' })
+      void dialog.showErrorBox(
+        'Nexus Draft - overlay failed to load',
+        `${String(desc)} (${String(code)})\n${failedUrl}\n\nRun: npm run dev (same dev server as the main window).`
+      )
+      return
+    }
+    showOverlayLoadFailure(`${desc} (${code})`)
+  })
+
+  overlayWindow.webContents.on('did-finish-load', () => {
+    diagLog('[overlay] did-finish-load', overlayWindow?.webContents.getURL() ?? '(gone)')
+  })
+
+  /** A crashed overlay renderer must not leave an invisible husk behind. */
+  overlayWindow.webContents.on('render-process-gone', (_event, details) => {
+    diagLog('[overlay] render-process-gone', details.reason, details.exitCode)
+    showOverlayLoadFailure(`Overlay renderer stopped (${details.reason}).`)
+  })
+
   if (isDev) {
-    const base = devRendererBase()
-    overlayWindow.webContents.on('did-fail-load', (_e, code, desc, failedUrl) => {
-      console.error('[drafter] overlay did-fail-load', { code, desc, failedUrl, base })
-      if (isDev) {
-        void overlayWindow?.webContents.openDevTools({ mode: 'detach' })
-        void dialog.showErrorBox(
-          'Nexus Draft - overlay failed to load',
-          `${String(desc)} (${String(code)})\n${failedUrl}\n\nRun: npm run dev (same dev server as the main window).`
-        )
-      }
-    })
-    void overlayWindow.loadURL(`${base}#/overlay`)
+    void overlayWindow.loadURL(`${devRendererBase()}#/overlay`)
   } else {
     const file = join(_dirname, '../renderer/index.html')
-    void overlayWindow.loadURL(pathToFileURL(file).href + '#/overlay')
+    if (!existsSync(file)) {
+      diagLog('[overlay] renderer entry missing', file)
+      showOverlayLoadFailure(`Missing UI file: ${file}`)
+    } else {
+      const target = pathToFileURL(file).href + '#/overlay'
+      diagLog('[overlay] loading', target)
+      overlayWindow.loadURL(target).catch((err: unknown) => {
+        showOverlayLoadFailure(err instanceof Error ? err.message : String(err))
+      })
+    }
   }
+
+  overlayWindow.on('moved', queueOverlayBoundsSave)
+  overlayWindow.on('resize', queueOverlayBoundsSave)
+
   overlayWindow.on('closed', () => {
+    clearOverlayShowWatchdog()
+    stopOverlayTopmostReassert()
     overlayWindow = null
     overlayCompactBounds = null
     overlayProjectionOpen = false
+    overlayShown = false
   })
 
   if (isDev) {
@@ -421,10 +684,21 @@ function toggleOverlayWindow() {
   let created = false
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     if (overlayWindow.isVisible()) {
+      diagLog('[overlay] hide (toggle)')
       overlayWindow.hide()
+      stopOverlayTopmostReassert()
+      /*
+       * With the main window hidden by default, hiding the overlay could leave zero visible
+       * windows — and if the hotkey is the one that failed to register, no way back in.
+       */
+      if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) {
+        if (registeredOverlayShortcuts.length === 0) {
+          diagLog('[overlay] hidden with no working hotkey; surfacing the main window instead')
+          setMainWindowVisible(true)
+        }
+      }
     } else {
-      applyOverlayPriority(overlayWindow)
-      overlayWindow.showInactive()
+      showOverlay('toggle')
     }
   } else {
     createOverlayWindow()
@@ -435,6 +709,78 @@ function toggleOverlayWindow() {
     visible: overlayWindow && !overlayWindow.isDestroyed() ? overlayWindow.isVisible() : false,
     created,
     route: 'overlay' as const
+  }
+}
+
+/**
+ * (Re)binds the overlay toggle keys. Unregisters whatever we held first so switching
+ * hotkeys at runtime cannot leak a stale binding.
+ */
+function applyOverlayHotkeys(next: string[]): { registered: string[]; failed: string[] } {
+  for (const accelerator of registeredOverlayShortcuts) {
+    if (globalShortcut.isRegistered(accelerator)) {
+      globalShortcut.unregister(accelerator)
+    }
+  }
+  registeredOverlayShortcuts = []
+  failedOverlayShortcuts = []
+
+  for (const accelerator of next) {
+    let ok = false
+    try {
+      ok = globalShortcut.register(accelerator, () => {
+        toggleOverlayWindow()
+      })
+    } catch (error) {
+      diagLog(`[drafter] globalShortcut threw for ${accelerator}:`, error)
+      ok = false
+    }
+    if (ok) {
+      registeredOverlayShortcuts.push(accelerator)
+      diagLog(`[drafter] globalShortcut ok: ${accelerator}`)
+    } else {
+      failedOverlayShortcuts.push(accelerator)
+      diagLog(`[drafter] globalShortcut FAILED: ${accelerator} (another app owns that key)`)
+    }
+  }
+  if (registeredOverlayShortcuts.length === 0) {
+    diagLog(
+      '[drafter] no overlay hotkeys registered — pick a different key in Settings, or use the in-app toggle'
+    )
+  }
+  // Both windows render the active key, so broadcast rather than target the main window.
+  const payload = { registered: registeredOverlayShortcuts, failed: failedOverlayShortcuts }
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('overlay:hotkeysChanged', payload)
+    }
+  }
+  return payload
+}
+
+/**
+ * Recovery for "the overlay is gone and nothing brings it back": forget saved geometry,
+ * rebuild the window from scratch, and park it at the default on-screen spot.
+ */
+function resetOverlayWindow() {
+  diagLog('[overlay] reset requested')
+  clearOverlayBounds()
+  if (overlayBoundsSaveTimer) {
+    clearTimeout(overlayBoundsSaveTimer)
+    overlayBoundsSaveTimer = null
+  }
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.destroy()
+  }
+  overlayWindow = null
+  overlayCompactBounds = null
+  overlayProjectionOpen = false
+  createOverlayWindow()
+  // Do not wait on `ready-to-show`; a reset must produce a visible window promptly.
+  showOverlay('reset')
+  return {
+    ok: true as const,
+    bounds: overlayWindow ? (overlayWindow as BrowserWindow).getBounds() : defaultOverlayBounds()
   }
 }
 
@@ -570,14 +916,70 @@ app.whenReady().then(() => {
   ipcMain.handle('overlay:toggle', () => {
     return toggleOverlayWindow()
   })
+  ipcMain.handle('overlay:reset', () => {
+    return resetOverlayWindow()
+  })
   ipcMain.handle('overlay:status', () => {
     return overlayStatusResult()
+  })
+  /** Everything needed to explain "the overlay is not showing" without a dev build. */
+  ipcMain.handle('overlay:diagnostics', () => {
+    const win = overlayWindow && !overlayWindow.isDestroyed() ? overlayWindow : null
+    return {
+      ok: true as const,
+      exists: win != null,
+      visible: win?.isVisible() ?? false,
+      alwaysOnTop: win?.isAlwaysOnTop() ?? false,
+      bounds: win?.getBounds() ?? null,
+      savedBounds: getOverlayBounds(),
+      url: win?.webContents.getURL() ?? null,
+      loadError: overlayLoadError,
+      shortcutsRegistered: registeredOverlayShortcuts,
+      shortcutsFailed: failedOverlayShortcuts,
+      displays: screen.getAllDisplays().map((d) => ({ id: d.id, bounds: d.bounds, scale: d.scaleFactor })),
+      logPath: diagnosticsLogPath(),
+      recent: recentDiagnostics(60)
+    }
+  })
+  ipcMain.handle('overlay:openLogFolder', () => {
+    void shell.showItemInFolder(diagnosticsLogPath())
+    return { ok: true as const }
   })
   ipcMain.handle('overlay:shortcutsStatus', () => {
     return {
       ok: failedOverlayShortcuts.length === 0,
       registered: registeredOverlayShortcuts,
-      failed: failedOverlayShortcuts
+      failed: failedOverlayShortcuts,
+      configured: getOverlayHotkeys(),
+      defaults: [...DEFAULT_OVERLAY_HOTKEYS]
+    }
+  })
+  /** Rebind the overlay toggle keys. `null`/empty restores the defaults. */
+  ipcMain.handle('overlay:setHotkeys', (_event, raw: unknown) => {
+    const requested = Array.isArray(raw) ? raw : []
+    const invalid = requested.filter((v) => !isValidAccelerator(v))
+    if (invalid.length) {
+      return {
+        ok: false as const,
+        error: `Not a usable key: ${invalid.map(String).join(', ')}`,
+        registered: registeredOverlayShortcuts,
+        failed: failedOverlayShortcuts,
+        configured: getOverlayHotkeys(),
+        defaults: [...DEFAULT_OVERLAY_HOTKEYS]
+      }
+    }
+    const stored = setOverlayHotkeys(requested)
+    const result = applyOverlayHotkeys(stored)
+    return {
+      ok: result.registered.length > 0,
+      error:
+        result.registered.length > 0
+          ? undefined
+          : 'Windows would not give us that key — another app already owns it. Try another.',
+      registered: result.registered,
+      failed: result.failed,
+      configured: stored,
+      defaults: [...DEFAULT_OVERLAY_HOTKEYS]
     }
   })
   ipcMain.handle('overlay:setProjectionMode', (_event, open: unknown) => {
@@ -593,6 +995,16 @@ app.whenReady().then(() => {
     }
     return { ok: true as const }
   })
+  ipcMain.handle('mainWindow:show', () => setMainWindowVisible(true))
+  ipcMain.handle('mainWindow:hide', () => setMainWindowVisible(false))
+  ipcMain.handle('mainWindow:toggle', () => {
+    const visible = mainWindow != null && !mainWindow.isDestroyed() && mainWindow.isVisible()
+    return setMainWindowVisible(!visible)
+  })
+  ipcMain.handle('mainWindow:status', () => ({
+    ok: true as const,
+    visible: mainWindow != null && !mainWindow.isDestroyed() && mainWindow.isVisible()
+  }))
 
   createMainWindow()
   createOverlayWindow()
@@ -618,28 +1030,7 @@ app.whenReady().then(() => {
   const lcuTimer = setInterval(sendLcuToMain, LCU_POLL_MS)
   lcuTimer.unref()
 
-  const shortcuts = ['Insert', 'F9', 'F10'] as const
-  registeredOverlayShortcuts = []
-  failedOverlayShortcuts = []
-  for (const accelerator of shortcuts) {
-    if (globalShortcut.isRegistered(accelerator)) {
-      globalShortcut.unregister(accelerator)
-    }
-    const ok = globalShortcut.register(accelerator, () => {
-      toggleOverlayWindow()
-    })
-    if (ok) {
-      registeredOverlayShortcuts.push(accelerator)
-      if (isDev) {
-        console.log(`[drafter] globalShortcut ok: ${accelerator}`)
-      }
-    } else {
-      failedOverlayShortcuts.push(accelerator)
-      console.error(
-        `[drafter] globalShortcut FAILED: ${accelerator} (try another app using that key, or use F9 / F10 / in-app button)`
-      )
-    }
-  }
+  applyOverlayHotkeys(getOverlayHotkeys())
 })
 
 app.on('child-process-gone', (_event, details) => {

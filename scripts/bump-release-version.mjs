@@ -49,10 +49,6 @@ function formatVersion(version) {
   return `${version.major}.${version.minor}.${version.patch}`
 }
 
-function formatShortVersion(version) {
-  return `${version.major}.${version.minor}`
-}
-
 function bumpOnce(version) {
   if (version.minor >= 11) {
     return { major: version.major + 1, minor: 0, patch: 0 }
@@ -81,7 +77,6 @@ const packageJson = readJson('package.json')
 const previous = parseVersion(packageJson.version)
 const next = bumpVersion(packageJson.version, count)
 const nextVersion = formatVersion(next)
-const nextShortVersion = formatShortVersion(next)
 
 packageJson.version = nextVersion
 writeJson('package.json', packageJson)
@@ -93,21 +88,6 @@ if (packageLock.packages?.['']) {
 }
 writeJson('package-lock.json', packageLock)
 
-const tauriConfig = readJson('src-tauri/tauri.conf.json')
-tauriConfig.version = nextVersion
-writeJson('src-tauri/tauri.conf.json', tauriConfig)
-
-replaceRequired('src-tauri/Cargo.toml', /^version = ".+"$/m, `version = "${nextVersion}"`)
-replaceRequired(
-  'Cargo.lock',
-  /(\[\[package\]\]\r?\nname = "nexus-draft-tauri"\r?\nversion = ")([^"]+)(")/,
-  `$1${nextVersion}$3`
-)
-replaceRequired(
-  'src-tauri/src/lib.rs',
-  /NexusDraft\/\d+\.\d+(?:\.\d+)? rust-desktop/g,
-  `NexusDraft/${nextShortVersion} rust-desktop`
-)
 replaceRequired('src/renderer/src/MainShell.tsx', /build: '\d+\.\d+\.\d+'/g, `build: '${nextVersion}'`)
 replaceRequired(
   'src/renderer/src/WebDraftApp.tsx',

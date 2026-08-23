@@ -4,9 +4,7 @@ param(
   [string]$CertificateProfileName = $env:AZURE_SIGNING_CERTIFICATE_PROFILE_NAME,
   [string]$SignToolPath = $env:SIGNTOOL_PATH,
   [string]$DlibPath = $env:AZURE_CODESIGNING_DLIB_PATH,
-  [string]$Version = $env:NEXUS_DRAFT_SIGN_VERSION,
-  [switch]$IncludeTauri,
-  [switch]$TauriOnly
+  [string]$Version = $env:NEXUS_DRAFT_SIGN_VERSION
 )
 
 $ErrorActionPreference = 'Stop'
@@ -173,16 +171,8 @@ function Add-ReleaseArtifact {
 
 $artifacts = @()
 
-if (-not $TauriOnly) {
-  $artifacts += Add-ReleaseArtifact -Name "Nexus-Draft-Setup-$Version.exe" -Required $true
-  $artifacts += Add-ReleaseArtifact -Name "Nexus-Draft-Portable-$Version.exe" -Required $true
-}
-
-if ($IncludeTauri -or $TauriOnly) {
-  $artifacts += Add-ReleaseArtifact -Name 'NexusDraft.exe' -Required $TauriOnly
-  $artifacts += Add-ReleaseArtifact -Name "Nexus-Draft-Tauri-Portable-$Version.exe" -Required $false
-  $artifacts += Add-ReleaseArtifact -Name "Nexus-Draft-Tauri-Setup-$Version.exe" -Required $false
-}
+$artifacts += Add-ReleaseArtifact -Name "Nexus-Draft-Setup-$Version.exe" -Required $true
+$artifacts += Add-ReleaseArtifact -Name "Nexus-Draft-Portable-$Version.exe" -Required $true
 
 $artifacts = $artifacts | Where-Object { $_ } | Sort-Object FullName -Unique
 
@@ -229,21 +219,20 @@ try {
     Write-Host "$($artifact.Name): $($signature.Status)"
   }
 
-  if (-not $TauriOnly) {
-    $setupArtifact = Join-Path $releaseDir "Nexus-Draft-Setup-$Version.exe"
-    $blockmapPath = "$setupArtifact.blockmap"
-    $latestYmlPath = Join-Path $releaseDir 'latest.yml'
-    $appBuilder = Resolve-AppBuilder
+  # Signing rewrites the installer, so the updater feed must be recomputed afterwards.
+  $setupArtifact = Join-Path $releaseDir "Nexus-Draft-Setup-$Version.exe"
+  $blockmapPath = "$setupArtifact.blockmap"
+  $latestYmlPath = Join-Path $releaseDir 'latest.yml'
+  $appBuilder = Resolve-AppBuilder
 
-    Write-Host "Regenerating blockmap for $(Split-Path $setupArtifact -Leaf)..."
-    & $appBuilder blockmap --input=$setupArtifact --output=$blockmapPath
-    if ($LASTEXITCODE -ne 0) {
-      throw "app-builder blockmap failed with exit code $LASTEXITCODE."
-    }
-
-    Write-Host "Updating latest.yml hash/size for signed installer..."
-    Update-LatestYml -LatestYmlPath $latestYmlPath -ArtifactPath $setupArtifact
+  Write-Host "Regenerating blockmap for $(Split-Path $setupArtifact -Leaf)..."
+  & $appBuilder blockmap --input=$setupArtifact --output=$blockmapPath
+  if ($LASTEXITCODE -ne 0) {
+    throw "app-builder blockmap failed with exit code $LASTEXITCODE."
   }
+
+  Write-Host "Updating latest.yml hash/size for signed installer..."
+  Update-LatestYml -LatestYmlPath $latestYmlPath -ArtifactPath $setupArtifact
 }
 finally {
   Remove-Item -LiteralPath $metadataPath -Force -ErrorAction SilentlyContinue

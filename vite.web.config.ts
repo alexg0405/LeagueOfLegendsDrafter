@@ -6,8 +6,7 @@ export default defineConfig({
   root: 'src/renderer',
   base: './',
   define: {
-    'import.meta.env.VITE_NEXUS_WEB': JSON.stringify('1'),
-    'import.meta.env.VITE_NEXUS_TAURI': JSON.stringify('0')
+    'import.meta.env.VITE_NEXUS_WEB': JSON.stringify('1')
   },
   resolve: {
     alias: {

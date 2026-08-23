@@ -26,8 +26,7 @@ export default defineConfig({
   renderer: {
     root: 'src/renderer',
     define: {
-      'import.meta.env.VITE_NEXUS_WEB': JSON.stringify('0'),
-      'import.meta.env.VITE_NEXUS_TAURI': JSON.stringify('0')
+      'import.meta.env.VITE_NEXUS_WEB': JSON.stringify('0')
     },
     server: {
       port: 5173,

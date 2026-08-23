@@ -13,6 +13,8 @@ type Props = {
   resourceLine?: string
   onMinimizeApp?: () => void
   onCloseApp?: () => void
+  /** Hide the main window and leave the overlay running. */
+  onCollapseToOverlay?: () => void
 }
 
 export function NexusTopBar({
@@ -24,7 +26,8 @@ export function NexusTopBar({
   networkStatus,
   resourceLine,
   onMinimizeApp,
-  onCloseApp
+  onCloseApp,
+  onCollapseToOverlay
 }: Props) {
   const { reduce } = useNexusMotion()
   return (
@@ -74,6 +77,18 @@ export function NexusTopBar({
             {resourceLine}
           </div>
         )}
+        {/* Back to the compact overlay; the app keeps running behind it. */}
+        {onCollapseToOverlay ? (
+          <button
+            type="button"
+            className="nexus-focus h-7 px-2 border border-nexus-line bg-nexus-surface-2 text-nexus-lime/90 hover:bg-nexus-lime/10 hover:border-nexus-lime/45 transition-colors uppercase text-[11px] leading-none"
+            onClick={onCollapseToOverlay}
+            aria-label="Collapse to overlay"
+            title="Hide this window and keep the overlay running"
+          >
+            Collapse
+          </button>
+        ) : null}
         <button
           type="button"
           className="nexus-focus h-7 min-w-7 px-2 border border-nexus-line bg-nexus-surface-2 text-nexus-text/90 hover:bg-nexus-lime/10 hover:border-nexus-lime/45 transition-colors uppercase text-[11px] leading-none"

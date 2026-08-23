@@ -18,6 +18,7 @@ type Props = {
     resourceLine?: string
     onCloseApp?: () => void
     onMinimizeApp?: () => void
+    onCollapseToOverlay?: () => void
   }
   right: {
     lcuState: string
@@ -54,6 +55,7 @@ export function NexusClientLayout({ nav, onNavigate, top, right, bottom, childre
           resourceLine={top.resourceLine}
           onMinimizeApp={top.onMinimizeApp}
           onCloseApp={top.onCloseApp}
+          onCollapseToOverlay={top.onCollapseToOverlay}
         />
         <div className="flex-1 min-h-0 flex">
           <main className="flex-1 min-w-0 min-h-0 overflow-y-auto nexus-ops-scroll bg-nexus-bg" role="main">

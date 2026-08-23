@@ -5,6 +5,8 @@ import type { OverlayEnginePrefsPatch } from '../shared/draft/types'
 import type { LcuChampSelectResult } from '../shared/draft/lcuTypes'
 import type {
   LcuDiagnosticResult,
+  OverlayDiagnosticsResult,
+  OverlayResetResult,
   OverlayShortcutStatusResult,
   OverlayStatusResult,
   OverlayToggleResult
@@ -84,9 +86,42 @@ const api = {
   },
 
   toggleOverlay: () => ipcRenderer.invoke('overlay:toggle') as Promise<OverlayToggleResult>,
+  /** Forget saved geometry and rebuild the overlay at a guaranteed on-screen position. */
+  resetOverlay: () => ipcRenderer.invoke('overlay:reset') as Promise<OverlayResetResult>,
   getOverlayStatus: () => ipcRenderer.invoke('overlay:status') as Promise<OverlayStatusResult>,
+  getOverlayDiagnostics: () =>
+    ipcRenderer.invoke('overlay:diagnostics') as Promise<OverlayDiagnosticsResult>,
+  openOverlayLogFolder: () => ipcRenderer.invoke('overlay:openLogFolder') as Promise<{ ok: true }>,
+  onOverlayLoadError: (cb: (payload: { message: string }) => void) => {
+    const handler = (_: unknown, payload: { message: string }) => {
+      cb(payload)
+    }
+    ipcRenderer.on('overlay:loadError', handler)
+    return () => {
+      ipcRenderer.removeListener('overlay:loadError', handler)
+    }
+  },
   getOverlayShortcutStatus: () =>
     ipcRenderer.invoke('overlay:shortcutsStatus') as Promise<OverlayShortcutStatusResult>,
+  /** Rebind the overlay toggle keys; pass [] to restore Insert / F9 / F10. */
+  setOverlayHotkeys: (accelerators: string[]) =>
+    ipcRenderer.invoke('overlay:setHotkeys', accelerators) as Promise<OverlayShortcutStatusResult>,
+  onOverlayHotkeysChanged: (cb: (status: { registered: string[]; failed: string[] }) => void) => {
+    const handler = (_: unknown, status: { registered: string[]; failed: string[] }) => {
+      cb(status)
+    }
+    ipcRenderer.on('overlay:hotkeysChanged', handler)
+    return () => {
+      ipcRenderer.removeListener('overlay:hotkeysChanged', handler)
+    }
+  },
+
+  /** The big window is hidden at launch; the overlay expands it on demand. */
+  showMainWindow: () => ipcRenderer.invoke('mainWindow:show') as Promise<{ ok: true; visible: boolean }>,
+  hideMainWindow: () => ipcRenderer.invoke('mainWindow:hide') as Promise<{ ok: true; visible: boolean }>,
+  toggleMainWindow: () => ipcRenderer.invoke('mainWindow:toggle') as Promise<{ ok: true; visible: boolean }>,
+  getMainWindowStatus: () =>
+    ipcRenderer.invoke('mainWindow:status') as Promise<{ ok: true; visible: boolean }>,
   setOverlayProjectionMode: (open: boolean) =>
     ipcRenderer.invoke('overlay:setProjectionMode', open) as Promise<{ ok: boolean; open: boolean }>,
   closeApp: () => ipcRenderer.invoke('app:close') as Promise<{ ok: true }>,

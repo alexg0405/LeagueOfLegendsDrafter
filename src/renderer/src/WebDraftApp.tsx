@@ -94,7 +94,7 @@ const LS_WEB_RECOMMENDATION_POOL_MODE = 'nexusdraft.web.v1.recommendationPoolMod
  * `release:stage-web` writes alongside the real artifacts, so a version bump can never
  * point the button at an exe that has not been published yet.
  */
-const EXE_DOWNLOAD_FILE = 'Nexus-Draft-Portable-4.8.0.exe'
+const EXE_DOWNLOAD_FILE = 'Nexus-Draft-Portable-4.10.0.exe'
 const EXE_DOWNLOAD_URL = `/downloads/${EXE_DOWNLOAD_FILE}`
 const APP_VERSION = /(\d+\.\d+\.\d+)/.exec(EXE_DOWNLOAD_FILE)?.[1] ?? ''
 
@@ -2203,7 +2203,7 @@ export function WebDraftApp() {
               </a>
               <div className="mt-4 flex items-center gap-2 border-t border-nexus-line/50 pt-3 text-nexus-muted">
                 <NexusPlus className="text-[10px]" />
-                <span className="font-mono text-xs">Web build v4.8.0</span>
+                <span className="font-mono text-xs">Web build v4.10.0</span>
               </div>
             </NexusPanel>
           </aside>

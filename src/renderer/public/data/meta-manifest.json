@@ -1,11 +1,11 @@
 {
   "schema": "nexus_public_meta_manifest_v1",
   "patch": "16.17",
-  "updatedAt": "2026-09-03",
+  "updatedAt": "2026-09-04",
   "metaUrl": "publicMetaStatsSeed.json",
   "synergyUrl": "publicSynergyStatsSeed.json",
   "rankFilter": "emerald_plus",
-  "roleBaseCount": 338,
-  "counterCount": 10512,
+  "roleBaseCount": 340,
+  "counterCount": 10835,
   "synergyCount": 0
 }

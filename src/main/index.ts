@@ -847,12 +847,65 @@ function hideOverlayAfterDraft() {
   }
 }
 
+/** Page the main window jumps to on its next mount or 'mainWindow:navigate'. */
+let pendingMainView: 'settings' | 'live' | null = null
+
+/**
+ * Show the main window on a page. `front` puts it in front of other windows (the League client)
+ * without taking keyboard focus, so typing in champ select keeps going to the client.
+ */
+function openMainWindowOn(view: 'settings' | 'live', front = false): { ok: true; visible: boolean } {
+  pendingMainView = view
+  let result: { ok: true; visible: boolean }
+  if (front && mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore()
+    }
+    mainWindow.showInactive()
+    mainWindow.moveTop()
+    diagLog(`[main-window] shown in front (${view})`)
+    result = { ok: true, visible: true }
+  } else {
+    result = setMainWindowVisible(true)
+  }
+  const send = () => mainWindow?.webContents.send('mainWindow:navigate', { view })
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.webContents.isLoading()) {
+      mainWindow.webContents.once('did-finish-load', send)
+    } else {
+      send()
+    }
+  }
+  return result
+}
+
+/** True while the Live page is up only because champ select opened it. */
+let mainOpenedForDraft = false
+
+/** Champ select is over: put the Live page away (unless that would leave no way back in). */
+function hideMainWindowAfterDraft() {
+  if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) {
+    return
+  }
+  if (registeredOverlayShortcuts.length === 0) {
+    diagLog('[main-window] kept open after champ select: no working overlay hotkey')
+    return
+  }
+  mainWindow.hide()
+  if (boxesArranging) {
+    boxesArranging = false
+    syncBoxVisibility()
+    broadcastOverlayLayout()
+  }
+  diagLog('[main-window] hidden (champ select ended)')
+}
+
 /** About 1.2 s of "no session" polls before the overlay treats champ select as over. */
 const CHAMP_SELECT_END_POLLS = 3
 const champSelectWatch = new ChampSelectWatch({
   endAfter: CHAMP_SELECT_END_POLLS,
   onStart: () => {
-    const { openOnChampSelect } = getOverlayLayout().draft
+    const { openOnChampSelect, openPageOnChampSelect } = getOverlayLayout().draft
     diagLog(`[overlay] champ select started${openOnChampSelect ? '' : ' (auto-open off)'}`)
     notifyOverlayChampSelect(true)
     if (openOnChampSelect) {
@@ -861,14 +914,22 @@ const champSelectWatch = new ChampSelectWatch({
       }
       showOverlay('champ-select')
     }
+    if (openPageOnChampSelect) {
+      mainOpenedForDraft = !(mainWindow != null && !mainWindow.isDestroyed() && mainWindow.isVisible())
+      openMainWindowOn('live', true)
+    }
   },
   onEnd: () => {
-    const { closeAfterChampSelect } = getOverlayLayout().draft
+    const { closeAfterChampSelect, closePageAfterChampSelect } = getOverlayLayout().draft
     diagLog(`[overlay] champ select ended${closeAfterChampSelect ? '' : ' (auto-close off)'}`)
     notifyOverlayChampSelect(false)
     if (closeAfterChampSelect) {
       hideOverlayAfterDraft()
     }
+    if (closePageAfterChampSelect && mainOpenedForDraft) {
+      hideMainWindowAfterDraft()
+    }
+    mainOpenedForDraft = false
   }
 })
 
@@ -1221,21 +1282,8 @@ app.whenReady().then(() => {
     return { ok: true as const }
   })
   ipcMain.handle('mainWindow:show', () => setMainWindowVisible(true))
-  /** Overlay ⚙: open the main window on Setup (theme, in-game layout). */
-  let pendingMainView: 'settings' | null = null
-  ipcMain.handle('mainWindow:openSettings', () => {
-    pendingMainView = 'settings'
-    const result = setMainWindowVisible(true)
-    const send = () => mainWindow?.webContents.send('mainWindow:navigate', { view: 'settings' })
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      if (mainWindow.webContents.isLoading()) {
-        mainWindow.webContents.once('did-finish-load', send)
-      } else {
-        send()
-      }
-    }
-    return result
-  })
+  /** Overlay ⚙: open the main window on Setup (theme, overlay layouts). */
+  ipcMain.handle('mainWindow:openSettings', () => openMainWindowOn('settings'))
   /** The main window asks once on mount, in case the navigate event fired before it listened. */
   ipcMain.handle('mainWindow:takePendingView', () => {
     const view = pendingMainView

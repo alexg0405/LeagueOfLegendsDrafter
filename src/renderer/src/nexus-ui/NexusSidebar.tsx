@@ -3,12 +3,14 @@ import { MicroLabel, NexusPlus } from './NexusTick'
 import { DUR, EASING, useNexusMotion, navItemVariants, springMicro } from './nexusMotion'
 
 /** League / Nexus-only routes — no placeholder game-launcher items */
-export type NexusNavId = 'home' | 'operations' | 'settings'
+export type NexusNavId = 'home' | 'operations' | 'settings' | 'live'
 
 const NAV: { id: NexusNavId; label: string; tag: string }[] = [
   { id: 'home', label: 'Home', tag: '01' },
   { id: 'operations', label: 'Draft', tag: '02' },
-  { id: 'settings', label: 'Setup', tag: '03' }
+  { id: 'settings', label: 'Setup', tag: '03' },
+  // The overlay's full Draft tab in this window; opens by itself during champ select.
+  { id: 'live', label: 'Live', tag: '04' }
 ]
 
 const navStagger: import('framer-motion').Variants = {

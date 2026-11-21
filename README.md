@@ -77,6 +77,12 @@ who it pairs with, runes, tips, build), more sections (both teams, your matchups
 champion search, coaching), the Draft/Build tabs, data status, hotkey hint, engine settings, the
 full tables, and the open/close behavior itself.
 
+The main window's **Live** page (menu item 04) is the full Draft tab: every pick with all its
+details, both teams, your matchups, draft intel and champion search. It comes up in front of the
+League client when champ select starts (typing still goes to the client) and hides again when it
+ends, if champ select is what opened it. Both are toggles under **Setup → Champ select overlay →
+Live page (04)**.
+
 Champ select start and end come from the same 400 ms League client poll that feeds the draft. The
 overlay closes after about 1.2 s with no session, so one failed request never closes it mid-draft.
 To test without League, set `LEAGUE_LOCKFILE` to the lockfile of a mock client on `127.0.0.1` that

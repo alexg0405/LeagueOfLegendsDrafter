@@ -57,6 +57,10 @@ export type DraftOverlayPrefs = {
   openOnChampSelect: boolean
   /** Hide it when champ select ends (the game starts, or someone dodges). */
   closeAfterChampSelect: boolean
+  /** Bring the main window up on its Live page (the full Draft tab) when champ select starts. */
+  openPageOnChampSelect: boolean
+  /** Hide that window again when champ select ends, if champ select is what opened it. */
+  closePageAfterChampSelect: boolean
 }
 
 export const DEFAULT_DRAFT_OVERLAY: DraftOverlayPrefs = {
@@ -65,7 +69,18 @@ export const DEFAULT_DRAFT_OVERLAY: DraftOverlayPrefs = {
   pickDetails: { delta: true, score: false, beats: false, pairs: false, runes: false, tips: false, build: false },
   extras: { tabs: true, dataStatus: false, hotkeys: true, engine: false, tables: false },
   openOnChampSelect: true,
-  closeAfterChampSelect: true
+  closeAfterChampSelect: true,
+  openPageOnChampSelect: true,
+  closePageAfterChampSelect: true
+}
+
+/** The Live page (04) shows everything; it has room the overlay doesn't. */
+export const FULL_DRAFT_VIEW: DraftOverlayPrefs = {
+  ...DEFAULT_DRAFT_OVERLAY,
+  picks: 8,
+  sections: { board: true, matchups: true, intel: true, lookup: true, coaching: true },
+  pickDetails: { delta: true, score: true, beats: true, pairs: true, runes: true, tips: true, build: true },
+  extras: { tabs: false, dataStatus: false, hotkeys: false, engine: true, tables: true }
 }
 
 function readFlags<K extends string>(keys: readonly K[], raw: unknown, fallback: Record<K, boolean>): Record<K, boolean> {
@@ -83,7 +98,10 @@ export function normalizeDraftOverlay(raw: unknown): DraftOverlayPrefs {
     pickDetails: readFlags(PICK_DETAILS, r.pickDetails, d.pickDetails),
     extras: readFlags(DRAFT_EXTRAS, r.extras, d.extras),
     openOnChampSelect: typeof r.openOnChampSelect === 'boolean' ? r.openOnChampSelect : d.openOnChampSelect,
-    closeAfterChampSelect: typeof r.closeAfterChampSelect === 'boolean' ? r.closeAfterChampSelect : d.closeAfterChampSelect
+    closeAfterChampSelect: typeof r.closeAfterChampSelect === 'boolean' ? r.closeAfterChampSelect : d.closeAfterChampSelect,
+    openPageOnChampSelect: typeof r.openPageOnChampSelect === 'boolean' ? r.openPageOnChampSelect : d.openPageOnChampSelect,
+    closePageAfterChampSelect:
+      typeof r.closePageAfterChampSelect === 'boolean' ? r.closePageAfterChampSelect : d.closePageAfterChampSelect
   }
 }
 

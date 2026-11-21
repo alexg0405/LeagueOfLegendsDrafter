@@ -51,6 +51,7 @@ import { copyLcuStatusLine, displayLcuError, lcuUiStatus } from './lcuStatusCopy
 import { buildDraftIntelAsync } from './draftIntel/draftIntelClient'
 import { buildDraftItemMatrixPlansAsync, type ItemMatrixRequestOptions } from './itemMatrix/itemMatrixClient'
 import { suggestPicksAsync } from './recommend/recommendClient'
+import { OverlayPanel } from './OverlayPanel'
 
 const ROLES: DraftRole[] = ['top', 'jungle', 'middle', 'bottom', 'support']
 const LS_MY_ROLE = 'nexusdraft.v1.myRole'
@@ -757,8 +758,9 @@ export function MainShell() {
   const lcuStatusLine = copyLcuStatusLine(lcu, lcuDiagnostics)
   const lcuError = displayLcuError(lcu)
 
-  useEffect(() => {
-    const payload: DraftUpdate = {
+  /** What the overlay's Draft tab shows; the Live page (04) renders the same update in this window. */
+  const draftPayload = useMemo(
+    (): DraftUpdate => ({
       source: draftSource,
       lcuConnected: lcu?.lcuReachable ?? false,
       lcuStatus,
@@ -777,26 +779,30 @@ export function MainShell() {
       championsSearch,
       trainedEffectsStatus: trainedEffects ? trainedEffects.status : null,
       overlayEngineEcho
-    }
-    void window.drafter.publishDraft(sanitizeDraftUpdateForIpc(payload))
-  }, [
-    draftSource,
-    lcu,
-    lcuStatus,
-    lcuError,
-    activeSnapshot,
-    suggestions,
-    ddVersion,
-    patchLabel,
-    roleForSuggestions,
-    banChampionNames,
-    enemyRoleInference,
-    draftIntelWithMatrix,
-    boardSignature,
-    championsSearch,
-    trainedEffects,
-    overlayEngineEcho
-  ])
+    }),
+    [
+      draftSource,
+      lcu,
+      lcuStatus,
+      lcuError,
+      activeSnapshot,
+      suggestions,
+      ddVersion,
+      patchLabel,
+      roleForSuggestions,
+      banChampionNames,
+      enemyRoleInference,
+      draftIntelWithMatrix,
+      boardSignature,
+      championsSearch,
+      trainedEffects,
+      overlayEngineEcho
+    ]
+  )
+
+  useEffect(() => {
+    void window.drafter.publishDraft(sanitizeDraftUpdateForIpc(draftPayload))
+  }, [draftPayload])
 
   useEffect(() => {
     return window.drafter.onLcuChampSelect((r) => {
@@ -1102,23 +1108,22 @@ export function MainShell() {
     [nexusNav]
   )
 
-  // Overlay ⚙ → straight to Setup.
+  // Overlay ⚙ → straight to Setup; champ select starting → straight to the Live page.
   useEffect(() => {
-    const open = () => {
+    const open = (view: 'settings' | 'live' | null) => {
+      if (view !== 'settings' && view !== 'live') {
+        return
+      }
       window.dispatchEvent(new Event('nexus:skip-intro'))
-      goNav('settings')
+      goNav(view)
     }
     void window.drafter
       .takePendingMainView()
-      .then((view) => {
-        if (view === 'settings') open()
-      })
+      .then(open)
       .catch(() => {
         /* older main process */
       })
-    return window.drafter.onMainNavigate(({ view }) => {
-      if (view === 'settings') open()
-    })
+    return window.drafter.onMainNavigate(({ view }) => open(view))
   }, [goNav])
 
   const topBar = {
@@ -1264,6 +1269,12 @@ export function MainShell() {
               }}
               onToggleOverlay={handleToggleOverlay}
             />
+          </NexusRoutePanel>
+        )}
+
+        {nexusNav === 'live' && (
+          <NexusRoutePanel key="live" direction={routeDir} className="w-full min-h-0 min-w-0">
+            <OverlayPanel variant="page" draft={draftPayload} />
           </NexusRoutePanel>
         )}
 

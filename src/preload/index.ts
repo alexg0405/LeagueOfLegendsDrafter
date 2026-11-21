@@ -196,9 +196,9 @@ const api = {
   showMainWindow: () => ipcRenderer.invoke('mainWindow:show') as Promise<{ ok: true; visible: boolean }>,
   /** Open the main window on Setup (theme, in-game layout). */
   openSettings: () => ipcRenderer.invoke('mainWindow:openSettings') as Promise<{ ok: true; visible: boolean }>,
-  takePendingMainView: () => ipcRenderer.invoke('mainWindow:takePendingView') as Promise<'settings' | null>,
-  onMainNavigate: (cb: (payload: { view: 'settings' }) => void) => {
-    const handler = (_: unknown, payload: { view: 'settings' }) => {
+  takePendingMainView: () => ipcRenderer.invoke('mainWindow:takePendingView') as Promise<'settings' | 'live' | null>,
+  onMainNavigate: (cb: (payload: { view: 'settings' | 'live' }) => void) => {
+    const handler = (_: unknown, payload: { view: 'settings' | 'live' }) => {
       cb(payload)
     }
     ipcRenderer.on('mainWindow:navigate', handler)

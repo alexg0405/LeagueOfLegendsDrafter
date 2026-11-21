@@ -26,7 +26,7 @@ export const MOTION_PRESETS = {
 
 const STAGGER = { nav: 0.055, card: 0.065, row: 0.045, meta: 0.04 }
 
-export const NAV_ORDER: Record<NexusNavId, number> = { home: 0, operations: 1, settings: 2 }
+export const NAV_ORDER: Record<NexusNavId, number> = { home: 0, operations: 1, settings: 2, live: 3 }
 
 export function useNexusMotion() {
   const reduce = useReducedMotion() ?? false

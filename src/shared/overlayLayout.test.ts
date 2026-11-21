@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_DRAFT_OVERLAY,
   DEFAULT_OVERLAY_LAYOUT,
+  FULL_DRAFT_VIEW,
   boxLabel,
   moveBlockTo,
   normalizeDraftOverlay,
@@ -20,6 +21,18 @@ describe('champ select overlay settings', () => {
     expect(Object.values(draft.sections).some(Boolean)).toBe(false)
     expect(draft.openOnChampSelect).toBe(true)
     expect(draft.closeAfterChampSelect).toBe(true)
+    expect(draft.openPageOnChampSelect).toBe(true)
+    expect(draft.closePageAfterChampSelect).toBe(true)
+  })
+
+  it('give the Live page every section and detail, with no overlay chrome', () => {
+    expect(Object.values(FULL_DRAFT_VIEW.sections).every(Boolean)).toBe(true)
+    expect(Object.values(FULL_DRAFT_VIEW.pickDetails).every(Boolean)).toBe(true)
+    expect(FULL_DRAFT_VIEW.extras).toEqual({ tabs: false, dataStatus: false, hotkeys: false, engine: true, tables: true })
+    expect(normalizeDraftOverlay({ openPageOnChampSelect: false, closePageAfterChampSelect: 1 })).toMatchObject({
+      openPageOnChampSelect: false,
+      closePageAfterChampSelect: true
+    })
   })
 
   it('give layouts saved before these settings existed the plain defaults', () => {

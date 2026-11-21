@@ -162,6 +162,34 @@ export function DraftOverlayEditor({
         </button>
       </Row>
 
+      <Row
+        label="Live page (04)"
+        tip={
+          <>
+            The full Draft tab in this window: every pick with all its details, both teams, matchups, intel and champion search.
+            <b> Open</b>: it comes up in front of the League client when champ select starts (typing still goes to the client).
+            <b> Close</b>: it hides again when champ select ends, if champ select is what opened it.
+          </>
+        }
+      >
+        <button
+          type="button"
+          className={chip(prefs.openPageOnChampSelect)}
+          aria-pressed={prefs.openPageOnChampSelect}
+          onClick={() => onChange({ ...prefs, openPageOnChampSelect: !prefs.openPageOnChampSelect })}
+        >
+          Open at champ select
+        </button>
+        <button
+          type="button"
+          className={chip(prefs.closePageAfterChampSelect)}
+          aria-pressed={prefs.closePageAfterChampSelect}
+          onClick={() => onChange({ ...prefs, closePageAfterChampSelect: !prefs.closePageAfterChampSelect })}
+        >
+          Close when it ends
+        </button>
+      </Row>
+
       <button type="button" className={`${chip(false)} w-full py-1`} onClick={() => onChange(normalizeDraftOverlay(null))}>
         Back to simple
       </button>

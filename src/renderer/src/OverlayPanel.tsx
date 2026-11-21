@@ -34,6 +34,7 @@ import { usableDdragonVersion, useBuildSeedRevision, useEnemyPurchases, useItemC
 import { ChampionBuildBrowser } from './nexus-ui/ChampionBuildBrowser'
 import { LiveBuildPanel } from './nexus-ui/LiveBuildPanel'
 import { useOverlayLayout } from './builds/useOverlayLayout'
+import { FULL_DRAFT_VIEW } from '@shared/overlayLayout'
 import { DraftItemPlanBlock as OverlayItemPlan } from './nexus-ui/DraftItemPlanBlock'
 import { DraftItemMatrixView } from './nexus-ui/DraftItemMatrixView'
 import { NexusInfoTip } from './nexus-ui/NexusInfoTip'
@@ -357,8 +358,15 @@ function inRolePool(id: number, role: DraftRole): boolean {
   )
 }
 
-export function OverlayPanel() {
-  const [d, setD] = useState<DraftUpdate>(empty)
+/**
+ * The overlay window's content. `variant="page"` renders its Draft tab inside the main window
+ * (the Live page, 04) from the main window's own draft update, with every section on and none
+ * of the overlay-window plumbing (resizing, projection, title bar, tabs, footer).
+ */
+export function OverlayPanel({ variant = 'overlay', draft }: { variant?: 'overlay' | 'page'; draft?: DraftUpdate } = {}) {
+  const isPage = variant === 'page'
+  const [overlayDraft, setD] = useState<DraftUpdate>(empty)
+  const d = isPage ? (draft ?? empty) : overlayDraft
   const [lookupQuery, setLookupQuery] = useState('')
   const [trainedEffects, setTrainedEffects] = useState<CompiledTrainedEffects | null>(null)
   const [pickMatrixOpen, setPickMatrixOpen] = useState(false)
@@ -376,17 +384,22 @@ export function OverlayPanel() {
   const [liveDataStatus, setLiveDataStatus] = useState<LivePublicDataRefreshStatus | null>(null)
 
   useEffect(() => {
+    if (isPage) {
+      return
+    }
     const un = window.drafter.onDraftUpdate((p) => {
       if (isDraftUpdate(p)) {
         setD(p)
       }
     })
     return un
-  }, [])
+  }, [isPage])
 
   useEffect(() => {
-    pushOverlayPrefs({ roleOverride: null })
-  }, [])
+    if (!isPage) {
+      pushOverlayPrefs({ roleOverride: null })
+    }
+  }, [isPage])
 
   useEffect(() => {
     let cancelled = false
@@ -439,6 +452,10 @@ export function OverlayPanel() {
   }, [])
 
   useEffect(() => {
+    // The main window refreshes this data itself.
+    if (isPage) {
+      return
+    }
     let cancelled = false
     const refresh = async () => {
       const status = await refreshLivePublicData()
@@ -475,19 +492,26 @@ export function OverlayPanel() {
     return () => window.removeEventListener('keydown', onKey)
   }, [pickMatrixOpen, itemMatrixOpen])
 
+  // Tables balloon the overlay window to fit; on the Live page they just cover the page.
   useEffect(() => {
+    if (isPage) {
+      return
+    }
     void window.drafter.setOverlayProjectionMode(pickMatrixOpen || itemMatrixOpen).catch(() => {
       /* overlay may be closing */
     })
-  }, [pickMatrixOpen, itemMatrixOpen])
+  }, [isPage, pickMatrixOpen, itemMatrixOpen])
 
   useEffect(() => {
+    if (isPage) {
+      return
+    }
     return () => {
       void window.drafter.setOverlayProjectionMode(false).catch(() => {
         /* overlay may be closing */
       })
     }
-  }, [])
+  }, [isPage])
 
   const importPlayerChampionPool = async () => {
     if (!OVERLAY_PLAYER_POOL_IMPORT_ENABLED) {
@@ -636,7 +660,7 @@ export function OverlayPanel() {
   const enemyPurchases = useEnemyPurchases(liveGame, itemCatalog)
   const { state: layoutState } = useOverlayLayout()
   /** What the Draft tab shows; set on the main window's Setup page. */
-  const draftShow = layoutState.layout.draft
+  const draftShow = isPage ? FULL_DRAFT_VIEW : layoutState.layout.draft
   const topPicks = d.suggestions.slice(0, draftShow.picks)
   const openSettings = () => {
     void window.drafter.openSettings().catch(() => {
@@ -680,14 +704,14 @@ export function OverlayPanel() {
   }, [])
   // With the tab bar turned off there is no way to pick a tab, so it just follows the phase.
   const manualTab = draftShow.extras.tabs && tabChoice?.phase === phase ? tabChoice.tab : null
-  const tab: 'draft' | 'build' = peeking ? 'build' : manualTab ?? (phase === 'game' ? 'build' : 'draft')
+  const tab: 'draft' | 'build' = isPage ? 'draft' : peeking ? 'build' : manualTab ?? (phase === 'game' ? 'build' : 'draft')
   const chooseTab = (next: 'draft' | 'build') => setTabChoice({ phase, tab: next })
   const peekOn = peekKey?.enabled === true && peekKey.available
   const peekKeyLabel = peekKey ? PEEK_KEY_LABELS[peekKey.key] : 'Caps Lock'
   const peekHold = peekKey?.mode !== 'toggle'
   /** The Draft tab can turn the hotkey hint off; warnings and errors always show. */
-  const showHotkeyHint = peeking || activeHotkeys.length === 0 || tab !== 'draft' || draftShow.extras.hotkeys
-  const showFooter = showHotkeyHint || (Boolean(d.error) && tab === 'draft')
+  const showHotkeyHint = !isPage && (peeking || activeHotkeys.length === 0 || tab !== 'draft' || draftShow.extras.hotkeys)
+  const showFooter = !isPage && (showHotkeyHint || (Boolean(d.error) && tab === 'draft'))
 
   // A new champ select starts on the Draft tab; when one ends, any open table closes.
   useEffect(() => {
@@ -716,7 +740,7 @@ export function OverlayPanel() {
   useEffect(() => {
     const scroller = scrollRef.current
     const inner = scrollInnerRef.current
-    if (!scroller || !inner || typeof ResizeObserver === 'undefined' || !window.drafter.fitOverlayHeight) {
+    if (isPage || !scroller || !inner || typeof ResizeObserver === 'undefined' || !window.drafter.fitOverlayHeight) {
       return
     }
     let frame = 0
@@ -827,7 +851,15 @@ export function OverlayPanel() {
   }, [lookupId, poolRole, lookupDdragon, lookupChampion])
 
   return (
-    <div className="nexus-overlay-root fixed inset-1 flex min-h-0 flex-col overflow-hidden font-body font-medium text-nexus-text text-sm">
+    <div
+      className={
+        isPage
+          ? 'relative mx-auto flex w-full max-w-3xl min-h-0 flex-col p-3 font-body font-medium text-nexus-text text-sm'
+          : 'nexus-overlay-root fixed inset-1 flex min-h-0 flex-col overflow-hidden font-body font-medium text-nexus-text text-sm'
+      }
+    >
+      {isPage ? null : (
+      <>
       <div className="nexus-noise absolute inset-0 opacity-[0.35] pointer-events-none z-0" aria-hidden />
       <div
         className="nexus-overlay-drag relative z-10 flex items-center flex-wrap gap-x-2 gap-y-1 border-b border-nexus-line bg-nexus-surface-2 px-3 py-2.5"
@@ -867,6 +899,8 @@ export function OverlayPanel() {
           </button>
         </span>
       </div>
+      </>
+      )}
       {/* Data refresh status: opt-in from Setup, and never over the in-game build. */}
       {!draftShow.extras.dataStatus || (tab === 'build' && liveActive) ? null : (
         <div className="nexus-overlay-drag relative z-10 border-b border-nexus-line/60 bg-nexus-surface-2/80 px-3 py-1">
@@ -1074,10 +1108,14 @@ export function OverlayPanel() {
 
       <div
         ref={scrollRef}
-        className={[
-          'nexus-overlay-nodrag nexus-overlay-scroll relative z-10 flex-1 min-h-0 overflow-y-auto px-3.5 text-sm leading-relaxed',
-          gameBuildView || tab === 'draft' ? 'py-2.5' : 'py-3.5'
-        ].join(' ')}
+        className={
+          isPage
+            ? 'relative z-10 text-sm leading-relaxed'
+            : [
+                'nexus-overlay-nodrag nexus-overlay-scroll relative z-10 flex-1 min-h-0 overflow-y-auto px-3.5 text-sm leading-relaxed',
+                gameBuildView || tab === 'draft' ? 'py-2.5' : 'py-3.5'
+              ].join(' ')
+        }
       >
         <div ref={scrollInnerRef}>
         {tab === 'build' ? (
@@ -1189,15 +1227,17 @@ export function OverlayPanel() {
                   </button>
                 </>
               ) : null}
-              <button
-                type="button"
-                className="nexus-focus border border-nexus-line px-1.5 text-[12px] leading-[18px] text-nexus-muted hover:border-nexus-lime/50 hover:text-nexus-text"
-                onClick={openSettings}
-                title="Choose what this overlay shows (opens Setup)"
-                aria-label="Customize the overlay"
-              >
-                ⚙
-              </button>
+              {isPage ? null : (
+                <button
+                  type="button"
+                  className="nexus-focus border border-nexus-line px-1.5 text-[12px] leading-[18px] text-nexus-muted hover:border-nexus-lime/50 hover:text-nexus-text"
+                  onClick={openSettings}
+                  title="Choose what this overlay shows (opens Setup)"
+                  aria-label="Customize the overlay"
+                >
+                  ⚙
+                </button>
+              )}
             </span>
           </div>
 
@@ -1249,7 +1289,9 @@ export function OverlayPanel() {
 
           {topPicks.length === 0 && (
             <p className="m-0 font-mono text-xs text-nexus-muted">
-              Waiting for champ select. Start a game, or enter the draft manually in the main window.
+              {isPage
+                ? 'Waiting for champ select. This page opens by itself when it starts, or enter a draft by hand on the Draft page (02).'
+                : 'Waiting for champ select. Start a game, or enter the draft manually in the main window.'}
             </p>
           )}
           <ul className="m-0 list-none space-y-1 p-0" key={d.boardSignature ? d.boardSignature : d.updatedAt}>

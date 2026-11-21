@@ -1,12 +1,12 @@
 {
-  "version": "5.2.0",
-  "releasedAt": "2026-11-21T18:41:45.593Z",
+  "version": "5.3.0",
+  "releasedAt": "2026-11-21T23:54:29.408Z",
   "installer": {
-    "file": "Nexus-Draft-Setup-5.2.0.exe",
-    "bytes": 85133770
+    "file": "Nexus-Draft-Setup-5.3.0.exe",
+    "bytes": 85134797
   },
   "portable": {
-    "file": "Nexus-Draft-Portable-5.2.0.exe",
-    "bytes": 84925737
+    "file": "Nexus-Draft-Portable-5.3.0.exe",
+    "bytes": 84926751
   }
 }

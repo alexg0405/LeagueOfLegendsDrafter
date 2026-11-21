@@ -3,12 +3,14 @@ import { createRoot } from 'react-dom/client'
 import { Analytics } from '@vercel/analytics/react'
 import { App } from './App'
 import { ErrorBoundary } from './ErrorBoundary'
+import { initTheme } from './theme'
 import './index.css'
 import './App.css'
 
 const isWeb = import.meta.env.VITE_NEXUS_WEB === '1'
 
 async function bootstrap() {
+  initTheme()
   const root = document.getElementById('root')
   if (!root) {
     throw new Error('no #root')

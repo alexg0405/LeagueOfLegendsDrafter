@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { ParticleIntroActiveContext, ParticleWordIntroOverlay, ParticleWordLoader } from './ParticleWordLoader'
-import { isOverlayRoute } from './route'
+import { currentBoxId, isOverlayRoute } from './route'
 
 const IS_WEB_BUILD = import.meta.env.VITE_NEXUS_WEB === '1'
 const WebDraftApp = IS_WEB_BUILD
@@ -15,11 +15,18 @@ function AppLoading() {
 }
 
 function shouldShowIntroOverlay(): boolean {
-  return typeof window !== 'undefined' && !isOverlayRoute()
+  return typeof window !== 'undefined' && !isOverlayRoute() && currentBoxId() == null
 }
 
 function IntroShell({ children }: { children: ReactNode }) {
   const [entered, setEntered] = useState(() => !shouldShowIntroOverlay())
+
+  // Opening Setup from the overlay should land on Setup, not the splash.
+  useEffect(() => {
+    const skip = () => setEntered(true)
+    window.addEventListener('nexus:skip-intro', skip)
+    return () => window.removeEventListener('nexus:skip-intro', skip)
+  }, [])
 
   useEffect(() => {
     if (entered || typeof document === 'undefined') {

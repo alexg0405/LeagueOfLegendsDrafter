@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { themeRgb } from '../theme'
 import {
   NexusParticlePool,
   NexusQualityController,
@@ -43,10 +44,14 @@ function createSpriteAtlas(): HTMLCanvasElement {
     return atlas
   }
 
+  // Sparks follow the color theme (text, accent, gold).
+  const accent = themeRgb('--nexus-lime', '29, 212, 168')
+  const text = themeRgb('--nexus-text', '232, 243, 238')
+  const gold = themeRgb('--nexus-yellow', '232, 154, 44')
   const colors = [
-    ['rgba(232,243,238,0.95)', 'rgba(29,212,168,0)'],
-    ['rgba(29,212,168,0.9)', 'rgba(29,212,168,0)'],
-    ['rgba(232,154,44,0.88)', 'rgba(232,154,44,0)']
+    [`rgba(${text},0.95)`, `rgba(${accent},0)`],
+    [`rgba(${accent},0.9)`, `rgba(${accent},0)`],
+    [`rgba(${gold},0.88)`, `rgba(${gold},0)`]
   ] as const
 
   colors.forEach(([inner, outer], index) => {
@@ -406,7 +411,7 @@ class NexusCanvasRuntime {
     ctx.clearRect(0, 0, this.width, this.height)
     ctx.save()
     ctx.globalAlpha = this.config.surface === 'matrix' ? 0.18 : 0.1
-    ctx.strokeStyle = 'rgba(29,212,168,0.22)'
+    ctx.strokeStyle = `rgba(${themeRgb('--nexus-lime', '29, 212, 168')},0.22)`
     ctx.lineWidth = 1
     const gap = this.config.surface === 'matrix' ? 34 : 48
     for (let x = 0; x < this.width; x += gap) {
@@ -434,9 +439,10 @@ class NexusCanvasRuntime {
     if (this.config.surface === 'matrix') {
       const sweep = (time * 0.018) % (this.width + 220)
       const gradient = ctx.createLinearGradient(sweep - 180, 0, sweep, this.height)
-      gradient.addColorStop(0, 'rgba(29,212,168,0)')
-      gradient.addColorStop(0.78, 'rgba(29,212,168,0.06)')
-      gradient.addColorStop(1, 'rgba(232,243,238,0.16)')
+      const accent = themeRgb('--nexus-lime', '29, 212, 168')
+      gradient.addColorStop(0, `rgba(${accent},0)`)
+      gradient.addColorStop(0.78, `rgba(${accent},0.06)`)
+      gradient.addColorStop(1, `rgba(${themeRgb('--nexus-text', '232, 243, 238')},0.16)`)
       ctx.fillStyle = gradient
       ctx.fillRect(0, 0, this.width, this.height)
     }

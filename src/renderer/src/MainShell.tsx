@@ -1,7 +1,8 @@
+import { NexusSettingsView } from './nexus-ui/NexusSettingsView'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import type { AppUpdateStatus } from '@shared/appUpdate'
-import type { LcuDiagnosticResult, OverlayShortcutStatusResult } from '@shared/desktopInterop'
+import type { LcuDiagnosticResult, OverlayShortcutStatusResult, PeekSettingsPatch, PeekStatus } from '@shared/desktopInterop'
 import { getLatestDDragonVersion, loadChampionMaps, loadItemMaps, type ChampionLite, type ItemLite } from '@shared/dataDragon'
 import {
   applyChampionNames,
@@ -37,7 +38,6 @@ import {
   NexusHomeDashboard,
   NexusOperationsView,
   NexusRoutePanel,
-  NexusStubView,
   NAV_ORDER,
   type NexusNavId
 } from './nexus-ui'
@@ -305,6 +305,7 @@ export function MainShell() {
   const [overlayStatusLine, setOverlayStatusLine] = useState<string | null>(null)
   const [overlayError, setOverlayError] = useState<string | null>(null)
   const [overlayShortcuts, setOverlayShortcuts] = useState<OverlayShortcutStatusResult | null>(null)
+  const [peekStatus, setPeekStatus] = useState<PeekStatus | null>(null)
   const [overlayDiagnostics, setOverlayDiagnostics] = useState<string | null>(null)
 
   const effectiveMyRole: DraftRole = useMemo(() => {
@@ -979,6 +980,31 @@ export function MainShell() {
     }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    void window.drafter
+      .getPeekStatus()
+      .then((status) => {
+        if (!cancelled) setPeekStatus(status)
+      })
+      .catch(() => {
+        /* main process without the feature */
+      })
+    const un = window.drafter.onPeekStatus((status) => setPeekStatus(status))
+    return () => {
+      cancelled = true
+      un()
+    }
+  }, [])
+
+  const handleSetPeek = useCallback(async (patch: PeekSettingsPatch) => {
+    try {
+      setPeekStatus(await window.drafter.setPeekSettings(patch))
+    } catch (error) {
+      setOverlayError(error instanceof Error ? error.message : String(error))
+    }
+  }, [])
+
   const handleSetOverlayHotkey = useCallback(async (accelerators: string[]) => {
     setOverlayError(null)
     try {
@@ -1076,12 +1102,29 @@ export function MainShell() {
     [nexusNav]
   )
 
+  // Overlay ⚙ → straight to Setup.
+  useEffect(() => {
+    const open = () => {
+      window.dispatchEvent(new Event('nexus:skip-intro'))
+      goNav('settings')
+    }
+    void window.drafter
+      .takePendingMainView()
+      .then((view) => {
+        if (view === 'settings') open()
+      })
+      .catch(() => {
+        /* older main process */
+      })
+    return window.drafter.onMainNavigate(({ view }) => {
+      if (view === 'settings') open()
+    })
+  }, [goNav])
+
   const topBar = {
     runnerId: 'NEXUS//LOCAL',
-    region: 'AMERICAS',
     dataVersion: ddVersion && ddVersion[0] !== '(' ? ddVersion : '—',
     build: '4.10.0',
-    networkStatus: lcuStatus === 'ready' ? 'On' : 'Wait',
     link: lcuStatus === 'ready' ? 'League: ready' : 'League: waiting',
     resourceLine: `Picks from: ${copyDraftSource(draftSource)} · Suggestions: ${patchLabel ?? ENGINE_V1_LABEL} · ${livePublicDataStatusLine(liveDataStatus)}`,
     onMinimizeApp: () => {
@@ -1203,19 +1246,6 @@ export function MainShell() {
               onInstallAppUpdate={installAppUpdate}
               playerPoolProfile={playerPoolProfile}
               playerPoolStatus={playerPoolStatus}
-              overlayStatusLine={overlayStatusLine}
-              overlayError={overlayError}
-              overlayShortcutStatus={overlayShortcuts}
-              overlayDiagnosticsText={overlayDiagnostics}
-              onResetOverlay={() => {
-                void handleResetOverlay()
-              }}
-              onShowOverlayDiagnostics={() => {
-                void handleShowOverlayDiagnostics()
-              }}
-              onSetOverlayHotkey={(accelerators) => {
-                void handleSetOverlayHotkey(accelerators)
-              }}
               playerPoolBusy={playerPoolBusy}
               recommendationPoolMode={recommendationPoolMode}
               onRecommendationPoolMode={setRecommendationPoolMode}
@@ -1239,7 +1269,26 @@ export function MainShell() {
 
         {nexusNav === 'settings' && (
           <NexusRoutePanel key="settings" direction={routeDir} className="w-full min-h-0 min-w-0">
-            <NexusStubView />
+            <NexusSettingsView
+              overlayStatusLine={overlayStatusLine}
+              overlayError={overlayError}
+              overlayShortcutStatus={overlayShortcuts}
+              overlayDiagnosticsText={overlayDiagnostics}
+              onResetOverlay={() => {
+                void handleResetOverlay()
+              }}
+              onShowOverlayDiagnostics={() => {
+                void handleShowOverlayDiagnostics()
+              }}
+              onSetOverlayHotkey={(accelerators) => {
+                void handleSetOverlayHotkey(accelerators)
+              }}
+              peekStatus={peekStatus}
+              onSetPeek={(patch) => {
+                void handleSetPeek(patch)
+              }}
+              onToggleOverlay={handleToggleOverlay}
+            />
           </NexusRoutePanel>
         )}
       </AnimatePresence>

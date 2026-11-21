@@ -45,20 +45,43 @@ import { loadLocalEnv, loadLocalEnvWhenReady } from './loadLocalEnv'
 import { setupAppUpdater } from './appUpdater'
 import { fetchChampSelectSession, getLcuDiagnostics } from './lcuClient'
 import { fetchLivePublicDataPayload } from './livePublicDataFetcher'
+import { getLastLiveGameStatus, startLiveGamePolling } from './liveClientData'
+import { createPeekKeyReader, createPeekPoller } from './peekKey'
+import { PeekController } from './peekController'
+import { OverlayBoxManager } from './overlayBoxes'
+import type { OverlayLayoutState } from '../shared/overlayLayout'
 import { getPlayerChampionPool } from './riotPlayerChampionPool'
 import {
   clearOverlayBounds,
+  clearOverlayGameBounds,
+  getBoxBounds,
+  getOverlayGameBounds,
+  getOverlayLayout,
+  setBoxBounds,
+  setOverlayGameBounds,
+  setOverlayLayout,
   DEFAULT_OVERLAY_HOTKEYS,
   getCaptureSourceId,
   getOverlayBounds,
   getOverlayHotkeys,
+  getPeekEnabled,
+  getPeekKey,
+  getPeekMode,
   isValidAccelerator,
   setCaptureSourceId,
   setOverlayBounds,
-  setOverlayHotkeys
+  setOverlayHotkeys,
+  setPeekSettings
 } from './settingsStore'
 import { diagLog, diagnosticsLogPath, recentDiagnostics } from './diagnosticsLog'
 import { type DraftUpdate } from '../shared/draft/types'
+import {
+  isOverlayPositionPreset,
+  type OverlayPhase,
+  type OverlayPositionPreset,
+  type OverlayPositionStatus,
+  type PeekStatus
+} from '../shared/desktopInterop'
 import { isDraftUpdate, isOverlayEnginePrefsPatch } from '../shared/draft/validate'
 import {
   loadTrainedEffectsFromDisk,
@@ -271,6 +294,22 @@ function clampOverlayBounds(bounds: Rectangle): Rectangle {
   }
 }
 
+/** Like clampOverlayBounds, but boxes may be small: only keep them reachable on a live display. */
+function clampBoxBounds(bounds: Rectangle): Rectangle {
+  const displays = screen.getAllDisplays()
+  const visible = displays.some((display) => {
+    const w = display.workArea
+    return bounds.x < w.x + w.width && bounds.x + bounds.width > w.x && bounds.y < w.y + w.height && bounds.y + bounds.height > w.y
+  })
+  const work = visible ? screen.getDisplayMatching(bounds).workArea : screen.getPrimaryDisplay().workArea
+  const width = Math.max(220, Math.min(bounds.width, work.width))
+  const height = Math.max(36, Math.min(bounds.height, work.height))
+  // Boxes are small: keep the whole box on screen, not just a sliver of it.
+  const x = visible ? Math.min(Math.max(bounds.x, work.x), work.x + work.width - width) : work.x + 16
+  const y = visible ? Math.min(Math.max(bounds.y, work.y), work.y + work.height - height) : work.y + 80
+  return { x, y, width, height }
+}
+
 function initialOverlayBounds(): Rectangle {
   const saved = getOverlayBounds()
   if (!saved) {
@@ -278,6 +317,9 @@ function initialOverlayBounds(): Rectangle {
   }
   return clampOverlayBounds(saved)
 }
+
+/** Champ select vs in game: each remembers its own overlay spot. */
+let overlayPhase: OverlayPhase = 'draft'
 
 function queueOverlayBoundsSave() {
   if (overlayBoundsSaveTimer) {
@@ -289,8 +331,54 @@ function queueOverlayBoundsSave() {
     if (!overlayWindow || overlayWindow.isDestroyed() || overlayProjectionOpen) {
       return
     }
-    setOverlayBounds(overlayWindow.getBounds())
+    // Dragging the overlay during a game sets where it opens in every game after.
+    if (overlayPhase === 'game') {
+      setOverlayGameBounds(overlayWindow.getBounds())
+    } else {
+      setOverlayBounds(overlayWindow.getBounds())
+    }
   }, OVERLAY_BOUNDS_SAVE_DEBOUNCE_MS)
+}
+
+/** Move the overlay to the remembered spot for the phase we just entered. */
+function applyOverlayPhase(next: OverlayPhase) {
+  if (next === overlayPhase) {
+    return
+  }
+  if (next === 'game' && !getOverlayBounds() && overlayWindow && !overlayWindow.isDestroyed() && !overlayProjectionOpen) {
+    setOverlayBounds(overlayWindow.getBounds())
+  }
+  overlayPhase = next
+  if (next === 'game') {
+    boxesUserHidden = false
+  }
+  const saved = next === 'game' ? getOverlayGameBounds() : getOverlayBounds()
+  // No champ-select spot (first run, or Reset overlay during a game): go to the default one
+  // instead of keeping the small in-game size.
+  const target = saved ?? (next === 'draft' ? defaultOverlayBounds() : null)
+  diagLog(`[overlay] phase ${next}${saved ? '' : target ? ' (default spot)' : ' (no saved spot, staying put)'}`)
+  if (!target || !overlayWindow || overlayWindow.isDestroyed() || overlayProjectionOpen) {
+    return
+  }
+  overlayWindow.setBounds(clampOverlayBounds(target))
+}
+
+/** Preset spot on the display the overlay is on, keeping its current size. */
+function overlayPresetBounds(preset: OverlayPositionPreset): Rectangle {
+  const current = overlayWindow && !overlayWindow.isDestroyed() ? overlayWindow.getBounds() : defaultOverlayBounds()
+  const work = screen.getDisplayMatching(current).workArea
+  const margin = 16
+  const width = Math.min(current.width, work.width - margin * 2)
+  const height = Math.min(current.height, work.height - margin * 2)
+  const [vertical, horizontal] = preset.split('-') as ['top' | 'middle' | 'bottom', 'left' | 'right']
+  const x = horizontal === 'left' ? work.x + margin : work.x + work.width - width - margin
+  const y =
+    vertical === 'top'
+      ? work.y + 24
+      : vertical === 'middle'
+        ? work.y + Math.round((work.height - height) / 2)
+        : work.y + work.height - height - margin
+  return { x, y, width, height }
 }
 
 function clearOverlayShowWatchdog() {
@@ -346,7 +434,7 @@ function overlayFallbackHtml(message: string): string {
   const safe = message.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] as string)
   return `<!doctype html><html><head><meta charset="utf-8">
 <style>
-  html,body{margin:0;height:100%;background:#060f0c;color:#e8f3ee;
+  html,body{margin:0;height:100%;background:#0f131a;color:#e3e7ee;
     font:13px/1.5 "Segoe UI",system-ui,sans-serif}
   .wrap{padding:14px;-webkit-app-region:drag}
   h1{margin:0 0 8px;font-size:14px;color:#f07167;letter-spacing:.04em}
@@ -440,7 +528,7 @@ function devRendererBase(): string {
 
 function fallbackDevHtml(): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Nexus Draft</title>
-  <style>body{font-family:system-ui;padding:24px;background:#060f0c;color:#e8f3ee;max-width:560px}</style>
+  <style>body{font-family:system-ui;padding:24px;background:#0f131a;color:#e3e7ee;max-width:560px}</style>
   </head><body>
   <h1>Dev server URL missing</h1>
   <p>Run <code>npm run dev</code> from the project root so <code>electron-vite</code> can set <code>ELECTRON_RENDERER_URL</code>.</p>
@@ -470,6 +558,12 @@ function setMainWindowVisible(visible: boolean): { ok: true; visible: boolean } 
     mainWindow.focus()
   } else {
     mainWindow.hide()
+    // Arranging boxes happens in Setup; closing the window ends it.
+    if (boxesArranging) {
+      boxesArranging = false
+      syncBoxVisibility()
+      broadcastOverlayLayout()
+    }
     // Never leave the user with nothing on screen.
     if (!overlayWindow || overlayWindow.isDestroyed() || !overlayWindow.isVisible()) {
       showOverlay('main-collapsed')
@@ -490,7 +584,7 @@ function createMainWindow() {
     resizable: false,
     maximizable: false,
     title: APP_DISPLAY_NAME,
-    backgroundColor: '#060f0c',
+    backgroundColor: '#0f131a',
     icon: windowIconPath(),
     webPreferences: defaultWebPreferences()
   })
@@ -563,7 +657,7 @@ function createOverlayWindow() {
      * the UI still uses a glassy panel in CSS.
      */
     transparent: false,
-    backgroundColor: '#060f0c',
+    backgroundColor: '#0f131a',
     resizable: true,
     minHeight: 200,
     minWidth: 320,
@@ -680,7 +774,80 @@ function createOverlayWindow() {
   }
 }
 
+/** Set once the app is ready; null until then (and on non-Windows). */
+let peekController: PeekController | null = null
+let boxManager: OverlayBoxManager | null = null
+/** Peek key currently held (hold mode) or toggled on. */
+let peekShowing = false
+/** Player hid everything with the overlay hotkey this game (boxes in "always" mode). */
+let boxesUserHidden = false
+/** "Arrange boxes" from the customizer: show boxes with placeholders so they can be placed. */
+let boxesArranging = false
+
+function inLiveGame(): boolean {
+  return getLastLiveGameStatus().state === 'in-game'
+}
+
+function overlayLayoutState(): OverlayLayoutState {
+  return { layout: getOverlayLayout(), arranging: boxesArranging, boxesVisible: boxManager?.isVisible() ?? false }
+}
+
+function broadcastOverlayLayout() {
+  const state = overlayLayoutState()
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('overlay:layoutChanged', state)
+    }
+  }
+}
+
+/** Boxes show in game (always, or only while peeking) and while being arranged. */
+function syncBoxVisibility() {
+  if (!boxManager) {
+    return
+  }
+  const layout = getOverlayLayout()
+  const inGameWanted = inLiveGame() && layout.boxes.length > 0 && (peekShowing || (layout.boxVisibility === 'always' && !boxesUserHidden))
+  const before = boxManager.isVisible()
+  boxManager.setVisible(boxesArranging || inGameWanted)
+  if (boxManager.isVisible() !== before) {
+    broadcastOverlayLayout()
+  }
+}
+
+function mainOverlayHasSections(): boolean {
+  return getOverlayLayout().main.length > 0
+}
+
 function toggleOverlayWindow() {
+  peekController?.userToggled()
+  // In game with boxes: the hotkey shows/hides everything together.
+  if (overlayPhase === 'game' && boxManager && boxManager.size > 0) {
+    const mainVisible = overlayWindow != null && !overlayWindow.isDestroyed() && overlayWindow.isVisible()
+    if (mainVisible || boxManager.isVisible()) {
+      if (mainVisible) {
+        overlayWindow!.hide()
+        stopOverlayTopmostReassert()
+      }
+      boxesUserHidden = true
+      peekShowing = false
+    } else {
+      if (mainOverlayHasSections()) {
+        if (!overlayWindow || overlayWindow.isDestroyed()) {
+          createOverlayWindow()
+        }
+        showOverlay('toggle')
+      }
+      boxesUserHidden = false
+    }
+    syncBoxVisibility()
+    return {
+      ok: true as const,
+      visible: !boxesUserHidden,
+      created: false,
+      route: 'overlay' as const
+    }
+  }
   let created = false
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     if (overlayWindow.isVisible()) {
@@ -765,6 +932,7 @@ function applyOverlayHotkeys(next: string[]): { registered: string[]; failed: st
 function resetOverlayWindow() {
   diagLog('[overlay] reset requested')
   clearOverlayBounds()
+  clearOverlayGameBounds()
   if (overlayBoundsSaveTimer) {
     clearTimeout(overlayBoundsSaveTimer)
     overlayBoundsSaveTimer = null
@@ -899,8 +1067,12 @@ app.whenReady().then(() => {
   ipcMain.handle('lcu:diagnostics', () => {
     return getLcuDiagnostics()
   })
-  ipcMain.handle('publicMeta:getLive', async () => {
-    return fetchLivePublicDataPayload()
+  ipcMain.handle('publicMeta:getLive', async (_event, raw: unknown) => {
+    const have = raw != null && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+    return fetchLivePublicDataPayload({
+      buildsPatch: typeof have.buildsPatch === 'string' ? have.buildsPatch.slice(0, 16) : null,
+      buildsUpdatedAt: typeof have.buildsUpdatedAt === 'string' ? have.buildsUpdatedAt.slice(0, 32) : null
+    })
   })
   ipcMain.handle('riot:playerChampionPool', async (_event, raw: unknown) => {
     return getPlayerChampionPool(raw)
@@ -996,6 +1168,27 @@ app.whenReady().then(() => {
     return { ok: true as const }
   })
   ipcMain.handle('mainWindow:show', () => setMainWindowVisible(true))
+  /** Overlay ⚙: open the main window on Setup (theme, in-game layout). */
+  let pendingMainView: 'settings' | null = null
+  ipcMain.handle('mainWindow:openSettings', () => {
+    pendingMainView = 'settings'
+    const result = setMainWindowVisible(true)
+    const send = () => mainWindow?.webContents.send('mainWindow:navigate', { view: 'settings' })
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.webContents.isLoading()) {
+        mainWindow.webContents.once('did-finish-load', send)
+      } else {
+        send()
+      }
+    }
+    return result
+  })
+  /** The main window asks once on mount, in case the navigate event fired before it listened. */
+  ipcMain.handle('mainWindow:takePendingView', () => {
+    const view = pendingMainView
+    pendingMainView = null
+    return view
+  })
   ipcMain.handle('mainWindow:hide', () => setMainWindowVisible(false))
   ipcMain.handle('mainWindow:toggle', () => {
     const visible = mainWindow != null && !mainWindow.isDestroyed() && mainWindow.isVisible()
@@ -1031,6 +1224,203 @@ app.whenReady().then(() => {
   lcuTimer.unref()
 
   applyOverlayHotkeys(getOverlayHotkeys())
+
+  /**
+   * In-game data (items, levels, KDA) from Riot's Live Client Data API. Both windows get it:
+   * the overlay turns it into "what to build next".
+   */
+  ipcMain.handle('livegame:get', () => getLastLiveGameStatus())
+
+  /**
+   * In-game peek key (Caps Lock by default): hold it (or press, in toggle mode) to see the
+   * overlay's Build tab. Reads key state without hooks and polls only while in a game.
+   */
+  const peekReader = createPeekKeyReader({ allowFake: isDev, getKey: getPeekKey, log: diagLog })
+  const peekStatus = (): PeekStatus => ({
+    enabled: getPeekEnabled(),
+    available: peekReader.reader != null,
+    reason: peekReader.reader ? null : peekReader.reason,
+    key: getPeekKey(),
+    mode: getPeekMode()
+  })
+  const peek = peekReader.reader
+    ? new PeekController({
+        reader: peekReader.reader,
+        isEnabled: getPeekEnabled,
+        isInGame: () => getLastLiveGameStatus().state === 'in-game',
+        mode: getPeekMode,
+        overlayVisible: () => overlayWindow != null && !overlayWindow.isDestroyed() && overlayWindow.isVisible(),
+        showOverlay: () => {
+          // Everything moved into boxes: the peek shows the boxes, not an empty main overlay.
+          if (!mainOverlayHasSections()) {
+            return
+          }
+          if (!overlayWindow || overlayWindow.isDestroyed()) {
+            createOverlayWindow()
+          }
+          showOverlay('peek-key')
+        },
+        hideOverlay: () => {
+          if (overlayWindow && !overlayWindow.isDestroyed()) {
+            overlayWindow.hide()
+            stopOverlayTopmostReassert()
+          }
+        },
+        notify: (active) => {
+          peekShowing = active
+          syncBoxVisibility()
+          if (overlayWindow && !overlayWindow.isDestroyed()) {
+            overlayWindow.webContents.send('overlay:peek', { active })
+          }
+        }
+      })
+    : null
+  peekController = peek
+  const peekPoller = peek ? createPeekPoller(peek) : null
+  const syncPeekPolling = () => {
+    peekPoller?.setRunning(getPeekEnabled() && getLastLiveGameStatus().state === 'in-game')
+  }
+  diagLog(`[peek] ${peekReader.reader ? `ready (${peekReader.kind}, ${getPeekKey()}/${getPeekMode()})` : `unavailable: ${peekReader.reason}`}`)
+  ipcMain.handle('overlay:peekStatus', () => peekStatus())
+  ipcMain.handle('overlay:setPeek', (_event, raw: unknown) => {
+    // Switching key/mode mid-peek: close the current peek cleanly first.
+    peek?.cancel()
+    setPeekSettings(raw)
+    syncPeekPolling()
+    const status = peekStatus()
+    diagLog(`[peek] settings: ${status.enabled ? 'on' : 'off'} ${status.key}/${status.mode}`)
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('overlay:peekStatusChanged', status)
+      }
+    }
+    return status
+  })
+
+  boxManager = new OverlayBoxManager({
+    webPreferences: defaultWebPreferences,
+    iconPath: windowIconPath(),
+    loadBox: (win, boxId) => {
+      if (isDev) {
+        void win.loadURL(`${devRendererBase()}#/box/${boxId}`)
+        return
+      }
+      const file = join(_dirname, '../renderer/index.html')
+      void win.loadURL(`${pathToFileURL(file).href}#/box/${boxId}`).catch((err: unknown) => {
+        diagLog(`[boxes] ${boxId} failed to load:`, err)
+      })
+    },
+    wireWindow: (win, label) => {
+      wireNavigationGuards(win.webContents, label)
+      wireWebContentsStabilityLogging(win.webContents, label)
+    },
+    savedBounds: getBoxBounds,
+    saveBounds: setBoxBounds,
+    clamp: clampBoxBounds,
+    log: diagLog
+  })
+  boxManager.sync(getOverlayLayout())
+
+  ipcMain.handle('overlay:layout', () => overlayLayoutState())
+  ipcMain.handle('overlay:setLayout', (_event, raw: unknown) => {
+    const layout = setOverlayLayout(raw)
+    boxManager?.sync(layout)
+    syncBoxVisibility()
+    broadcastOverlayLayout()
+    diagLog(`[boxes] layout: main=[${layout.main.join(',')}] boxes=${layout.boxes.map((b) => `${b.id}:[${b.blocks.join(',')}]`).join(' ')} ${layout.boxVisibility}`)
+    return overlayLayoutState()
+  })
+  ipcMain.handle('overlay:arrangeBoxes', (_event, raw: unknown) => {
+    boxesArranging = raw === true && getOverlayLayout().boxes.length > 0
+    syncBoxVisibility()
+    broadcastOverlayLayout()
+    return overlayLayoutState()
+  })
+  /**
+   * The overlay hugs whatever tab it shows: the renderer reports the height it needs and the
+   * window grows/shrinks to match (kept on screen), so it never sits tiny with a scrollbar.
+   */
+  ipcMain.on('overlay:fitHeight', (event, raw: unknown) => {
+    if (typeof raw !== 'number' || !Number.isFinite(raw) || overlayProjectionOpen) {
+      return
+    }
+    if (!overlayWindow || overlayWindow.isDestroyed() || event.sender.id !== overlayWindow.webContents.id) {
+      return
+    }
+    const [contentWidth, contentHeight] = overlayWindow.getContentSize()
+    const work = screen.getDisplayMatching(overlayWindow.getBounds()).workArea
+    const height = Math.max(240, Math.min(Math.round(raw), work.height - 16))
+    // Always grow (even 1px short shows a scrollbar); ignore tiny shrinks so it never jitters.
+    const delta = height - contentHeight
+    if (delta === 0 || (delta < 0 && delta > -3)) {
+      return
+    }
+    // Content size, not setBounds(getBounds()): on Windows that round trip widens a frameless
+    // window by a couple of pixels on every call, and this runs on every content change.
+    overlayWindow.setContentSize(contentWidth, height)
+    const [x, y] = overlayWindow.getPosition()
+    const bottom = work.y + work.height - 8
+    if (y + height > bottom) {
+      overlayWindow.setPosition(x, Math.max(work.y + 8, bottom - height))
+    }
+  })
+  ipcMain.on('box:fit', (event, raw: unknown) => {
+    if (typeof raw === 'number') {
+      boxManager?.fit(event.sender, raw)
+    }
+  })
+
+  const overlayPositionStatus = (): OverlayPositionStatus => ({
+    phase: overlayPhase,
+    hasGamePosition: getOverlayGameBounds() != null
+  })
+  ipcMain.handle('overlay:position', () => overlayPositionStatus())
+  ipcMain.handle('overlay:setPosition', (_event, raw: unknown) => {
+    const req = raw != null && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+    const phase: OverlayPhase = req.phase === 'game' ? 'game' : 'draft'
+    if (phase === 'game' && req.reset === true) {
+      clearOverlayGameBounds()
+      if (overlayPhase === 'game' && overlayWindow && !overlayWindow.isDestroyed()) {
+        overlayWindow.setBounds(clampOverlayBounds(getOverlayBounds() ?? defaultOverlayBounds()))
+      }
+      return overlayPositionStatus()
+    }
+    if (!isOverlayPositionPreset(req.preset)) {
+      return overlayPositionStatus()
+    }
+    const bounds = overlayPresetBounds(req.preset)
+    if (phase === 'game') {
+      setOverlayGameBounds(bounds)
+    } else {
+      setOverlayBounds(bounds)
+    }
+    if (phase === overlayPhase && overlayWindow && !overlayWindow.isDestroyed() && !overlayProjectionOpen) {
+      overlayWindow.setBounds(bounds)
+    }
+    diagLog(`[overlay] ${phase} position -> ${req.preset}`)
+    return overlayPositionStatus()
+  })
+
+  let loggedLiveGameState: string | null = null
+  const stopLiveGamePolling = startLiveGamePolling((status) => {
+    if (status.state !== loggedLiveGameState) {
+      loggedLiveGameState = status.state
+      diagLog(`[livegame] ${status.state}${status.error ? `: ${status.error}` : ''}`)
+    }
+    applyOverlayPhase(status.state === 'in-game' || status.state === 'loading' ? 'game' : 'draft')
+    syncPeekPolling()
+    syncBoxVisibility()
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('livegame:update', status)
+      }
+    }
+  })
+  app.on('before-quit', () => {
+    stopLiveGamePolling()
+    peekPoller?.setRunning(false)
+    boxManager?.closeAll()
+  })
 })
 
 app.on('child-process-gone', (_event, details) => {

@@ -148,3 +148,67 @@ export {
   type RiotPlatform,
   type RiotRegionGroup
 } from './playerChampionPool'
+export {
+  applyBuildSeed,
+  buildSeedInfo,
+  ensureBuildPathDetails,
+  isNewerBuildSeed,
+  buildSeedRevision,
+  currentBuildSeed,
+  subscribeBuildSeed,
+  type BuildSeed,
+  type BuildSeedApplyResult,
+  type BuildSeedInfo,
+  type BuildSeedRole,
+  type BuildSeedRow
+} from './buildSeedStore'
+export {
+  bestBuildRoleForChampion,
+  buildRolesForChampion,
+  bundledChampion,
+  bundledChampionByKeyOrName,
+  bundledChampions,
+  getChampionBuildPath,
+  runeInfo,
+  statShardName,
+  summonerSpellInfo,
+  type BuildPathCatalogItem,
+  type BuildPathOption,
+  type BuildPathSlot,
+  type BundledChampion,
+  type ChampionBuildPath,
+  type ChampionBuildRole
+} from './buildPaths'
+export {
+  championKeyFromRawName,
+  formatGameClock,
+  isLiveGameStatus,
+  liveGamePositionToRole,
+  parseLiveClientAllGameData,
+  type LiveGameItem,
+  type LiveGamePlayer,
+  type LiveGameSnapshot,
+  type LiveGameState,
+  type LiveGameStatus,
+  type LiveGameTeam
+} from './liveGame'
+export {
+  buildLiveAdvice,
+  buildProfileFor,
+  componentsToBuy,
+  isCompletedItem,
+  itemStatLines,
+  liveNeedLabel,
+  remainingItemCost,
+  type AdvisorCatalog,
+  type AdvisorItem,
+  type BuildProfile,
+  type BuildSlotStatus,
+  type LiveBuildAdvice,
+  type LiveBuildSlot,
+  type LiveNeed,
+  type LiveNextBuy,
+  type LiveSwap,
+  type LiveThreat
+} from './liveBuildAdvisor'
+export { diffEnemyPurchases, mergePurchaseFeed, type EnemyPurchase } from './livePurchases'

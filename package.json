@@ -53,6 +53,7 @@
     "electron-store": "^9.0.0",
     "electron-updater": "^6.8.3",
     "framer-motion": "^12.38.0",
+    "koffi": "2.16.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
@@ -92,7 +93,11 @@
       "!out/renderer/downloads/**/*",
       "package.json",
       "favicon.png",
-      "favicon.ico"
+      "favicon.ico",
+      "!node_modules/koffi/build/koffi/!(win32_x64)/**",
+      "!node_modules/koffi/build/koffi/win32_x64/*.{exp,lib}",
+      "!node_modules/koffi/{src,vendor,doc,lib}/**",
+      "!node_modules/koffi/*.md"
     ],
     "extraResources": [
       {
@@ -128,11 +133,15 @@
     },
     "portable": {
       "artifactName": "Nexus-Draft-Portable-${version}.exe"
-    }
+    },
+    "asarUnpack": [
+      "node_modules/koffi/build/koffi/win32_x64/*.node"
+    ]
   },
   "allowScripts": {
     "electron@33.4.11": true,
     "esbuild@0.21.5": true,
-    "wasm-pack@0.15.0": true
+    "wasm-pack@0.15.0": true,
+    "koffi@2.16.4": false
   }
 }

@@ -1,4 +1,4 @@
-import uggSeed from '../data/uggDefaultItemBuildsSeed.json'
+import { rustBuildSeed, type RustBuildSeed } from './buildSeedStore'
 import { isRecommendableSummonersRiftItem } from '../dataDragon'
 import { championThreatOverrideRows } from './championThreatOverrides'
 import type { BuildDraftIntelArgs } from './draftIntel'
@@ -17,7 +17,7 @@ export type RustItemMatrixInput = {
   championMetaById: { id: number; meta: NonNullable<BuildDraftIntelArgs['championMetaById']> extends ReadonlyMap<number, infer T> ? T : never }[]
   enemyRoleInference: NonNullable<BuildDraftIntelArgs['enemyRoleInference']>
   itemCatalog: NonNullable<BuildDraftIntelArgs['itemCatalog']>
-  uggSeed: typeof uggSeed
+  uggSeed: RustBuildSeed
   championThreatOverrides: ReturnType<typeof championThreatOverrideRows>
   focusChampionId?: number | null
   limit?: number
@@ -75,7 +75,7 @@ export function serializeItemMatrixInput(
     championMetaById: focusedChampionMeta(args, options),
     enemyRoleInference: args.enemyRoleInference ?? [],
     itemCatalog: (args.itemCatalog ?? []).filter(isRecommendableSummonersRiftItem),
-    uggSeed,
+    uggSeed: rustBuildSeed(),
     championThreatOverrides: championThreatOverrideRows(),
     focusChampionId: options?.focusChampionId ?? null,
     limit: options?.limit

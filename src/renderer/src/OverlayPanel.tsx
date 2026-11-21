@@ -1,9 +1,11 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { ddragonChampionImageUrl } from '@shared/dataDragon'
 import {
   ALLY_SYNERGY_BONUS,
   buildOverlayChampionSearchPool,
+  bundledChampion,
+  bundledChampions,
   compileTrainedEffects,
   formatRuneTipNote,
   getChampionBuildProfile,
@@ -27,6 +29,11 @@ import {
   type RiotPlatform
 } from '@shared/draft'
 import { scoreChampionAsync } from './recommend/championScoreClient'
+import { PEEK_KEY_LABELS, type PeekStatus } from '@shared/desktopInterop'
+import { usableDdragonVersion, useBuildSeedRevision, useEnemyPurchases, useItemCatalog, useLiveGame } from './builds/useBuildData'
+import { ChampionBuildBrowser } from './nexus-ui/ChampionBuildBrowser'
+import { LiveBuildPanel } from './nexus-ui/LiveBuildPanel'
+import { useOverlayLayout } from './builds/useOverlayLayout'
 import { DraftItemPlanBlock as OverlayItemPlan } from './nexus-ui/DraftItemPlanBlock'
 import { DraftItemMatrixView } from './nexus-ui/DraftItemMatrixView'
 import { NexusInfoTip } from './nexus-ui/NexusInfoTip'
@@ -130,8 +137,8 @@ function ContextPortrait({
   const name = slotName(slot)
   const toneClass =
     tone === 'ally'
-      ? 'border-nexus-lime/80 bg-nexus-lime/10 shadow-[0_0_8px_rgba(35,213,176,0.18)]'
-      : 'border-nexus-red/80 bg-nexus-red/10 shadow-[0_0_8px_rgba(248,113,113,0.18)]'
+      ? 'border-nexus-lime/80 bg-nexus-lime/10 shadow-[0_0_8px_color-mix(in_srgb,var(--nexus-lime)_18%,transparent)]'
+      : 'border-nexus-red/80 bg-nexus-red/10 shadow-[0_0_8px_color-mix(in_srgb,var(--nexus-red)_18%,transparent)]'
   return (
     <span className={['inline-flex h-6 w-6 items-center justify-center border p-0.5', toneClass].join(' ')} title={name}>
       {imageUrl ? (
@@ -602,13 +609,111 @@ export function OverlayPanel() {
     return new Map(rows.flatMap((c) => (c.key ? [[c.id, c.key] as const] : [])))
   }, [d.championsSearch])
 
+  const imageVersion = usableDdragonVersion(d.dataDragonVersion)
   const championIconUrl = (id: number | null | undefined): string | null => {
-    if (id == null || id <= 0 || !d.dataDragonVersion || d.dataDragonVersion[0] === '(') {
+    if (id == null || id <= 0) {
       return null
     }
-    const key = championKeyById.get(id)
-    return key ? ddragonChampionImageUrl(d.dataDragonVersion, key) : null
+    // Bundled keys keep portraits working before the main window has loaded Data Dragon.
+    const key = championKeyById.get(id) ?? bundledChampion(id)?.key
+    return key ? ddragonChampionImageUrl(imageVersion, key) : null
   }
+
+  useBuildSeedRevision()
+  const itemCatalog = useItemCatalog(d.dataDragonVersion)
+  // The main window republishes every LCU poll (400ms); key on content so the live advisor does
+  // not recompute for an identical champion list.
+  const buildChampionsKey = `${searchPool.length}:${championKeyById.size}`
+  const buildChampions = useMemo(
+    () => (searchPool.length ? searchPool.map((c) => ({ id: c.id, name: c.name, key: championKeyById.get(c.id) })) : bundledChampions()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [buildChampionsKey]
+  )
+  const liveGame = useLiveGame(buildChampions)
+  const enemyPurchases = useEnemyPurchases(liveGame, itemCatalog)
+  const { state: layoutState } = useOverlayLayout()
+  const openSettings = () => {
+    void window.drafter.openSettings().catch(() => {
+      /* main window may be mid-teardown */
+    })
+  }
+
+  const liveActive = liveGame?.state === 'in-game' || liveGame?.state === 'loading'
+  const liveMe = liveGame?.snapshot?.players.find((p) => p.isActive) ?? null
+
+  /**
+   * Draft tab in champ select, Build tab once the game is running. A manual tab choice sticks
+   * until the phase changes again.
+   */
+  const phase: 'game' | 'draft' = liveActive ? 'game' : 'draft'
+  const [tabChoice, setTabChoice] = useState<{ phase: 'game' | 'draft'; tab: 'draft' | 'build' } | null>(null)
+  /** Holding Tab in game (hold-Tab peek, driven by the main process) always shows Build. */
+  const [peeking, setPeeking] = useState(false)
+  const [peekKey, setPeekKey] = useState<PeekStatus | null>(null)
+  useEffect(() => {
+    const bridge = window.drafter
+    if (!bridge.onOverlayPeek || !bridge.getPeekStatus) {
+      return
+    }
+    let cancelled = false
+    void bridge
+      .getPeekStatus()
+      .then((status) => {
+        if (!cancelled) setPeekKey(status)
+      })
+      .catch(() => {
+        /* older main process */
+      })
+    const unPeek = bridge.onOverlayPeek(({ active }) => setPeeking(active))
+    const unStatus = bridge.onPeekStatus((status) => setPeekKey(status))
+    return () => {
+      cancelled = true
+      unPeek()
+      unStatus()
+    }
+  }, [])
+  const tab: 'draft' | 'build' = peeking ? 'build' : tabChoice?.phase === phase ? tabChoice.tab : phase === 'game' ? 'build' : 'draft'
+  const chooseTab = (next: 'draft' | 'build') => setTabChoice({ phase, tab: next })
+  const peekOn = peekKey?.enabled === true && peekKey.available
+  const peekKeyLabel = peekKey ? PEEK_KEY_LABELS[peekKey.key] : 'Caps Lock'
+  const peekHold = peekKey?.mode !== 'toggle'
+
+  /**
+   * The overlay hugs its content on every tab so nothing needs scrolling: report the height the
+   * content needs and the main process resizes the window (kept on screen). Observing the
+   * scroller too catches chrome changes (the ⚙ strip opening) and our own resizes.
+   */
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const scrollInnerRef = useRef<HTMLDivElement | null>(null)
+  const gameBuildView = tab === 'build' && liveActive
+  useEffect(() => {
+    const scroller = scrollRef.current
+    const inner = scrollInnerRef.current
+    if (!scroller || !inner || typeof ResizeObserver === 'undefined' || !window.drafter.fitOverlayHeight) {
+      return
+    }
+    let frame = 0
+    const report = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        const style = getComputedStyle(scroller)
+        const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
+        const needed = window.innerHeight - scroller.clientHeight + padding + inner.getBoundingClientRect().height
+        // +2: at 125%/150% display scaling the window snaps to device pixels and can land a
+        // fraction short, which would bring back a scrollbar.
+        window.drafter.fitOverlayHeight(Math.ceil(needed) + 2)
+      })
+    }
+    const observer = new ResizeObserver(report)
+    observer.observe(inner)
+    observer.observe(scroller)
+    report()
+    return () => {
+      cancelAnimationFrame(frame)
+      observer.disconnect()
+    }
+  }, [])
+
 
   const nameMatches = useMemo(() => {
     const q = lookupQuery.trim()
@@ -695,7 +800,7 @@ export function OverlayPanel() {
   }, [lookupId, poolRole, lookupDdragon, lookupChampion])
 
   return (
-    <div className="nexus-overlay-root fixed inset-1 flex min-h-0 flex-col overflow-hidden font-body font-bold text-nexus-text text-sm">
+    <div className="nexus-overlay-root fixed inset-1 flex min-h-0 flex-col overflow-hidden font-body font-medium text-nexus-text text-sm">
       <div className="nexus-noise absolute inset-0 opacity-[0.35] pointer-events-none z-0" aria-hidden />
       <div
         className="nexus-overlay-drag relative z-10 flex items-center flex-wrap gap-x-2 gap-y-1 border-b border-nexus-line bg-nexus-surface-2 px-3 py-2.5"
@@ -735,17 +840,47 @@ export function OverlayPanel() {
           </button>
         </span>
       </div>
-      <div className="nexus-overlay-drag relative z-10 border-b border-nexus-line/60 bg-nexus-surface-2/80 px-3 py-1">
-        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-muted">
-          {livePublicDataStatusLine(liveDataStatus)}
-        </span>
+      {tab === 'build' && liveActive ? null : (
+        <div className="nexus-overlay-drag relative z-10 border-b border-nexus-line/60 bg-nexus-surface-2/80 px-3 py-1">
+          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-muted">
+            {livePublicDataStatusLine(liveDataStatus)}
+          </span>
+        </div>
+      )}
+
+      {/* Draft in champ select, Build in game: the overlay switches by itself, a click overrides. */}
+      <div className="nexus-overlay-nodrag relative z-10 flex border-b border-nexus-line bg-nexus-surface-2/95" role="tablist" aria-label="Overlay view">
+        {(['draft', 'build'] as const).map((t) => {
+          const on = tab === t
+          return (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              className={[
+                'nexus-focus flex flex-1 items-center justify-center gap-1.5 border-b-2 py-1.5 font-mono text-xs font-bold uppercase tracking-[0.16em] transition-colors',
+                on ? 'border-nexus-lime bg-nexus-lime/10 text-nexus-lime' : 'border-transparent text-nexus-muted hover:text-nexus-text'
+              ].join(' ')}
+              onClick={() => chooseTab(t)}
+            >
+              {t === 'draft' ? 'Draft' : 'Build'}
+              {t === 'build' && liveActive ? (
+                <span className="inline-flex items-center gap-1 text-[9px] tracking-[0.12em] text-nexus-red">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-nexus-red" aria-hidden />
+                  live
+                </span>
+              ) : null}
+            </button>
+          )
+        })}
       </div>
 
       {/*
         One glanceable strip. Everything an average player never touches (delta ordering,
         Monte Carlo rollouts, override reset) is behind the gear.
       */}
-      <div className="nexus-overlay-nodrag border-b border-nexus-line/80 bg-nexus-surface-2/95 px-3 py-2 text-[11px] sm:text-xs font-mono">
+      <div className={['nexus-overlay-nodrag border-b border-nexus-line/80 bg-nexus-surface-2/95 px-3 py-2 text-[11px] sm:text-xs font-mono', tab === 'build' ? 'hidden' : ''].join(' ')}>
         <div className="flex items-center gap-2">
           <span className="text-nexus-muted uppercase tracking-wide">You</span>
           <span className="px-2 py-0.5 border border-nexus-lime/50 bg-nexus-lime/10 text-nexus-lime uppercase">
@@ -883,7 +1018,7 @@ export function OverlayPanel() {
             <span />
             <span />
           </div>
-          <section className="nexus-matrix-panel relative w-full h-full overflow-hidden border border-nexus-lime/55 bg-nexus-surface/95 shadow-[0_0_48px_rgba(29,212,168,0.26)]">
+          <section className="nexus-matrix-panel relative w-full h-full overflow-hidden border border-nexus-lime/55 bg-nexus-surface/95 shadow-[0_0_48px_color-mix(in_srgb,var(--nexus-lime)_26%,transparent)]">
             <header className="flex items-center justify-between gap-4 border-b border-nexus-lime/35 bg-nexus-surface-2/95 px-4 py-3">
               <div className="min-w-0">
                 <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-nexus-lime/80 m-0">expanded view</p>
@@ -1033,7 +1168,70 @@ export function OverlayPanel() {
         </div>
       )}
 
-      <div className="nexus-overlay-nodrag nexus-overlay-scroll relative z-10 flex-1 min-h-0 overflow-y-auto px-3.5 py-3.5 text-sm leading-relaxed">
+      <div
+        ref={scrollRef}
+        className={[
+          'nexus-overlay-nodrag nexus-overlay-scroll relative z-10 flex-1 min-h-0 overflow-y-auto px-3.5 text-sm leading-relaxed',
+          gameBuildView ? 'py-2.5' : 'py-3.5'
+        ].join(' ')}
+      >
+        <div ref={scrollInnerRef}>
+        {tab === 'build' ? (
+          <section className={liveActive ? 'mb-3' : 'mb-5 space-y-4'}>
+            {liveGame && liveActive ? (
+              <LiveBuildPanel
+                status={liveGame}
+                version={imageVersion}
+                catalog={itemCatalog}
+                iconUrl={championIconUrl}
+                purchases={enemyPurchases}
+                layout={layoutState.layout}
+                onCustomize={openSettings}
+                lookup={
+                  <ChampionBuildBrowser
+                    champions={buildChampions}
+                    focusChampionId={null}
+                    preferredRole={liveMe?.role ?? poolRole}
+                    version={imageVersion}
+                    catalog={itemCatalog}
+                    iconUrl={championIconUrl}
+                  />
+                }
+              />
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <SectionLabel>Build path</SectionLabel>
+                  <span className="mb-2.5 flex items-center gap-1.5">
+                    <NexusInfoTip label="About the Build tab">
+                      In game this tab tracks your items and gold: next item, your build, swaps for their comp, the enemy team.
+                    </NexusInfoTip>
+                    <button
+                      type="button"
+                      className="nexus-focus border border-nexus-line px-1.5 text-[12px] leading-[18px] text-nexus-muted hover:border-nexus-lime/50 hover:text-nexus-text"
+                      onClick={openSettings}
+                      title="In-game layout and theme (opens Setup)"
+                      aria-label="Open Setup"
+                    >
+                      ⚙
+                    </button>
+                  </span>
+                </div>
+                <ChampionBuildBrowser
+                  champions={buildChampions}
+                  focusChampionId={myChampion?.id ?? lookupId ?? null}
+                  preferredRole={poolRole}
+                  version={imageVersion}
+                  catalog={itemCatalog}
+                  iconUrl={championIconUrl}
+                />
+              </>
+            )}
+          </section>
+        ) : null}
+
+        {tab === 'draft' ? (
+        <>
         {s && (
           <section className="mb-5">
             <SectionLabel>Draft board</SectionLabel>
@@ -1516,17 +1714,26 @@ export function OverlayPanel() {
           </section>
         )}
 
+        </>
+        ) : null}
+
         <div className="flex flex-col gap-1.5 border-t border-nexus-line pt-3">
-          {d.error && <p className="m-0 font-mono text-xs font-bold leading-snug text-nexus-red">{d.error}</p>}
+          {d.error && tab === 'draft' && <p className="m-0 font-mono text-xs font-bold leading-snug text-nexus-red">{d.error}</p>}
           {/* Show the key that actually registered — never advertise a dead hotkey. */}
           <p className="m-0 flex flex-wrap items-center gap-x-1.5 font-mono text-[11px] text-nexus-muted">
-            {activeHotkeys.length > 0 ? (
+            {peeking ? (
+              <span className="text-nexus-lime">
+                {peekHold ? 'Release' : 'Press'} {peekKeyLabel} {peekHold ? 'to hide' : 'again to hide'}
+              </span>
+            ) : activeHotkeys.length > 0 ? (
               <span>
-                Press{' '}
-                <kbd className="border border-nexus-line/70 bg-nexus-bg px-1 text-nexus-text/90">
-                  {activeHotkeys[0]}
-                </kbd>{' '}
-                to hide
+                <kbd className="border border-nexus-line/70 bg-nexus-bg px-1 text-nexus-text/90">{activeHotkeys[0]}</kbd> hide
+                {peekOn ? (
+                  <>
+                    {' '}· {peekHold ? 'hold' : 'tap'}{' '}
+                    <kbd className="border border-nexus-line/70 bg-nexus-bg px-1 text-nexus-text/90">{peekKeyLabel}</kbd> peek
+                  </>
+                ) : null}
               </span>
             ) : (
               <span className="text-nexus-yellow/90">No hotkey — use ✕ above</span>
@@ -1542,6 +1749,13 @@ export function OverlayPanel() {
                   owns them. Open <b>☰ Menu → Overlay → Toggle key</b> and pick a different one.
                 </span>
               )}
+              {peekOn ? (
+                <span className="mt-1 block">
+                  In a game, {peekHold ? 'holding' : 'pressing'} <b>{peekKeyLabel}</b> shows the Build tab;{' '}
+                  {peekHold ? 'letting go hides it again' : 'press it again to hide'}. Change the key or turn it off under{' '}
+                  <b>☰ Menu → Overlay → Peek key</b>.
+                </span>
+              ) : null}
               <span className="mt-1 block">
                 Drag the title bar to move the overlay; it remembers where you put it.
               </span>
@@ -1554,6 +1768,7 @@ export function OverlayPanel() {
               </span>
             </NexusInfoTip>
           </p>
+        </div>
         </div>
       </div>
     </div>

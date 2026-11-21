@@ -10,10 +10,8 @@ type Props = {
   onNavigate: (id: NexusNavId) => void
   top: {
     runnerId: string
-    region: string
     dataVersion: string
     build: string
-    networkStatus: string
     link?: string
     resourceLine?: string
     onCloseApp?: () => void
@@ -41,16 +39,16 @@ type Props = {
 
 export function NexusClientLayout({ nav, onNavigate, top, right, bottom, children }: Props) {
   return (
-    <div className="h-full min-h-0 flex bg-nexus-bg text-nexus-text font-body text-base antialiased relative overflow-hidden">
+    // h-dvh, not h-full: after the intro nothing above this has a fixed height, and the whole
+    // window would scroll instead of the main area and right column.
+    <div className="h-dvh min-h-0 flex bg-nexus-bg text-nexus-text font-body text-base antialiased relative overflow-hidden">
       <div className="nexus-noise pointer-events-none absolute inset-0 z-0" aria-hidden />
       <NexusSidebar active={nav} onNavigate={onNavigate} />
       <div className="flex-1 min-w-0 min-h-0 flex flex-col relative z-10">
         <NexusTopBar
           runnerId={top.runnerId}
-          region={top.region}
           dataVersion={top.dataVersion}
           build={top.build}
-          networkStatus={top.networkStatus}
           link={top.link}
           resourceLine={top.resourceLine}
           onMinimizeApp={top.onMinimizeApp}

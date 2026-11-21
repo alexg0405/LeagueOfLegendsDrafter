@@ -6,11 +6,14 @@ import {
 } from './metaStats'
 import { applyPublicSynergyStatsSeed, getPublicSynergyStatsInfo, type PublicSynergyStatsInfo } from './synergyData'
 import { clearEnemyRoleInferenceCaches } from './roleInference'
+import { applyBuildSeed, buildSeedInfo, type BuildSeedApplyResult, type BuildSeedInfo } from './buildSeedStore'
 
 export type LivePublicDataPayload = {
   manifest?: unknown
   metaSeed: unknown
   synergySeed?: unknown
+  /** `buildPathsSeed.json`; applied independently of the meta seed. */
+  buildSeed?: unknown
   source?: string
 }
 
@@ -20,6 +23,8 @@ export type LivePublicDataApplyResult = {
   reason?: string
   meta: PublicMetaStatsInfo
   synergy: PublicSynergyStatsInfo
+  builds?: BuildSeedInfo
+  buildsApplied?: boolean
 }
 
 function isRecord(x: unknown): x is Record<string, unknown> {
@@ -48,6 +53,13 @@ function sameMetaInfo(a: PublicMetaStatsInfo, b: PublicMetaStatsInfo): boolean {
 }
 
 export function applyLivePublicDataPayload(payload: LivePublicDataPayload): LivePublicDataApplyResult {
+  const builds: BuildSeedApplyResult | null =
+    payload.buildSeed != null ? applyBuildSeed(payload.buildSeed, payload.source ?? 'live') : null
+  const result = applyMetaPayload(payload)
+  return { ...result, builds: builds?.info ?? buildSeedInfo(), buildsApplied: builds?.applied ?? false }
+}
+
+function applyMetaPayload(payload: LivePublicDataPayload): LivePublicDataApplyResult {
   const currentMeta = getPublicMetaStatsInfo()
   const currentSynergy = getPublicSynergyStatsInfo()
   const patch = payloadPatch(payload)

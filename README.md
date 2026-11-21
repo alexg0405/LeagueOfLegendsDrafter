@@ -48,13 +48,74 @@ The desktop app launches **overlay-first**: only the compact overlay is shown, a
 stays loaded but hidden (it owns the draft engine that feeds the overlay). Use `☰ Menu` on the
 overlay to expand the full window, and `Collapse` in its title bar to go back.
 
+All settings live on the full window's **Setup** page (the overlay's ⚙ opens it): overlay keys,
+theme and the in-game layout. Labels stay short; the `i` badges explain each control.
+
 Overlay toggle keys default to `Insert` / `F9` / `F10`. Windows refuses a key that another app
 already owns, so the overlay shows the key that actually registered — or tells you none did. Rebind
-it under **Overlay → Toggle key**. `Reset overlay` rebuilds the window at a known-visible position,
-and `Why can't I see it?` dumps a diagnostic you can paste into a bug report.
+it under **Setup → Overlay → Toggle key**. `Reset overlay` rebuilds the window at a known-visible
+position, and `Why can't I see it?` dumps a diagnostic you can paste into a bug report.
+
+**Themes** (Setup → Theme): Midnight (default), Graphite and Emerald. The choice recolors every
+window at once (main, overlay and boxes) and is remembered per install.
+
+The overlay sizes its height to its content on both tabs, so it never sits small with a scrollbar
+(it only scrolls when the content is taller than the screen). It remembers two spots: where you
+leave it in champ select and where you leave it in game.
 
 Main-process logs (including every overlay show/hide/failure) go to
 `%APPDATA%/nexusdraft/logs/nexus-draft-main.log` in packaged builds.
+
+## Build Paths And In-Game Help
+
+The overlay has two tabs: **Draft** (champ select picks) and **Build**. It switches to Build by
+itself when a game starts and back to Draft afterwards; clicking a tab overrides that until the
+next phase change.
+
+- **Build tab, out of game**: build path for your locked champion (or any champion you search):
+  starting items, core in buy order, 4th/5th/6th item options with win rates, the six-item end
+  state, skill order, runes and summoner spells. The website has the same view at `/builds`
+  (`/builds?champion=Ahri` links straight to a champion).
+- **Build tab, in game**: the main process polls Riot's Live Client Data API
+  (`https://127.0.0.1:2999/liveclientdata/allgamedata`, every 2s in game). The overlay shows the
+  next item to buy, the gold you still need after the components you own, what to buy with your
+  current gold, your build with owned items ticked, swaps for what the enemy team is building
+  (anti-heal into healers, penetration into armor/MR stacking, defense against whoever is fed),
+  and the enemy team's items, KDA and damage type. Items an enemy just finished show up as
+  **New** buys for three minutes of game time. That API only exposes what the Tab scoreboard already shows; summoner
+  names are dropped when the payload is parsed.
+- **Peek key** (on by default; Setup → Overlay → Peek key): in a game, hold `Caps Lock` to show the
+  overlay on its Build tab and let go to hide it (an overlay you opened yourself stays open).
+  `Tab`, `` ` ``, `Mouse 4` and `Mouse 5` also work, and **Toggle** mode makes it press-to-show,
+  press-to-hide. The main process polls `GetAsyncKeyState` every 35 ms through
+  [koffi](https://koffi.dev) only while a game is running, and only when League's game window is in
+  front and Alt/Ctrl/Win are up. It installs no keyboard or mouse hook and never sends keys, so the
+  game still gets the key press. Like the overlay itself, it needs Borderless or Windowed mode;
+  exclusive fullscreen covers other windows.
+- **In-game layout** (Setup → In-game layout): put each in-game section (Next buy, Your build,
+  Item swaps, Enemy team) in the main overlay, in a **box**, or hide it. Boxes are small
+  always-on-top windows you drag anywhere (up to four). They can stay up all game or show only
+  while you peek. `Arrange boxes on screen` shows them outside a game so you can place them. The
+  arrows set where the main overlay opens in game. Your overlay toggle key hides and shows
+  everything.
+
+Build data comes from U.GG's public stats (world, Emerald+, current patch). `npm run items:update:ugg`
+writes three files: the slim engine seed bundled with the draft engine
+(`src/shared/data/uggDefaultItemBuildsSeed.json`), the full paths that load when a Build view
+opens (`src/shared/data/buildPathsSeed.json`), and a served copy
+(`src/renderer/public/data/buildPathsSeed.json`) that installed apps download when it is newer
+than what they bundle. The daily `Update public meta data` workflow runs it together with the
+Lolalytics meta refresh and only commits when the tests pass. (`items:update:coachless` is an older
+alternative source; it only rewrites the slim engine seed.)
+
+To test the in-game view without League, point the app at a mock server:
+`NEXUS_LIVE_CLIENT_URL=https://127.0.0.1:29990 npm run dev` (only `127.0.0.1`/`localhost` are accepted).
+In dev builds, `NEXUS_PEEK_FAKE_FILE=<path>` replaces the peek key reader with a file: `1` means
+the key is held, anything else means released. Packaged builds ignore it.
+
+koffi ships prebuilt binaries, so its install script is marked `false` in `allowScripts`.
+`build.files` keeps only `win32_x64/koffi.node` (unpacked from the asar) out of its 18
+platform builds.
 
 ## Release Flow
 

@@ -61,6 +61,7 @@ import {
 } from './web/persistedWebDraft'
 import { WebDraftLabPage } from './web/WebDraftLabPage'
 import { WebSuggestionsPage } from './web/WebSuggestionsPage'
+import { WebBuildsPage } from './web/WebBuildsPage'
 import { nexusWebTrack } from './web/webAnalytics'
 import {
   outlineGlitchCtaClass,
@@ -491,8 +492,8 @@ function SuggestionContextPortrait({
   const src = champion && ddragonVersion ? ddragonChampionImageUrl(ddragonVersion, champion.key) : null
   const toneClass =
     tone === 'ally'
-      ? 'border-nexus-lime/70 bg-nexus-lime/8 shadow-[0_0_8px_rgba(35,213,176,0.12)]'
-      : 'border-nexus-red/70 bg-nexus-red/8 shadow-[0_0_8px_rgba(248,113,113,0.12)]'
+      ? 'border-nexus-lime/70 bg-nexus-lime/8 shadow-[0_0_8px_color-mix(in_srgb,var(--nexus-lime)_12%,transparent)]'
+      : 'border-nexus-red/70 bg-nexus-red/8 shadow-[0_0_8px_color-mix(in_srgb,var(--nexus-red)_12%,transparent)]'
   return (
     <span
       className={['inline-flex h-7 w-7 items-center justify-center border p-0.5', toneClass].join(' ')}
@@ -828,7 +829,7 @@ export function WebDraftApp() {
   const poolUndo = poolUndoStack[poolUndoStack.length - 1] ?? null
 
   const navigateWebRoute = useCallback((next: WebRoute) => {
-    const nextPath = next === 'suggestions' ? '/suggestions' : '/'
+    const nextPath = next === 'suggestions' ? '/suggestions' : next === 'builds' ? '/builds' : '/'
     if (window.location.pathname !== nextPath) {
       window.history.pushState({}, '', nextPath)
     }
@@ -927,7 +928,8 @@ export function WebDraftApp() {
   }, [])
 
   useEffect(() => {
-    document.title = webRoute === 'suggestions' ? 'Suggestions | Nexus Draft' : 'Nexus Draft'
+    document.title =
+      webRoute === 'suggestions' ? 'Suggestions | Nexus Draft' : webRoute === 'builds' ? 'Build Paths | Nexus Draft' : 'Nexus Draft'
   }, [webRoute])
 
   useEffect(() => {
@@ -1698,6 +1700,9 @@ export function WebDraftApp() {
   if (webRoute === 'suggestions') {
     return <WebSuggestionsPage onNavigateDraft={() => navigateWebRoute('draft')} />
   }
+  if (webRoute === 'builds') {
+    return <WebBuildsPage onNavigateDraft={() => navigateWebRoute('draft')} exeUrl={exeUrl} exeFile={exeFile} />
+  }
 
   return (
     <WebDraftLabPage>
@@ -1738,12 +1743,12 @@ export function WebDraftApp() {
       </a>
       <main id="nexus-web-main" className="relative mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:px-6 lg:px-8">
         <section className="nexus-command-deck relative mb-5 overflow-hidden border border-nexus-line bg-nexus-surface-2/90 p-5 shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
-          <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(35,213,176,0.12),transparent_35%,rgba(83,166,255,0.08))]" aria-hidden />
+          <div className="absolute inset-0 bg-[linear-gradient(110deg,color-mix(in_srgb,var(--nexus-lime)_12%,transparent),transparent_35%,color-mix(in_srgb,var(--nexus-blue)_8%,transparent))]" aria-hidden />
           <div className="relative">
           <MicroLabel className="text-nexus-lime/80">web app // manual draft lab</MicroLabel>
           <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h1 className="drop-shadow-[0_0_18px_rgba(231,255,245,0.10)]">
+              <h1 className="drop-shadow-[0_0_18px_color-mix(in_srgb,var(--nexus-text)_10%,transparent)]">
                 <ParticleWordMark
                   ariaLabel="NexusDraft"
                   target="nexusdraft"
@@ -1803,6 +1808,17 @@ export function WebDraftApp() {
               </NexusInfoTip>
               <a
                 className={outlineGlitchCtaClass}
+                data-glitch-label="Build paths"
+                href="/builds"
+                onClick={(event) => {
+                  event.preventDefault()
+                  navigateWebRoute('builds')
+                }}
+              >
+                Build paths
+              </a>
+              <a
+                className={outlineGlitchCtaClass}
                 data-glitch-label="Suggestions"
                 href="/suggestions"
                 onClick={(event) => {
@@ -1815,6 +1831,19 @@ export function WebDraftApp() {
             </div>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-nexus-line/60 pt-3 font-mono text-xs uppercase tracking-[0.12em]">
+            <a
+              className="text-nexus-lime hover:text-nexus-text"
+              href="/builds"
+              onClick={(event) => {
+                event.preventDefault()
+                navigateWebRoute('builds')
+              }}
+            >
+              Builds
+            </a>
+            <span className="text-nexus-line" aria-hidden>
+              /
+            </span>
             <a
               className="text-nexus-lime hover:text-nexus-text"
               href="/suggestions"
@@ -1907,8 +1936,8 @@ export function WebDraftApp() {
                     key={side}
                     className={
                       side === 'ally'
-                        ? 'rounded-md border border-nexus-lime/30 border-l-4 border-l-nexus-lime bg-nexus-lime/[0.06] p-3 shadow-[inset_0_1px_0_rgba(35,213,176,0.12)]'
-                        : 'rounded-md border border-nexus-red/30 border-l-4 border-l-nexus-red bg-nexus-red/[0.06] p-3 shadow-[inset_0_1px_0_rgba(248,113,113,0.1)]'
+                        ? 'rounded-md border border-nexus-lime/30 border-l-4 border-l-nexus-lime bg-nexus-lime/[0.06] p-3 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--nexus-lime)_12%,transparent)]'
+                        : 'rounded-md border border-nexus-red/30 border-l-4 border-l-nexus-red bg-nexus-red/[0.06] p-3 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--nexus-red)_10%,transparent)]'
                     }
                   >
                     <h3
@@ -1977,7 +2006,7 @@ export function WebDraftApp() {
                                 <span
                                   id={listboxId}
                                   role="listbox"
-                                  className="absolute left-0 right-0 top-[calc(100%+2px)] z-30 max-h-44 overflow-y-auto rounded-md border border-white/10 bg-[#0b1c16] shadow-[0_12px_28px_rgba(0,0,0,0.5)]"
+                                  className="absolute left-0 right-0 top-[calc(100%+2px)] z-30 max-h-44 overflow-y-auto rounded-md border border-white/10 bg-nexus-surface shadow-[0_12px_28px_rgba(0,0,0,0.5)]"
                                 >
                                   {matches.map((champion, optIdx) => (
                                     <button

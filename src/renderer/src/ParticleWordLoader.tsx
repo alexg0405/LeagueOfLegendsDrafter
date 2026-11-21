@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { themeRgb } from './theme'
 import { NexusEffectsLayer, emitNexusEffect } from './effects'
 
 type Particle = {
@@ -57,8 +58,12 @@ const INTRO_SWIRL_FORCE = 1.12
 const WORD_TARGET_CACHE_LIMIT = 48
 const TWO_PI = Math.PI * 2
 
-const FILL_BY_TINT = ['rgba(29, 212, 168, 0.78)', 'rgba(61, 184, 160, 0.84)', 'rgba(232, 243, 238, 0.94)'] as const
-const GLOW_FILL_BY_TINT = ['rgba(29, 212, 168, 0.22)', 'rgba(61, 184, 160, 0.2)', 'rgba(232, 243, 238, 0.18)'] as const
+/** Particle tints follow the color theme: accent, secondary, text. */
+function tintRgb(): readonly [string, string, string] {
+  return [themeRgb('--nexus-lime', '29, 212, 168'), themeRgb('--nexus-blue', '61, 184, 160'), themeRgb('--nexus-text', '232, 243, 238')]
+}
+const FILL_ALPHA = [0.78, 0.84, 0.94] as const
+const GLOW_ALPHA = [0.22, 0.2, 0.18] as const
 
 const wordTargetCache = new Map<string, ParticleTarget[]>()
 
@@ -243,7 +248,7 @@ function paintParticles(
   if (softGlow && alphaScale > 0.01) {
     for (let tint = 0; tint < 3; tint += 1) {
       context.beginPath()
-      context.fillStyle = GLOW_FILL_BY_TINT[tint as 0 | 1 | 2]
+      context.fillStyle = `rgba(${tintRgb()[tint as 0 | 1 | 2]}, ${GLOW_ALPHA[tint as 0 | 1 | 2]})`
       for (const particle of particles) {
         if (particle.tint !== tint) continue
         context.moveTo(particle.x + particle.r * 2.4, particle.y)
@@ -255,15 +260,7 @@ function paintParticles(
 
   for (let tint = 0; tint < 3; tint += 1) {
     context.beginPath()
-    const base = FILL_BY_TINT[tint as 0 | 1 | 2]
-    context.fillStyle =
-      alphaScale >= 0.999
-        ? base
-        : tint === 2
-          ? `rgba(232, 243, 238, ${0.94 * alphaScale})`
-          : tint === 1
-            ? `rgba(61, 184, 160, ${0.84 * alphaScale})`
-            : `rgba(29, 212, 168, ${0.78 * alphaScale})`
+    context.fillStyle = `rgba(${tintRgb()[tint as 0 | 1 | 2]}, ${FILL_ALPHA[tint as 0 | 1 | 2] * Math.min(1, alphaScale)})`
     for (const particle of particles) {
       if (particle.tint !== tint) continue
       context.moveTo(particle.x + particle.r, particle.y)
@@ -748,7 +745,7 @@ export function ParticleWordIntroOverlay({ onDone }: { onDone: () => void }) {
       <div className={['nexus-noise absolute inset-0 transition-opacity duration-700', exiting ? 'opacity-0' : 'opacity-70'].join(' ')} aria-hidden />
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" aria-hidden />
       <div className="pointer-events-none absolute inset-x-0 bottom-[18vh] flex justify-center px-6">
-        <p className={['m-0 border border-nexus-line/70 bg-nexus-bg/55 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-nexus-muted shadow-[0_0_28px_rgba(29,212,168,0.12)] transition-opacity duration-300', exiting ? 'opacity-0' : 'opacity-100'].join(' ')}>
+        <p className={['m-0 border border-nexus-line/70 bg-nexus-bg/55 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-nexus-muted shadow-[0_0_28px_color-mix(in_srgb,var(--nexus-lime)_12%,transparent)] transition-opacity duration-300', exiting ? 'opacity-0' : 'opacity-100'].join(' ')}>
           Click to enter
         </p>
       </div>
@@ -771,7 +768,7 @@ export function ParticleWordLoader({ label = 'Loading' }: ParticleWordLoaderProp
         settleDamping={0.62}
       />
       <div className="pointer-events-none absolute inset-x-0 bottom-[18vh] flex justify-center px-6">
-        <p className="m-0 border border-nexus-line/70 bg-nexus-bg/55 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-nexus-muted shadow-[0_0_28px_rgba(29,212,168,0.12)]">
+        <p className="m-0 border border-nexus-line/70 bg-nexus-bg/55 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-nexus-muted shadow-[0_0_28px_color-mix(in_srgb,var(--nexus-lime)_12%,transparent)]">
           {label}
         </p>
       </div>

@@ -1,7 +1,6 @@
 import { motion } from 'framer-motion'
 import { useEffect, useState, type DragEvent as ReactDragEvent, type ReactNode } from 'react'
 import { ddragonChampionImageUrl, type ChampionLite } from '@shared/dataDragon'
-import type { OverlayShortcutStatusResult } from '@shared/desktopInterop'
 import { NexusInfoTip } from './NexusInfoTip'
 import {
   RIOT_PLATFORMS,
@@ -45,73 +44,6 @@ const textMuted = 'text-nexus-muted'
 const textBody = 'font-mono text-sm text-nexus-text/90'
 const errText = 'font-mono text-sm text-nexus-red'
 
-/**
- * Translates a captured DOM key event into an Electron accelerator string.
- * Returns null for a bare modifier press so holding Ctrl does not commit a binding.
- */
-export function acceleratorFromKeyEvent(event: {
-  key: string
-  code: string
-  ctrlKey: boolean
-  altKey: boolean
-  shiftKey: boolean
-  metaKey: boolean
-}): string | null {
-  const { key, code } = event
-  if (key === 'Escape') {
-    return 'Escape'
-  }
-  if (['Control', 'Alt', 'Shift', 'Meta', 'OS', 'AltGraph', 'Dead'].includes(key)) {
-    return null
-  }
-
-  let base: string | null = null
-  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(key)) {
-    base = key
-  } else if (/^Key[A-Z]$/.test(code)) {
-    base = code.slice(3)
-  } else if (/^Digit[0-9]$/.test(code)) {
-    base = code.slice(5)
-  } else if (/^Numpad[0-9]$/.test(code)) {
-    base = code
-  } else {
-    const named: Record<string, string> = {
-      Insert: 'Insert',
-      Delete: 'Delete',
-      Home: 'Home',
-      End: 'End',
-      PageUp: 'PageUp',
-      PageDown: 'PageDown',
-      ArrowUp: 'Up',
-      ArrowDown: 'Down',
-      ArrowLeft: 'Left',
-      ArrowRight: 'Right',
-      ' ': 'Space',
-      Tab: 'Tab',
-      Backspace: 'Backspace'
-    }
-    base = named[key] ?? null
-  }
-  if (!base) {
-    return null
-  }
-
-  const parts: string[] = []
-  if (event.ctrlKey) {
-    parts.push('Control')
-  }
-  if (event.altKey) {
-    parts.push('Alt')
-  }
-  if (event.shiftKey) {
-    parts.push('Shift')
-  }
-  if (event.metaKey) {
-    parts.push('Super')
-  }
-  parts.push(base)
-  return parts.join('+')
-}
 
 function parseChampionSelectValue(value: string): number | null {
   if (!value) {
@@ -245,15 +177,6 @@ type NexusOperationsViewProps = {
   onInstallAppUpdate: () => void
   playerPoolProfile: PlayerChampionPoolProfile | null
   playerPoolStatus: string | null
-  overlayStatusLine?: string | null
-  overlayError?: string | null
-  overlayShortcutStatus?: OverlayShortcutStatusResult | null
-  /** Rendered verbatim under the overlay card when the user asks why it is hidden. */
-  overlayDiagnosticsText?: string | null
-  onResetOverlay?: () => void
-  onShowOverlayDiagnostics?: () => void
-  /** Pass an empty array to restore the default Insert / F9 / F10 bindings. */
-  onSetOverlayHotkey?: (accelerators: string[]) => void
   playerPoolBusy: boolean
   recommendationPoolMode: RecommendationPoolMode
   onRecommendationPoolMode: (mode: RecommendationPoolMode) => void
@@ -296,13 +219,6 @@ export function NexusOperationsView({
   onInstallAppUpdate,
   playerPoolProfile,
   playerPoolStatus,
-  overlayStatusLine,
-  overlayError,
-  overlayShortcutStatus,
-  overlayDiagnosticsText,
-  onResetOverlay,
-  onShowOverlayDiagnostics,
-  onSetOverlayHotkey,
   playerPoolBusy,
   recommendationPoolMode,
   onRecommendationPoolMode,
@@ -316,7 +232,6 @@ export function NexusOperationsView({
   const championNameById = new Map(champions.map((c) => [c.id, c.name] as const))
   const [openSectionIds, setOpenSectionIds] = useState<ReadonlySet<string>>(() => new Set())
   /** True while the hotkey field is listening for the next key press. */
-  const [hotkeyCapture, setHotkeyCapture] = useState(false)
   const [poolChampionId, setPoolChampionId] = useState<number | null>(null)
   const [poolPreference, setPoolPreference] = useState<ChampionPoolPreference>('comfortable')
   const [riotIdInput, setRiotIdInput] = useState(() => playerPoolProfile?.riotId ?? '')
@@ -547,7 +462,10 @@ export function NexusOperationsView({
         onToggle={() => toggleSection('DI_01')}
       >
         {!draftIntel ? (
-          <p className={`${textMuted} font-mono text-sm`}>Lock picks or use manual board to generate matchup plans, bans, and warnings.</p>
+          <p className={`${textMuted} m-0 flex items-center gap-1.5 font-mono text-sm`}>
+            No draft yet
+            <NexusInfoTip label="About draft intel">Lock picks (or use the manual board) to get plans, bans and warnings.</NexusInfoTip>
+          </p>
         ) : (
           <div className="space-y-4 font-mono text-sm">
             <div className="border-l-2 border-nexus-lime/70 bg-nexus-bg/25 px-3 py-2">
@@ -697,17 +615,14 @@ export function NexusOperationsView({
               </select>
             </label>
             <div className="min-w-0 border border-nexus-line/60 bg-nexus-bg/35 px-3 py-2 font-mono text-xs leading-relaxed text-nexus-muted lg:col-span-2 xl:col-span-1">
-              <span className="block uppercase tracking-[0.12em] text-nexus-lime/80">
+              <span className="flex items-center gap-1.5 uppercase tracking-[0.12em] text-nexus-lime/80">
                 {suggestMcRollouts > 0 ? `V1 + ${suggestMcRollouts} rollout(s)` : 'Fast V1'}
-              </span>
-              <span className="block whitespace-normal break-words" title={`Max ${maxSuggestMcRollouts} rollouts. Higher values react more as picks lock.`}>
-                Max {maxSuggestMcRollouts}. Higher values react more as picks lock.
+                <NexusInfoTip label="About the model">
+                  {modelDescription} Up to {maxSuggestMcRollouts} rollouts; more react better as picks lock.
+                </NexusInfoTip>
               </span>
             </div>
           </div>
-          <p className={`${textMuted} m-0 max-w-3xl font-mono text-xs sm:text-sm leading-relaxed`}>
-            {modelDescription}
-          </p>
         </div>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className="m-0 font-mono text-xs uppercase tracking-[0.12em] text-nexus-lime/80">
@@ -814,142 +729,7 @@ export function NexusOperationsView({
         </ol>
       </CollapsibleOpsSection>
 
-      <CollapsibleOpsSection
-        id="OV_01"
-        kicker="hud"
-        title="Overlay"
-        open={openSectionIds.has('OV_01')}
-        onToggle={() => toggleSection('OV_01')}
-      >
-        <p className={`${textMuted} text-sm mb-3 flex flex-wrap items-center gap-x-1.5 gap-y-1`}>
-          {overlayShortcutStatus?.registered.length ? (
-            <>
-              <span>Press</span>
-              {overlayShortcutStatus.registered.map((shortcut, idx) => (
-                <span key={`overlay-shortcut-${shortcut}`}>
-                  {idx > 0 ? (idx === overlayShortcutStatus.registered.length - 1 ? ' or ' : ', ') : null}
-                  <kbd className="px-1 border border-nexus-line/70 bg-nexus-bg text-nexus-text/90">{shortcut}</kbd>
-                </span>
-              ))}
-              <span>to show or hide it.</span>
-            </>
-          ) : (
-            <span>Use the button below to show or hide it.</span>
-          )}
-          <NexusInfoTip label="About the overlay">
-            A small always-on-top window that sits over League during champ select. Borderless or
-            windowed-fullscreen League works best — exclusive fullscreen can cover any overlay.
-          </NexusInfoTip>
-        </p>
 
-        {overlayShortcutStatus?.failed.length ? (
-          <p className={`${textMuted} text-xs mb-3 flex items-center gap-1.5`}>
-            <span className="text-nexus-yellow/90">
-              Hotkey unavailable: {overlayShortcutStatus.failed.join(', ')}.
-            </span>
-            <NexusInfoTip label="Why a hotkey fails" tone="lime">
-              Another running app already owns that key, so Windows refused to give it to Nexus
-              Draft. The Toggle overlay button below always works.
-            </NexusInfoTip>
-          </p>
-        ) : null}
-
-        {/* Rebind the toggle key. Essential when the defaults are already taken. */}
-        {onSetOverlayHotkey ? (
-          <div className="mb-3 border border-nexus-line/70 bg-nexus-bg/35 px-2.5 py-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="flex items-center gap-1.5 font-mono text-xs uppercase tracking-[0.12em] text-nexus-lime/85">
-                Toggle key
-                <NexusInfoTip label="About the toggle key">
-                  Click <b>Change</b>, then press the key you want. Function keys and Insert work
-                  well; you can also hold Ctrl, Alt or Shift for a combo. If Windows refuses the key
-                  another app already owns it — pick a different one.
-                </NexusInfoTip>
-              </span>
-              <kbd className="border border-nexus-line/70 bg-nexus-bg px-2 py-0.5 font-mono text-xs text-nexus-text/90">
-                {hotkeyCapture
-                  ? 'Press any key...'
-                  : overlayShortcutStatus?.registered.length
-                    ? overlayShortcutStatus.registered.join(' / ')
-                    : 'none'}
-              </kbd>
-              <button
-                type="button"
-                className={btnGhost}
-                onClick={() => setHotkeyCapture((v) => !v)}
-                aria-pressed={hotkeyCapture}
-              >
-                {hotkeyCapture ? 'Cancel' : 'Change'}
-              </button>
-              <button
-                type="button"
-                className={btnGhost}
-                title="Restore Insert / F9 / F10"
-                onClick={() => {
-                  setHotkeyCapture(false)
-                  onSetOverlayHotkey([])
-                }}
-              >
-                Reset
-              </button>
-            </div>
-            {hotkeyCapture ? (
-              <input
-                autoFocus
-                readOnly
-                aria-label="Press the key you want to use for the overlay"
-                className={`${inField} mt-2`}
-                value=""
-                placeholder="Press a key now (Esc to cancel)"
-                onKeyDown={(event) => {
-                  event.preventDefault()
-                  const accelerator = acceleratorFromKeyEvent(event)
-                  if (accelerator === 'Escape') {
-                    setHotkeyCapture(false)
-                    return
-                  }
-                  if (!accelerator) {
-                    return
-                  }
-                  setHotkeyCapture(false)
-                  onSetOverlayHotkey([accelerator])
-                }}
-                onBlur={() => setHotkeyCapture(false)}
-              />
-            ) : null}
-          </div>
-        ) : null}
-
-        {overlayStatusLine ? <p className={`${textBody} mb-2`}>{overlayStatusLine}</p> : null}
-        {overlayError ? <p className={`${errText} mb-2`}>{overlayError}</p> : null}
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className={btnPrimary} onClick={onToggleOverlay}>
-            Toggle overlay
-          </button>
-          {onResetOverlay ? (
-            <button
-              type="button"
-              className={btnGhost}
-              onClick={onResetOverlay}
-              title="Rebuild the overlay window at its default on-screen position"
-            >
-              Reset overlay
-            </button>
-          ) : null}
-          {onShowOverlayDiagnostics ? (
-            <button type="button" className={btnGhost} onClick={onShowOverlayDiagnostics}>
-              Why can't I see it?
-            </button>
-          ) : null}
-        </div>
-
-        {overlayDiagnosticsText ? (
-          <pre className="nexus-allow-select mt-3 max-h-56 overflow-auto border border-nexus-line/70 bg-nexus-bg/60 p-2.5 font-mono text-[11px] leading-snug text-nexus-muted whitespace-pre-wrap">
-            {overlayDiagnosticsText}
-          </pre>
-        ) : null}
-      </CollapsibleOpsSection>
     </div>
   )
 }

@@ -1,14 +1,14 @@
 import { motion } from 'framer-motion'
-import { MicroLabel, NexusPlus } from './NexusTick'
+import { NexusPlus } from './NexusTick'
 import { useNexusMotion, topBarVariants } from './nexusMotion'
 
 type Props = {
   runnerId: string
-  region: string
+  /** League connection status, e.g. "League: waiting". */
   link?: string
   dataVersion: string
+  /** App version. */
   build: string
-  networkStatus: string
   /** Optional: source + model (short) */
   resourceLine?: string
   onMinimizeApp?: () => void
@@ -19,11 +19,9 @@ type Props = {
 
 export function NexusTopBar({
   runnerId,
-  region,
   link = 'LIVE // READY',
   dataVersion,
   build,
-  networkStatus,
   resourceLine,
   onMinimizeApp,
   onCloseApp,
@@ -39,13 +37,7 @@ export function NexusTopBar({
       animate="animate"
     >
       <div className="flex-1 flex items-center gap-3 px-4 py-1.5 min-w-0">
-        <MicroLabel>App</MicroLabel>
         <span className="font-mono text-nexus-text/95 truncate tabular-nums">{runnerId}</span>
-        <span className="text-nexus-line select-none" aria-hidden>
-          |
-        </span>
-        <MicroLabel>region</MicroLabel>
-        <span className="font-mono text-nexus-muted uppercase">{region}</span>
         <NexusPlus className="text-[10px] opacity-40" />
         <motion.span
           className="font-mono text-nexus-lime/90 text-xs tracking-widest"
@@ -61,14 +53,9 @@ export function NexusTopBar({
           <span className="text-nexus-muted/90">Data</span>
           <span className="text-nexus-text tabular-nums">{dataVersion}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-nexus-muted/90">Build</span>
-          <span className="text-nexus-lime/95 tabular-nums">{build}</span>
-        </div>
-        <div className="hidden sm:flex items-center gap-1">
-          <span className="text-nexus-muted/90">League</span>
-          <span className="text-nexus-lime/95 uppercase">{networkStatus}</span>
-        </div>
+        <span className="text-nexus-muted/90 tabular-nums" title="App version">
+          v{build}
+        </span>
         {resourceLine && (
           <div
             className="hidden lg:block text-nexus-text/80 text-[11px] max-w-[min(280px,32vw)] truncate leading-snug"

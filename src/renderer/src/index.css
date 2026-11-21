@@ -3,27 +3,57 @@
 @tailwind utilities;
 
 @layer base {
-  /* Emerald Premium: deep forest + vibrant emerald + pale mint + golden orange */
-  :root {
+  /*
+   * Themes. `data-theme` on <html> picks one (Setup -> Appearance); Midnight is the default.
+   * Every UI color comes from these variables, so a theme is just one of these blocks.
+   * --nexus-noise-strength scales the scanline texture (calmer themes keep it faint).
+   */
+  :root,
+  :root[data-theme='midnight'] {
+    --nexus-bg: #0f131a;
+    --nexus-surface: #141a23;
+    --nexus-surface-2: #1a212c;
+    --nexus-panel-light: #d8dee9;
+    --nexus-text: #e3e7ee;
+    --nexus-muted: #a0aabb;
+    /* Primary accent (the token is still called "lime" across the UI). */
+    --nexus-lime: #72c6d4;
+    --nexus-blue: #8fa9ee;
+    --nexus-red: #ee8e8a;
+    --nexus-yellow: #e2b664;
+    --nexus-line: rgba(170, 190, 220, 0.13);
+    --nexus-noise-strength: 0.3;
+  }
+
+  :root[data-theme='graphite'] {
+    --nexus-bg: #121314;
+    --nexus-surface: #18191b;
+    --nexus-surface-2: #1f2023;
+    --nexus-panel-light: #dddcd8;
+    --nexus-text: #e7e5e2;
+    --nexus-muted: #a7a39d;
+    --nexus-lime: #a8cf8e;
+    --nexus-blue: #8ab4f0;
+    --nexus-red: #e8928b;
+    --nexus-yellow: #e0b468;
+    --nexus-line: rgba(225, 220, 210, 0.12);
+    --nexus-noise-strength: 0.3;
+  }
+
+  /* The original Emerald Premium look: deep forest, vibrant emerald, pale mint, golden orange. */
+  :root[data-theme='emerald'] {
     --nexus-bg: #060f0c;
     --nexus-surface: #0a1c15;
     --nexus-surface-2: #0f2a1f;
-    /* Pale mint: light panels and high-readability body text on dark */
     --nexus-panel-light: #c5e4d6;
     --nexus-text: #e8f3ee;
-    /*
-     * Secondary body text. Was #7fa896, which fell below comfortable reading contrast
-     * once combined with the /75–/85 opacity modifiers and 10–12px sizes used across the
-     * UI. Brightened so even `text-nexus-muted/70` stays legible on --nexus-bg.
-     */
     --nexus-muted: #b7d4c5;
-    /* Primary accent (UI still uses the “lime” token name) */
     --nexus-lime: #1dd4a8;
     --nexus-blue: #3db8a0;
     --nexus-red: #f07167;
-    /* Golden orange: queue / wait / high-contrast highlights */
     --nexus-yellow: #e89a2c;
     --nexus-line: rgba(200, 240, 224, 0.12);
+    --nexus-noise-strength: 1;
   }
 
   /*
@@ -198,6 +228,7 @@
 
 /* Scan / interference overlay (restrained) */
 .nexus-noise {
+  filter: opacity(var(--nexus-noise-strength, 1));
   background-image: repeating-linear-gradient(
       0deg,
       transparent,
@@ -226,8 +257,8 @@
   z-index: 1;
   pointer-events: none;
   background:
-    linear-gradient(90deg, transparent, rgba(29, 212, 168, 0.3), transparent) 0 0 / 34% 1px no-repeat,
-    linear-gradient(180deg, rgba(232, 243, 238, 0.055), transparent 18%, transparent 82%, rgba(29, 212, 168, 0.09));
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--nexus-lime) 30%, transparent), transparent) 0 0 / 34% 1px no-repeat,
+    linear-gradient(180deg, color-mix(in srgb, var(--nexus-text) 5.5%, transparent), transparent 18%, transparent 82%, color-mix(in srgb, var(--nexus-lime) 9%, transparent));
   animation: nexus-command-edge 2.8s ease-in-out infinite;
   opacity: 0.72;
 }
@@ -239,8 +270,8 @@
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 92% 16%, rgba(29, 212, 168, 0.16), transparent 25%),
-    linear-gradient(110deg, rgba(29, 212, 168, 0.1), transparent 34%, rgba(61, 184, 160, 0.06));
+    radial-gradient(circle at 92% 16%, color-mix(in srgb, var(--nexus-lime) 16%, transparent), transparent 25%),
+    linear-gradient(110deg, color-mix(in srgb, var(--nexus-lime) 10%, transparent), transparent 34%, color-mix(in srgb, var(--nexus-blue) 6%, transparent));
 }
 
 .nexus-command-deck > * {
@@ -286,15 +317,15 @@
     linear-gradient(
       90deg,
       transparent 0%,
-      rgba(240, 113, 103, 0.22) 18%,
-      rgba(61, 184, 255, 0.28) 48%,
-      rgba(232, 243, 238, 0.12) 56%,
+      color-mix(in srgb, var(--nexus-red) 22%, transparent) 18%,
+      color-mix(in srgb, var(--nexus-blue) 28%, transparent) 48%,
+      color-mix(in srgb, var(--nexus-text) 12%, transparent) 56%,
       transparent 82%
     ),
     repeating-linear-gradient(
       0deg,
       transparent 0 7px,
-      rgba(232, 243, 238, 0.16) 7px 8px,
+      color-mix(in srgb, var(--nexus-text) 16%, transparent) 7px 8px,
       transparent 8px 14px
     );
   mix-blend-mode: screen;
@@ -310,8 +341,8 @@
   color: transparent;
   content: attr(data-glitch-label);
   text-shadow:
-    -1.5px 0 rgba(240, 113, 103, 0.78),
-    1.5px 0 rgba(61, 184, 255, 0.82);
+    -1.5px 0 color-mix(in srgb, var(--nexus-red) 78%, transparent),
+    1.5px 0 color-mix(in srgb, var(--nexus-blue) 82%, transparent);
   white-space: nowrap;
   clip-path: inset(0 0 0 0);
 }
@@ -319,10 +350,10 @@
 .nexus-glitch-cta--solid:hover,
 .nexus-glitch-cta--solid:focus-visible {
   box-shadow:
-    0 0 0 1px rgba(232, 243, 238, 0.18),
-    0 0 28px rgba(29, 212, 168, 0.24),
-    -6px 0 18px rgba(240, 113, 103, 0.16),
-    6px 0 18px rgba(61, 184, 255, 0.16);
+    0 0 0 1px color-mix(in srgb, var(--nexus-text) 18%, transparent),
+    0 0 28px color-mix(in srgb, var(--nexus-lime) 24%, transparent),
+    -6px 0 18px color-mix(in srgb, var(--nexus-red) 16%, transparent),
+    6px 0 18px color-mix(in srgb, var(--nexus-blue) 16%, transparent);
 }
 
 .nexus-glitch-cta--outline:hover,
@@ -330,9 +361,9 @@
   border-color: color-mix(in srgb, var(--nexus-lime) 72%, transparent);
   background-color: color-mix(in srgb, var(--nexus-lime) 11%, transparent);
   box-shadow:
-    0 0 0 1px rgba(61, 184, 255, 0.12),
-    -5px 0 16px rgba(240, 113, 103, 0.1),
-    5px 0 16px rgba(61, 184, 255, 0.13);
+    0 0 0 1px color-mix(in srgb, var(--nexus-blue) 12%, transparent),
+    -5px 0 16px color-mix(in srgb, var(--nexus-red) 10%, transparent),
+    5px 0 16px color-mix(in srgb, var(--nexus-blue) 13%, transparent);
 }
 
 .nexus-glitch-cta:hover::before,
@@ -408,8 +439,8 @@
 
 .nexus-matrix-stage {
   background:
-    radial-gradient(circle at 78% 12%, rgba(29, 212, 168, 0.2), transparent 24%),
-    linear-gradient(180deg, rgba(6, 15, 12, 0.92), rgba(3, 8, 7, 0.98));
+    radial-gradient(circle at 78% 12%, color-mix(in srgb, var(--nexus-lime) 20%, transparent), transparent 24%),
+    linear-gradient(180deg, color-mix(in srgb, var(--nexus-bg) 92%, transparent), color-mix(in srgb, color-mix(in srgb, var(--nexus-bg) 55%, black) 98%, transparent));
 }
 
 .nexus-matrix-stage::before {
@@ -418,8 +449,8 @@
   inset: 0;
   pointer-events: none;
   background:
-    repeating-linear-gradient(90deg, transparent 0 22px, rgba(29, 212, 168, 0.16) 23px, transparent 24px),
-    repeating-linear-gradient(180deg, rgba(29, 212, 168, 0.07) 0 1px, transparent 1px 6px);
+    repeating-linear-gradient(90deg, transparent 0 22px, color-mix(in srgb, var(--nexus-lime) 16%, transparent) 23px, transparent 24px),
+    repeating-linear-gradient(180deg, color-mix(in srgb, var(--nexus-lime) 7%, transparent) 0 1px, transparent 1px 6px);
   opacity: 0.16;
 }
 
@@ -429,7 +460,7 @@
   left: 1.2rem;
   right: 1.2rem;
   top: 0.75rem;
-  color: rgba(29, 212, 168, 0.16);
+  color: color-mix(in srgb, var(--nexus-lime) 16%, transparent);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.7rem;
   letter-spacing: 0.22em;
@@ -450,8 +481,8 @@
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(29, 212, 168, 0.12), transparent 14%, transparent 86%, rgba(29, 212, 168, 0.1)),
-    repeating-linear-gradient(0deg, rgba(232, 243, 238, 0.035), rgba(232, 243, 238, 0.035) 1px, transparent 1px, transparent 4px);
+    linear-gradient(180deg, color-mix(in srgb, var(--nexus-lime) 12%, transparent), transparent 14%, transparent 86%, color-mix(in srgb, var(--nexus-lime) 10%, transparent)),
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--nexus-text) 3.5%, transparent), color-mix(in srgb, var(--nexus-text) 3.5%, transparent) 1px, transparent 1px, transparent 4px);
   mix-blend-mode: screen;
   z-index: 20;
 }
@@ -470,8 +501,8 @@
   width: 120vw;
   height: 1px;
   transform-origin: right center;
-  background: linear-gradient(90deg, transparent, rgba(29, 212, 168, 0.04), rgba(29, 212, 168, 0.82));
-  box-shadow: 0 0 14px rgba(29, 212, 168, 0.75);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--nexus-lime) 4%, transparent), color-mix(in srgb, var(--nexus-lime) 82%, transparent));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--nexus-lime) 75%, transparent);
   opacity: 0.32;
 }
 

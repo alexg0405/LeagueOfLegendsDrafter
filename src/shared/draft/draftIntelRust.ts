@@ -1,4 +1,4 @@
-import uggSeed from '../data/uggDefaultItemBuildsSeed.json'
+import { rustBuildSeed, type RustBuildSeed } from './buildSeedStore'
 import { isRecommendableSummonersRiftItem } from '../dataDragon'
 import { BUNDLED_CHAMPION_NAMES } from './championNameFallback'
 import { championThreatOverrideRows } from './championThreatOverrides'
@@ -16,7 +16,7 @@ export type RustDraftIntelInput = {
   championMetaById: { id: number; meta: NonNullable<BuildDraftIntelArgs['championMetaById']> extends ReadonlyMap<number, infer T> ? T : never }[]
   enemyRoleInference: NonNullable<BuildDraftIntelArgs['enemyRoleInference']>
   itemCatalog: NonNullable<BuildDraftIntelArgs['itemCatalog']>
-  uggSeed: typeof uggSeed
+  uggSeed: RustBuildSeed
   championThreatOverrides: ReturnType<typeof championThreatOverrideRows>
   publicBaseStats: PublicMetaBaseStat[]
   patchLabel?: string | null
@@ -53,7 +53,7 @@ export function serializeDraftIntelInput(args: BuildDraftIntelArgs): RustDraftIn
     championMetaById: Array.from(args.championMetaById?.entries() ?? []).map(([id, meta]) => ({ id, meta })),
     enemyRoleInference: args.enemyRoleInference ?? [],
     itemCatalog: (args.itemCatalog ?? []).filter(isRecommendableSummonersRiftItem),
-    uggSeed,
+    uggSeed: rustBuildSeed(),
     championThreatOverrides: championThreatOverrideRows(),
     publicBaseStats: publicBaseStatRows(),
     patchLabel: args.patchLabel,

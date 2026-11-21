@@ -297,7 +297,17 @@ ${rows.join(',\n')}
 `
 }
 
-function formatManifest({ patch, updatedAt, roleBaseCount, counterCount, synergyCount }) {
+/** `update-ugg-default-builds.mjs` owns the `builds*` keys; carry them over instead of dropping them. */
+async function existingBuildManifestKeys() {
+  try {
+    const previous = JSON.parse(await readFile(publicManifestPath, 'utf8'))
+    return Object.fromEntries(Object.entries(previous).filter(([key]) => key.startsWith('build')))
+  } catch {
+    return {}
+  }
+}
+
+function formatManifest({ patch, updatedAt, roleBaseCount, counterCount, synergyCount }, buildKeys = {}) {
   return `${JSON.stringify(
     {
       schema: 'nexus_public_meta_manifest_v1',
@@ -308,7 +318,8 @@ function formatManifest({ patch, updatedAt, roleBaseCount, counterCount, synergy
       rankFilter: TIER,
       roleBaseCount,
       counterCount,
-      synergyCount
+      synergyCount,
+      ...buildKeys
     },
     null,
     2
@@ -428,15 +439,19 @@ await writeFile(metaPath, nextMetaSeed, 'utf8')
 await writeFile(publicMetaPath, nextMetaSeed, 'utf8')
 await writeFile(synergyPath, nextSynergySeed, 'utf8')
 await writeFile(publicSynergyPath, nextSynergySeed, 'utf8')
+const buildManifestKeys = await existingBuildManifestKeys()
 await writeFile(
   publicManifestPath,
-  formatManifest({
-    patch: targetPatch,
-    updatedAt,
-    roleBaseCount: roleBase.length,
-    counterCount: counters.length,
-    synergyCount: synergyRows.length
-  }),
+  formatManifest(
+    {
+      patch: targetPatch,
+      updatedAt,
+      roleBaseCount: roleBase.length,
+      counterCount: counters.length,
+      synergyCount: synergyRows.length
+    },
+    buildManifestKeys
+  ),
   'utf8'
 )
 

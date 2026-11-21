@@ -52,7 +52,7 @@ export function PreloadGuard({ children }: Props) {
     return (
       <div
         className="boot-error"
-        style={{ padding: 24, maxWidth: 640, lineHeight: 1.5, background: '#060f0c', minHeight: '100vh' }}
+        style={{ padding: 24, maxWidth: 640, lineHeight: 1.5, background: '#0f131a', minHeight: '100vh' }}
       >
         <h1 style={{ color: '#f85149', fontSize: '1.1rem', margin: '0 0 8px' }}>Wrong place - you are in a web browser</h1>
         <p style={{ color: '#c9d1d9' }}>
@@ -75,7 +75,7 @@ export function PreloadGuard({ children }: Props) {
   return (
     <div
       className="boot-error"
-      style={{ padding: 24, maxWidth: 640, lineHeight: 1.5, background: '#060f0c', minHeight: '100vh' }}
+      style={{ padding: 24, maxWidth: 640, lineHeight: 1.5, background: '#0f131a', minHeight: '100vh' }}
     >
       <h1 style={{ color: '#f85149', fontSize: '1.1rem', margin: '0 0 8px' }}>Preload did not run</h1>
       <p style={{ color: '#c9d1d9' }}>

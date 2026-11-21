@@ -7,5 +7,9 @@
   "rankFilter": "emerald_plus",
   "roleBaseCount": 318,
   "counterCount": 7077,
-  "synergyCount": 0
+  "synergyCount": 0,
+  "buildsUrl": "buildPathsSeed.json",
+  "buildsPatch": "16.23",
+  "buildsUpdatedAt": "2026-11-20",
+  "buildCount": 865
 }

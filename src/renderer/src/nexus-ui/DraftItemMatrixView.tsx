@@ -398,7 +398,7 @@ export function DraftItemMatrixView({
     <section
       ref={panelRef}
       tabIndex={-1}
-      className={`relative isolate flex min-h-0 flex-col overflow-hidden border border-nexus-lime/45 bg-nexus-surface shadow-[0_0_42px_rgba(29,212,168,0.18)] focus:outline-none ${isScrolling ? 'nexus-matrix-scrolling' : ''} ${className}`}
+      className={`relative isolate flex min-h-0 flex-col overflow-hidden border border-nexus-lime/45 bg-nexus-surface shadow-[0_0_42px_color-mix(in_srgb,var(--nexus-lime)_18%,transparent)] focus:outline-none ${isScrolling ? 'nexus-matrix-scrolling' : ''} ${className}`}
     >
       <NexusEffectsLayer surface="matrix" quality="high" className="z-0 opacity-35" />
       <header className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-b border-nexus-lime/35 bg-nexus-surface-2 px-3 py-2.5">

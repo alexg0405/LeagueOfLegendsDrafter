@@ -1,22 +1,8 @@
-import seed from '../data/uggDefaultItemBuildsSeed.json'
 import { isRecommendableSummonersRiftItem, type ItemLite } from '../dataDragon'
+import { buildSeedRow, currentBuildSeed, type BuildSeedRow } from './buildSeedStore'
 import type { DraftItemRef, DraftRole } from './types'
 
-type UggSeedRole = Exclude<DraftRole, 'unknown'>
-
-type UggSeedRow = {
-  championId: number
-  role: UggSeedRole
-  sourceType?: 'coachless' | 'ugg' | 'ugg-fallback' | 'trusted' | 'generated' | 'pinned'
-  sourceUrl: string
-  starting?: number[]
-  boots?: number[]
-  core?: number[]
-  final?: number[]
-  winRate?: number
-  matches?: number
-  wpaOverall?: number
-}
+type UggSeedRow = BuildSeedRow
 
 export type UggDefaultItemBuild = {
   source: 'coachless' | 'ugg'
@@ -31,10 +17,6 @@ export type UggDefaultItemBuild = {
   core: DraftItemRef[]
   final: DraftItemRef[]
   defaultItemIds: number[]
-}
-
-function roleKey(role: DraftRole): UggSeedRole | null {
-  return role === 'unknown' ? null : role
 }
 
 function phaseFor(item: ItemLite, bucket: 'starting' | 'boots' | 'core' | 'final'): DraftItemRef['phase'] {
@@ -84,8 +66,6 @@ function dedupeIds(rows: readonly DraftItemRef[]): number[] {
   return out
 }
 
-const seedRows = (seed.builds as UggSeedRow[]).filter((row) => Number.isFinite(row.championId))
-
 function finiteStat(value: number | null | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
@@ -95,11 +75,10 @@ export function getUggDefaultItemBuild(
   role: DraftRole,
   itemCatalog: readonly ItemLite[] | null | undefined
 ): UggDefaultItemBuild | null {
-  const key = roleKey(role)
-  if (!key || !itemCatalog?.length) {
+  if (role === 'unknown' || !itemCatalog?.length) {
     return null
   }
-  const row = seedRows.find((entry) => entry.championId === championId && entry.role === key)
+  const row = buildSeedRow(championId, role)
   if (!row) {
     return null
   }
@@ -118,7 +97,7 @@ export function getUggDefaultItemBuild(
   return {
     source: row.sourceType === 'coachless' ? 'coachless' : 'ugg',
     ...(row.sourceType != null ? { sourceType: row.sourceType } : {}),
-    patch: typeof seed.patch === 'string' ? seed.patch : 'unknown',
+    patch: currentBuildSeed().patch,
     sourceUrl: row.sourceUrl,
     ...(winRate != null ? { winRate } : {}),
     ...(matches != null ? { matches } : {}),
@@ -132,5 +111,5 @@ export function getUggDefaultItemBuild(
 }
 
 export function uggDefaultBuildSeedPatch(): string {
-  return typeof seed.patch === 'string' ? seed.patch : 'unknown'
+  return currentBuildSeed().patch
 }

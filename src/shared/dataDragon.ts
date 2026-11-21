@@ -277,6 +277,92 @@ export async function loadChampionMaps(version: string): Promise<{
   return { byLowerName, champions }
 }
 
+/**
+ * Every Summoner's Rift item by id, unfiltered and not deduped by name — what the in-game
+ * advisor needs to read inventories (trinkets, transforms like Muramana, tier-3 boots).
+ */
+export type CatalogItem = {
+  id: number
+  name: string
+  description: string
+  plaintext: string
+  tags: string[]
+  stats: Record<string, number>
+  gold: { base: number; total: number; sell: number; purchasable: boolean }
+  from?: string[]
+  into?: string[]
+  specialRecipe?: number
+  depth?: number
+  consumed?: boolean
+  inStore: boolean
+}
+
+export function itemCatalogFromDDragonData(data: Record<string, unknown>): Map<number, CatalogItem> {
+  const out = new Map<number, CatalogItem>()
+  for (const [idText, raw] of Object.entries(data)) {
+    const id = Number(idText)
+    if (!Number.isInteger(id) || id <= 0 || id >= 10000 || raw == null || typeof raw !== 'object') {
+      continue
+    }
+    const item = raw as Record<string, unknown>
+    const maps = item.maps != null && typeof item.maps === 'object' ? (item.maps as Record<string, unknown>) : {}
+    if (maps['11'] !== true) {
+      continue
+    }
+    const gold = item.gold != null && typeof item.gold === 'object' ? (item.gold as Record<string, unknown>) : {}
+    const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : undefined)
+    out.set(id, {
+      id,
+      name: typeof item.name === 'string' ? item.name : `Item ${id}`,
+      description: typeof item.description === 'string' ? item.description : '',
+      plaintext: typeof item.plaintext === 'string' ? item.plaintext : '',
+      tags: strings(item.tags) ?? [],
+      stats: item.stats != null && typeof item.stats === 'object' ? (item.stats as Record<string, number>) : {},
+      gold: {
+        base: typeof gold.base === 'number' ? gold.base : 0,
+        total: typeof gold.total === 'number' ? gold.total : 0,
+        sell: typeof gold.sell === 'number' ? gold.sell : 0,
+        purchasable: gold.purchasable === true
+      },
+      from: strings(item.from),
+      into: strings(item.into),
+      specialRecipe: typeof item.specialRecipe === 'number' ? item.specialRecipe : undefined,
+      depth: typeof item.depth === 'number' ? item.depth : undefined,
+      consumed: item.consumed === true,
+      inStore: item.inStore !== false
+    })
+  }
+  return out
+}
+
+const itemCatalogCache = new Map<string, Promise<Map<number, CatalogItem>>>()
+
+export function loadItemCatalog(version: string): Promise<Map<number, CatalogItem>> {
+  let pending = itemCatalogCache.get(version)
+  if (!pending) {
+    pending = fetch(`https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/item.json`)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`item.json ${res.status}`)
+        }
+        return res.json() as Promise<{ data?: Record<string, unknown> }>
+      })
+      .then((j) => itemCatalogFromDDragonData(j.data ?? {}))
+    pending.catch(() => itemCatalogCache.delete(version))
+    itemCatalogCache.set(version, pending)
+  }
+  return pending
+}
+
+export function ddragonSummonerSpellImageUrl(version: string, spellKey: string): string {
+  return `https://ddragon.leagueoflegends.com/cdn/${version}/img/spell/${spellKey}.png`
+}
+
+/** Rune icons are not versioned on Data Dragon. */
+export function ddragonRuneImageUrl(iconPath: string): string {
+  return `https://ddragon.leagueoflegends.com/cdn/img/${iconPath}`
+}
+
 export async function loadItemMaps(version: string): Promise<{
   byId: Map<number, ItemLite>
   items: ItemLite[]

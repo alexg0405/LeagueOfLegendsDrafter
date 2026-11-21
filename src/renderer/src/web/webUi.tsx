@@ -1,15 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react'
 
-export type WebRoute = 'draft' | 'suggestions'
+export type WebRoute = 'draft' | 'suggestions' | 'builds'
 
 const VISITOR_COUNTER_URL = '/api/visit'
 
 /** Solid dark fill + [color-scheme:dark] so native selects/inputs do not render as light system panels. */
 export const webFieldClass =
-  'nexus-focus w-full rounded-md border border-white/[0.1] bg-[#0b1c16] text-[#e8f3ee] [color-scheme:dark] font-mono text-sm py-2.5 px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] placeholder:text-nexus-muted/55 focus:border-nexus-lime/40 focus:outline-none focus:ring-1 focus:ring-nexus-lime/15 disabled:opacity-45'
+  'nexus-focus w-full rounded-md border border-white/[0.1] bg-nexus-surface text-nexus-text [color-scheme:dark] font-mono text-sm py-2.5 px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] placeholder:text-nexus-muted/55 focus:border-nexus-lime/40 focus:outline-none focus:ring-1 focus:ring-nexus-lime/15 disabled:opacity-45'
 export const webFieldClassCompact = `${webFieldClass} py-2 text-xs`
 export const buttonClass =
-  'nexus-focus inline-flex items-center justify-center font-display text-xs sm:text-sm tracking-[0.16em] uppercase px-5 py-2.5 border border-nexus-lime bg-nexus-lime text-nexus-bg border-nexus-lime/90 shadow-[0_0_24px_rgba(35,213,176,0.18)] hover:brightness-110 active:brightness-95 disabled:opacity-40'
+  'nexus-focus inline-flex items-center justify-center font-display text-xs sm:text-sm tracking-[0.16em] uppercase px-5 py-2.5 border border-nexus-lime bg-nexus-lime text-nexus-bg border-nexus-lime/90 shadow-[0_0_24px_color-mix(in_srgb,var(--nexus-lime)_18%,transparent)] hover:brightness-110 active:brightness-95 disabled:opacity-40'
 export const solidGlitchCtaClass = `${buttonClass} nexus-glitch-cta nexus-glitch-cta--solid`
 export const outlineGlitchCtaClass =
   'nexus-focus nexus-glitch-cta nexus-glitch-cta--outline inline-flex items-center justify-center border border-nexus-line px-5 py-2.5 font-display text-xs sm:text-sm tracking-[0.16em] uppercase text-nexus-lime/90 hover:border-nexus-lime/60 hover:bg-nexus-lime/10'
@@ -19,14 +19,17 @@ export function readWebRoute(): WebRoute {
     return 'draft'
   }
   const path = window.location.pathname.replace(/\/+$/, '')
+  if (path.endsWith('/builds') || path.endsWith('/build')) {
+    return 'builds'
+  }
   return path.endsWith('/ask') || path.endsWith('/suggestions') ? 'suggestions' : 'draft'
 }
 
 export function WebPageShell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen overflow-hidden [color-scheme:dark] bg-[radial-gradient(circle_at_20%_0%,rgba(35,213,176,0.14),transparent_32%),radial-gradient(circle_at_80%_10%,rgba(83,166,255,0.1),transparent_28%),linear-gradient(180deg,var(--nexus-bg),#03100c)] text-nexus-text font-body antialiased flex flex-col">
+    <div className="min-h-screen overflow-hidden [color-scheme:dark] bg-[radial-gradient(circle_at_20%_0%,color-mix(in_srgb,var(--nexus-lime)_14%,transparent),transparent_32%),radial-gradient(circle_at_80%_10%,color-mix(in_srgb,var(--nexus-blue)_10%,transparent),transparent_28%),linear-gradient(180deg,var(--nexus-bg),color-mix(in_srgb,var(--nexus-bg)_70%,black))] text-nexus-text font-body antialiased flex flex-col">
       <div className="nexus-noise fixed inset-0 pointer-events-none opacity-60" aria-hidden />
-      <div className="pointer-events-none fixed inset-x-0 top-0 h-px bg-nexus-lime/70 shadow-[0_0_24px_rgba(35,213,176,0.7)]" aria-hidden />
+      <div className="pointer-events-none fixed inset-x-0 top-0 h-px bg-nexus-lime/70 shadow-[0_0_24px_color-mix(in_srgb,var(--nexus-lime)_70%,transparent)]" aria-hidden />
       {children}
     </div>
   )

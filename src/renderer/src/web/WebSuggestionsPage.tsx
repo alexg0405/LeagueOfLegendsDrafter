@@ -151,12 +151,12 @@ export function WebSuggestionsPage({ onNavigateDraft }: { onNavigateDraft: () =>
       </a>
       <main id="nexus-web-main" className="relative mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:px-6 lg:px-8">
         <section className="nexus-command-deck relative mb-5 overflow-hidden border border-nexus-line bg-nexus-surface-2/90 p-5 shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
-          <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(35,213,176,0.12),transparent_35%,rgba(83,166,255,0.08))]" aria-hidden />
+          <div className="absolute inset-0 bg-[linear-gradient(110deg,color-mix(in_srgb,var(--nexus-lime)_12%,transparent),transparent_35%,color-mix(in_srgb,var(--nexus-blue)_8%,transparent))]" aria-hidden />
           <div className="relative">
             <MicroLabel className="text-nexus-lime/80">suggestions // feedback</MicroLabel>
             <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <h1 className="font-display text-5xl leading-none tracking-[0.06em] text-nexus-text drop-shadow-[0_0_18px_rgba(231,255,245,0.10)] sm:text-7xl">
+                <h1 className="font-display text-5xl leading-none tracking-[0.06em] text-nexus-text drop-shadow-[0_0_18px_color-mix(in_srgb,var(--nexus-text)_10%,transparent)] sm:text-7xl">
                   SUGGEST<span className="text-nexus-lime">IONS</span>
                 </h1>
                 <p className="mt-3 max-w-2xl font-mono text-sm text-nexus-muted leading-relaxed">

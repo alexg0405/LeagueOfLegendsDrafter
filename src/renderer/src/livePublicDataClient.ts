@@ -1,6 +1,8 @@
 import {
   applyLivePublicDataPayload,
+  buildSeedInfo,
   getPublicMetaStatsInfo,
+  isNewerBuildSeed,
   getPublicSynergyStatsInfo,
   type LivePublicDataApplyResult,
   type LivePublicDataPayload
@@ -11,6 +13,9 @@ type LivePublicDataManifest = {
   updatedAt?: unknown
   metaUrl?: unknown
   synergyUrl?: unknown
+  buildsUrl?: unknown
+  buildsPatch?: unknown
+  buildsUpdatedAt?: unknown
 }
 
 export type LivePublicDataRefreshStatus = LivePublicDataApplyResult & {
@@ -39,9 +44,16 @@ async function fetchWebPayload(): Promise<LivePublicDataPayload> {
   const manifest = (await fetchJson(WEB_MANIFEST_URL)) as LivePublicDataManifest
   const metaUrl = stringField(manifest.metaUrl) ?? 'publicMetaStatsSeed.json'
   const synergyUrl = stringField(manifest.synergyUrl) ?? 'publicSynergyStatsSeed.json'
-  const metaSeed = await fetchJson(resolveManifestUrl(metaUrl, WEB_MANIFEST_URL))
-  const synergySeed = await fetchJson(resolveManifestUrl(synergyUrl, WEB_MANIFEST_URL))
-  return { manifest, metaSeed, synergySeed, source: 'web-live' }
+  const held = buildSeedInfo()
+  const buildsUrl = isNewerBuildSeed({ patch: manifest.buildsPatch, updatedAt: manifest.buildsUpdatedAt }, held)
+    ? stringField(manifest.buildsUrl)
+    : null
+  const [metaSeed, synergySeed, buildSeed] = await Promise.all([
+    fetchJson(resolveManifestUrl(metaUrl, WEB_MANIFEST_URL)),
+    fetchJson(resolveManifestUrl(synergyUrl, WEB_MANIFEST_URL)),
+    buildsUrl ? fetchJson(resolveManifestUrl(buildsUrl, WEB_MANIFEST_URL)).catch(() => undefined) : Promise.resolve(undefined)
+  ])
+  return { manifest, metaSeed, synergySeed, buildSeed, source: 'web-live' }
 }
 
 async function fetchDesktopPayload(): Promise<LivePublicDataPayload | null> {
@@ -49,7 +61,8 @@ async function fetchDesktopPayload(): Promise<LivePublicDataPayload | null> {
   if (!bridge?.getLivePublicData) {
     return null
   }
-  const payload = await bridge.getLivePublicData()
+  const held = buildSeedInfo()
+  const payload = await bridge.getLivePublicData({ buildsPatch: held.statsPatch, buildsUpdatedAt: held.updatedAt })
   if (!payload.ok) {
     throw new Error(payload.error)
   }
@@ -57,6 +70,7 @@ async function fetchDesktopPayload(): Promise<LivePublicDataPayload | null> {
     manifest: payload.manifest,
     metaSeed: payload.metaSeed,
     synergySeed: payload.synergySeed,
+    buildSeed: payload.buildSeed,
     source: 'desktop-live'
   }
 }
@@ -74,6 +88,7 @@ export async function refreshLivePublicData(): Promise<LivePublicDataRefreshStat
       reason: error instanceof Error ? error.message : 'Unable to refresh live public meta.',
       meta: getPublicMetaStatsInfo(),
       synergy: getPublicSynergyStatsInfo(),
+      builds: buildSeedInfo(),
       checkedAt
     }
   }

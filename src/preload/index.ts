@@ -3,13 +3,19 @@ import type { AppUpdateCheckResult, AppUpdateStatus } from '../shared/appUpdate'
 import type { PlayerChampionPoolRequest, PlayerChampionPoolResponse } from '../shared/draft'
 import type { OverlayEnginePrefsPatch } from '../shared/draft/types'
 import type { LcuChampSelectResult } from '../shared/draft/lcuTypes'
+import type { LiveGameStatus } from '../shared/draft/liveGame'
+import type { OverlayLayout, OverlayLayoutState } from '../shared/overlayLayout'
 import type {
   LcuDiagnosticResult,
   OverlayDiagnosticsResult,
   OverlayResetResult,
   OverlayShortcutStatusResult,
   OverlayStatusResult,
-  OverlayToggleResult
+  OverlayPositionRequest,
+  OverlayPositionStatus,
+  OverlayToggleResult,
+  PeekSettingsPatch,
+  PeekStatus
 } from '../shared/desktopInterop'
 
 const api = {
@@ -56,11 +62,71 @@ const api = {
 
   lcuFetch: () => ipcRenderer.invoke('lcu:fetch') as Promise<LcuChampSelectResult>,
   getLcuDiagnostics: () => ipcRenderer.invoke('lcu:diagnostics') as Promise<LcuDiagnosticResult>,
-  getLivePublicData: () =>
-    ipcRenderer.invoke('publicMeta:getLive') as Promise<
-      | { ok: true; manifest: unknown; metaSeed: unknown; synergySeed: unknown }
+  /** Pass the build data you already hold so main skips downloading an identical copy. */
+  getLivePublicData: (have?: { buildsPatch?: string | null; buildsUpdatedAt?: string | null }) =>
+    ipcRenderer.invoke('publicMeta:getLive', have ?? null) as Promise<
+      | { ok: true; manifest: unknown; metaSeed: unknown; synergySeed: unknown; buildSeed?: unknown }
       | { ok: false; error: string }
     >,
+  /** In-game peek key (Caps Lock by default) that shows the overlay's Build tab. */
+  getPeekStatus: () => ipcRenderer.invoke('overlay:peekStatus') as Promise<PeekStatus>,
+  setPeekSettings: (patch: PeekSettingsPatch) => ipcRenderer.invoke('overlay:setPeek', patch) as Promise<PeekStatus>,
+  onPeekStatus: (cb: (status: PeekStatus) => void) => {
+    const handler = (_: unknown, status: PeekStatus) => {
+      cb(status)
+    }
+    ipcRenderer.on('overlay:peekStatusChanged', handler)
+    return () => {
+      ipcRenderer.removeListener('overlay:peekStatusChanged', handler)
+    }
+  },
+  /** Champ select and in game each remember their own overlay spot; presets move it. */
+  getOverlayPosition: () => ipcRenderer.invoke('overlay:position') as Promise<OverlayPositionStatus>,
+  setOverlayPosition: (req: OverlayPositionRequest) =>
+    ipcRenderer.invoke('overlay:setPosition', req) as Promise<OverlayPositionStatus>,
+  /** In-game layout: which sections show in the main overlay vs floating boxes. */
+  getOverlayLayout: () => ipcRenderer.invoke('overlay:layout') as Promise<OverlayLayoutState>,
+  setOverlayLayout: (layout: OverlayLayout) => ipcRenderer.invoke('overlay:setLayout', layout) as Promise<OverlayLayoutState>,
+  /** Show boxes (with placeholders when no game is running) so they can be dragged into place. */
+  setArrangeBoxes: (arranging: boolean) => ipcRenderer.invoke('overlay:arrangeBoxes', arranging) as Promise<OverlayLayoutState>,
+  onOverlayLayout: (cb: (state: OverlayLayoutState) => void) => {
+    const handler = (_: unknown, state: OverlayLayoutState) => {
+      cb(state)
+    }
+    ipcRenderer.on('overlay:layoutChanged', handler)
+    return () => {
+      ipcRenderer.removeListener('overlay:layoutChanged', handler)
+    }
+  },
+  /** Overlay, in game: report the height the Build tab needs so the window hugs it. */
+  fitOverlayHeight: (height: number) => {
+    ipcRenderer.send('overlay:fitHeight', height)
+  },
+  /** Box windows: report content height so the window hugs it. */
+  fitBox: (height: number) => {
+    ipcRenderer.send('box:fit', height)
+  },
+  /** Main -> overlay: peek started/ended during a game. */
+  onOverlayPeek: (cb: (payload: { active: boolean }) => void) => {
+    const handler = (_: unknown, payload: { active: boolean }) => {
+      cb(payload)
+    }
+    ipcRenderer.on('overlay:peek', handler)
+    return () => {
+      ipcRenderer.removeListener('overlay:peek', handler)
+    }
+  },
+  /** Riot Live Client Data API (in-game items/levels/KDA), polled by the main process. */
+  getLiveGame: () => ipcRenderer.invoke('livegame:get') as Promise<LiveGameStatus>,
+  onLiveGameUpdate: (cb: (status: LiveGameStatus) => void) => {
+    const handler = (_: unknown, status: LiveGameStatus) => {
+      cb(status)
+    }
+    ipcRenderer.on('livegame:update', handler)
+    return () => {
+      ipcRenderer.removeListener('livegame:update', handler)
+    }
+  },
   getPlayerChampionPool: (request: PlayerChampionPoolRequest) =>
     ipcRenderer.invoke('riot:playerChampionPool', request) as Promise<PlayerChampionPoolResponse>,
   importPlayerChampionPoolFromOverlay: (request: PlayerChampionPoolRequest) =>
@@ -118,6 +184,18 @@ const api = {
 
   /** The big window is hidden at launch; the overlay expands it on demand. */
   showMainWindow: () => ipcRenderer.invoke('mainWindow:show') as Promise<{ ok: true; visible: boolean }>,
+  /** Open the main window on Setup (theme, in-game layout). */
+  openSettings: () => ipcRenderer.invoke('mainWindow:openSettings') as Promise<{ ok: true; visible: boolean }>,
+  takePendingMainView: () => ipcRenderer.invoke('mainWindow:takePendingView') as Promise<'settings' | null>,
+  onMainNavigate: (cb: (payload: { view: 'settings' }) => void) => {
+    const handler = (_: unknown, payload: { view: 'settings' }) => {
+      cb(payload)
+    }
+    ipcRenderer.on('mainWindow:navigate', handler)
+    return () => {
+      ipcRenderer.removeListener('mainWindow:navigate', handler)
+    }
+  },
   hideMainWindow: () => ipcRenderer.invoke('mainWindow:hide') as Promise<{ ok: true; visible: boolean }>,
   toggleMainWindow: () => ipcRenderer.invoke('mainWindow:toggle') as Promise<{ ok: true; visible: boolean }>,
   getMainWindowStatus: () =>

@@ -1124,7 +1124,7 @@ export function MainShell() {
   const topBar = {
     runnerId: 'NEXUS//LOCAL',
     dataVersion: ddVersion && ddVersion[0] !== '(' ? ddVersion : '—',
-    build: '4.11.0',
+    build: '5.1.0',
     link: lcuStatus === 'ready' ? 'League: ready' : 'League: waiting',
     resourceLine: `Picks from: ${copyDraftSource(draftSource)} · Suggestions: ${patchLabel ?? ENGINE_V1_LABEL} · ${livePublicDataStatusLine(liveDataStatus)}`,
     onMinimizeApp: () => {

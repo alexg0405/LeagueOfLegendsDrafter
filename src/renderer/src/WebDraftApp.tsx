@@ -2223,8 +2223,8 @@ export function WebDraftApp() {
               <a
                 className={`${solidGlitchCtaClass} mt-3`}
                 data-glitch-label="Download EXE"
-                href={EXE_DOWNLOAD_URL}
-                download={EXE_DOWNLOAD_FILE}
+                href={exeUrl}
+                download={exeFile}
                 onPointerEnter={(event) => emitNexusEffect('button:hover', { x: event.clientX, y: event.clientY })}
                 onPointerDown={(event) => emitNexusEffect('button:press', { x: event.clientX, y: event.clientY })}
               >

@@ -218,7 +218,8 @@ export function OverlayLayoutEditor({
         className={`${chip(false)} w-full`}
         onClick={() => {
           onArrange(false)
-          onChange({ ...DEFAULT_OVERLAY_LAYOUT, main: [...DEFAULT_OVERLAY_LAYOUT.main], boxes: [] })
+          // Champ select settings live in their own card and keep their own reset.
+          onChange({ ...DEFAULT_OVERLAY_LAYOUT, main: [...DEFAULT_OVERLAY_LAYOUT.main], boxes: [], draft: layout.draft })
         }}
       >
         Reset layout

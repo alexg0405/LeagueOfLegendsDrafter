@@ -44,6 +44,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { loadLocalEnv, loadLocalEnvWhenReady } from './loadLocalEnv'
 import { setupAppUpdater } from './appUpdater'
 import { fetchChampSelectSession, getLcuDiagnostics } from './lcuClient'
+import { ChampSelectWatch, champSelectSignal } from './champSelectWatch'
 import { fetchLivePublicDataPayload } from './livePublicDataFetcher'
 import { getLastLiveGameStatus, startLiveGamePolling } from './liveClientData'
 import { createPeekKeyReader, createPeekPoller } from './peekKey'
@@ -819,6 +820,58 @@ function mainOverlayHasSections(): boolean {
   return getOverlayLayout().main.length > 0
 }
 
+/** Lets the overlay reset to its Draft tab for a new draft and close any open table after one. */
+function notifyOverlayChampSelect(active: boolean) {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.webContents.send('overlay:champSelect', { active })
+  }
+}
+
+/** Champ select is over: put the overlay away. In game the peek key or toggle key brings it back. */
+function hideOverlayAfterDraft() {
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    return
+  }
+  if (overlayProjectionOpen) {
+    // Shrink back from a full-size table without re-showing (setOverlayProjectionMode would show).
+    overlayWindow.setMinimumSize(320, 200)
+    if (overlayCompactBounds) {
+      overlayWindow.setBounds(clampOverlayBounds(overlayCompactBounds), true)
+    }
+    overlayProjectionOpen = false
+  }
+  if (overlayWindow.isVisible()) {
+    diagLog('[overlay] hide (champ select ended)')
+    overlayWindow.hide()
+    stopOverlayTopmostReassert()
+  }
+}
+
+/** About 1.2 s of "no session" polls before the overlay treats champ select as over. */
+const CHAMP_SELECT_END_POLLS = 3
+const champSelectWatch = new ChampSelectWatch({
+  endAfter: CHAMP_SELECT_END_POLLS,
+  onStart: () => {
+    const { openOnChampSelect } = getOverlayLayout().draft
+    diagLog(`[overlay] champ select started${openOnChampSelect ? '' : ' (auto-open off)'}`)
+    notifyOverlayChampSelect(true)
+    if (openOnChampSelect) {
+      if (!overlayWindow || overlayWindow.isDestroyed()) {
+        createOverlayWindow()
+      }
+      showOverlay('champ-select')
+    }
+  },
+  onEnd: () => {
+    const { closeAfterChampSelect } = getOverlayLayout().draft
+    diagLog(`[overlay] champ select ended${closeAfterChampSelect ? '' : ' (auto-close off)'}`)
+    notifyOverlayChampSelect(false)
+    if (closeAfterChampSelect) {
+      hideOverlayAfterDraft()
+    }
+  }
+})
+
 function toggleOverlayWindow() {
   peekController?.userToggled()
   // In game with boxes: the hotkey shows/hides everything together.
@@ -1210,6 +1263,7 @@ app.whenReady().then(() => {
     }
     void fetchChampSelectSession()
       .then((r) => {
+        champSelectWatch.update(champSelectSignal(r))
         if (!mainWindow || mainWindow.isDestroyed()) {
           return
         }

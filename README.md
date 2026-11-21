@@ -49,7 +49,8 @@ stays loaded but hidden (it owns the draft engine that feeds the overlay). Use `
 overlay to expand the full window, and `Collapse` in its title bar to go back.
 
 All settings live on the full window's **Setup** page (the overlay's ⚙ opens it): overlay keys,
-theme and the in-game layout. Labels stay short; the `i` badges explain each control.
+what the overlay shows in champ select and in game, and the theme. Labels stay short; the `i`
+badges explain each control.
 
 Overlay toggle keys default to `Insert` / `F9` / `F10`. Windows refuses a key that another app
 already owns, so the overlay shows the key that actually registered — or tells you none did. Rebind
@@ -65,6 +66,21 @@ leave it in champ select and where you leave it in game.
 
 Main-process logs (including every overlay show/hide/failure) go to
 `%APPDATA%/nexusdraft/logs/nexus-draft-main.log` in packaged builds.
+
+## Champ Select Overlay
+
+The overlay opens when champ select starts and closes when it ends (the game starts, or someone
+dodges). In game, the peek key or your toggle key brings it back. By default the Draft tab is just
+your top 5 picks for your role, each with how much it changes your win chance. Everything else is
+opt-in under **Setup → Champ select overlay**: how many picks, more per pick (score, who it beats,
+who it pairs with, runes, tips, build), more sections (both teams, your matchups, draft intel,
+champion search, coaching), the Draft/Build tabs, data status, hotkey hint, engine settings, the
+full tables, and the open/close behavior itself.
+
+Champ select start and end come from the same 400 ms League client poll that feeds the draft. The
+overlay closes after about 1.2 s with no session, so one failed request never closes it mid-draft.
+To test without League, set `LEAGUE_LOCKFILE` to the lockfile of a mock client on `127.0.0.1` that
+answers `/lol-champ-select/v1/session` (404 means no champ select).
 
 ## Build Paths And In-Game Help
 

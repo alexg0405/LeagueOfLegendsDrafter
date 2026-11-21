@@ -1,13 +1,58 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_DRAFT_OVERLAY,
   DEFAULT_OVERLAY_LAYOUT,
   boxLabel,
   moveBlockTo,
+  normalizeDraftOverlay,
   normalizeOverlayLayout,
   placeOf,
   removeBox,
   shiftBlock
 } from './overlayLayout'
+
+describe('champ select overlay settings', () => {
+  it('default to a plain list: top 5 picks with their win chance, opening and closing with champ select', () => {
+    const draft = normalizeOverlayLayout(null).draft
+    expect(draft).toEqual(DEFAULT_DRAFT_OVERLAY)
+    expect(draft.picks).toBe(5)
+    expect(Object.entries(draft.pickDetails).filter(([, on]) => on).map(([key]) => key)).toEqual(['delta'])
+    expect(Object.values(draft.sections).some(Boolean)).toBe(false)
+    expect(draft.openOnChampSelect).toBe(true)
+    expect(draft.closeAfterChampSelect).toBe(true)
+  })
+
+  it('give layouts saved before these settings existed the plain defaults', () => {
+    const layout = normalizeOverlayLayout({ main: ['next'], boxes: [], showSkills: false })
+    expect(layout.showSkills).toBe(false)
+    expect(layout.draft).toEqual(DEFAULT_DRAFT_OVERLAY)
+  })
+
+  it('keep valid choices and fall back field by field on junk', () => {
+    const draft = normalizeDraftOverlay({
+      picks: 8,
+      sections: { board: true, lookup: 'yes', bogus: true },
+      pickDetails: { delta: false, runes: true },
+      extras: null,
+      openOnChampSelect: false,
+      closeAfterChampSelect: 'no'
+    })
+    expect(draft.picks).toBe(8)
+    expect(draft.sections).toEqual({ ...DEFAULT_DRAFT_OVERLAY.sections, board: true })
+    expect(draft.pickDetails).toEqual({ ...DEFAULT_DRAFT_OVERLAY.pickDetails, delta: false, runes: true })
+    expect(draft.extras).toEqual(DEFAULT_DRAFT_OVERLAY.extras)
+    expect(draft.openOnChampSelect).toBe(false)
+    expect(draft.closeAfterChampSelect).toBe(true)
+    expect(normalizeDraftOverlay({ picks: 7 }).picks).toBe(5)
+  })
+
+  it('never hand out the shared default objects', () => {
+    const a = normalizeOverlayLayout(null)
+    const b = normalizeOverlayLayout(null)
+    expect(a.draft).not.toBe(b.draft)
+    expect(a.draft.sections).not.toBe(DEFAULT_DRAFT_OVERLAY.sections)
+  })
+})
 
 describe('overlay layout', () => {
   it('starts with every section in the main overlay and no boxes', () => {

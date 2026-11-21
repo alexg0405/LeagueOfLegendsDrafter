@@ -1,10 +1,91 @@
 /**
- * In-game overlay layout: which info sections show, and where.
+ * What the overlay shows, in champ select (`draft`) and in game (everything else).
  *
- * Every section lives in exactly one place: the main overlay, one of up to four floating
- * boxes (separate small windows the player drags anywhere on screen), or hidden. Stored by
- * the main process so every window renders the same layout.
+ * In game, every section lives in exactly one place: the main overlay, one of up to four
+ * floating boxes (separate small windows the player drags anywhere on screen), or hidden.
+ * Stored by the main process so every window renders the same layout.
  */
+
+/** Optional panels under the champ select pick list, in the order they render. */
+export const DRAFT_SECTIONS = ['board', 'matchups', 'intel', 'lookup', 'coaching'] as const
+export type DraftSection = (typeof DRAFT_SECTIONS)[number]
+
+export const DRAFT_SECTION_LABELS: Record<DraftSection, string> = {
+  board: 'Both teams',
+  matchups: 'Your matchups',
+  intel: 'Draft intel',
+  lookup: 'Champion search',
+  coaching: 'Coaching'
+}
+
+/** Extra info on each pick row. The portrait and name always show. */
+export const PICK_DETAILS = ['delta', 'score', 'beats', 'pairs', 'runes', 'tips', 'build'] as const
+export type PickDetail = (typeof PICK_DETAILS)[number]
+
+export const PICK_DETAIL_LABELS: Record<PickDetail, string> = {
+  delta: 'Win chance',
+  score: 'Score',
+  beats: 'Beats',
+  pairs: 'Pairs with',
+  runes: 'Runes',
+  tips: 'Tips',
+  build: 'Build'
+}
+
+/** Overlay chrome while drafting. */
+export const DRAFT_EXTRAS = ['tabs', 'dataStatus', 'hotkeys', 'engine', 'tables'] as const
+export type DraftExtra = (typeof DRAFT_EXTRAS)[number]
+
+export const DRAFT_EXTRA_LABELS: Record<DraftExtra, string> = {
+  tabs: 'Draft/Build tabs',
+  dataStatus: 'Data status',
+  hotkeys: 'Hotkey hint',
+  engine: 'Engine settings',
+  tables: 'Full tables'
+}
+
+export const DRAFT_PICK_COUNTS = [3, 5, 8] as const
+
+/** Champ select overlay: by default just your top picks for your role; the rest is opt-in. */
+export type DraftOverlayPrefs = {
+  /** How many top picks the list shows (one of DRAFT_PICK_COUNTS). */
+  picks: number
+  sections: Record<DraftSection, boolean>
+  pickDetails: Record<PickDetail, boolean>
+  extras: Record<DraftExtra, boolean>
+  /** Show the overlay when champ select starts. */
+  openOnChampSelect: boolean
+  /** Hide it when champ select ends (the game starts, or someone dodges). */
+  closeAfterChampSelect: boolean
+}
+
+export const DEFAULT_DRAFT_OVERLAY: DraftOverlayPrefs = {
+  picks: 5,
+  sections: { board: false, matchups: false, lookup: false, intel: false, coaching: false },
+  pickDetails: { delta: true, score: false, beats: false, pairs: false, runes: false, tips: false, build: false },
+  extras: { tabs: true, dataStatus: false, hotkeys: true, engine: false, tables: false },
+  openOnChampSelect: true,
+  closeAfterChampSelect: true
+}
+
+function readFlags<K extends string>(keys: readonly K[], raw: unknown, fallback: Record<K, boolean>): Record<K, boolean> {
+  const r = raw != null && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  return Object.fromEntries(keys.map((key) => [key, typeof r[key] === 'boolean' ? r[key] : fallback[key]])) as Record<K, boolean>
+}
+
+/** Missing or bad fields fall back to the simple defaults; unknown keys are dropped. */
+export function normalizeDraftOverlay(raw: unknown): DraftOverlayPrefs {
+  const r = raw != null && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const d = DEFAULT_DRAFT_OVERLAY
+  return {
+    picks: (DRAFT_PICK_COUNTS as readonly unknown[]).includes(r.picks) ? (r.picks as number) : d.picks,
+    sections: readFlags(DRAFT_SECTIONS, r.sections, d.sections),
+    pickDetails: readFlags(PICK_DETAILS, r.pickDetails, d.pickDetails),
+    extras: readFlags(DRAFT_EXTRAS, r.extras, d.extras),
+    openOnChampSelect: typeof r.openOnChampSelect === 'boolean' ? r.openOnChampSelect : d.openOnChampSelect,
+    closeAfterChampSelect: typeof r.closeAfterChampSelect === 'boolean' ? r.closeAfterChampSelect : d.closeAfterChampSelect
+  }
+}
 
 export const LIVE_BLOCKS = ['next', 'build', 'adapt', 'enemy'] as const
 export type LiveBlock = (typeof LIVE_BLOCKS)[number]
@@ -30,6 +111,8 @@ export type OverlayLayout = {
   /** Skill max order chip. */
   showSkills: boolean
   boxVisibility: BoxVisibility
+  /** What the Draft tab shows in champ select, and whether the overlay opens/closes with it. */
+  draft: DraftOverlayPrefs
 }
 
 export type OverlayLayoutState = {
@@ -47,7 +130,8 @@ export const DEFAULT_OVERLAY_LAYOUT: OverlayLayout = {
   boxes: [],
   showNewBuys: true,
   showSkills: true,
-  boxVisibility: 'always'
+  boxVisibility: 'always',
+  draft: DEFAULT_DRAFT_OVERLAY
 }
 
 /** Where a section currently lives. */
@@ -58,7 +142,7 @@ export function isLiveBlock(value: unknown): value is LiveBlock {
 }
 
 function cloneDefault(): OverlayLayout {
-  return { ...DEFAULT_OVERLAY_LAYOUT, main: [...DEFAULT_OVERLAY_LAYOUT.main], boxes: [] }
+  return { ...DEFAULT_OVERLAY_LAYOUT, main: [...DEFAULT_OVERLAY_LAYOUT.main], boxes: [], draft: normalizeDraftOverlay(null) }
 }
 
 /**
@@ -97,7 +181,8 @@ export function normalizeOverlayLayout(raw: unknown): OverlayLayout {
     boxes,
     showNewBuys: r.showNewBuys !== false,
     showSkills: r.showSkills !== false,
-    boxVisibility: r.boxVisibility === 'peek' ? 'peek' : 'always'
+    boxVisibility: r.boxVisibility === 'peek' ? 'peek' : 'always',
+    draft: normalizeDraftOverlay(r.draft)
   }
 }
 

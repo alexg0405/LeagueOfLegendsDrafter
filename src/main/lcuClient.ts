@@ -144,7 +144,7 @@ export async function fetchChampSelectSession(): Promise<LcuChampSelectResult> {
   try {
     const { status, body } = await lcuGet('/lol-champ-select/v1/session', creds.port, creds.password)
     if (status === 404) {
-      return { lockfileFound: true, lcuReachable: true, snapshot: null, error: null }
+      return { lockfileFound: true, lcuReachable: true, snapshot: null, champSelect: false, error: null }
     }
     if (status < 200 || status >= 300) {
       return {
@@ -161,7 +161,7 @@ export async function fetchChampSelectSession(): Promise<LcuChampSelectResult> {
       return { lockfileFound: true, lcuReachable: true, snapshot: null, error: 'Invalid JSON from LCU' }
     }
     const snap = parseLcuChampSelectSession(json)
-    return { lockfileFound: true, lcuReachable: true, snapshot: snap, error: null }
+    return { lockfileFound: true, lcuReachable: true, snapshot: snap, champSelect: true, error: null }
   } catch (e) {
     return {
       lockfileFound: true,

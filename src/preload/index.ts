@@ -107,6 +107,16 @@ const api = {
     ipcRenderer.send('box:fit', height)
   },
   /** Main -> overlay: peek started/ended during a game. */
+  /** Champ select started (true) or ended (false), from the main process's LCU poll. */
+  onChampSelect: (cb: (payload: { active: boolean }) => void) => {
+    const handler = (_: unknown, payload: { active: boolean }) => {
+      cb(payload)
+    }
+    ipcRenderer.on('overlay:champSelect', handler)
+    return () => {
+      ipcRenderer.removeListener('overlay:champSelect', handler)
+    }
+  },
   onOverlayPeek: (cb: (payload: { active: boolean }) => void) => {
     const handler = (_: unknown, payload: { active: boolean }) => {
       cb(payload)

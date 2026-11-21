@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { THEMES, useTheme } from '../theme'
 import { useOverlayLayout } from '../builds/useOverlayLayout'
+import { DraftOverlayEditor } from './DraftOverlayEditor'
 import { NexusInfoTip } from './NexusInfoTip'
 import { OverlayControls, type OverlayControlsProps } from './OverlayControls'
 import { OverlayLayoutEditor } from './OverlayLayoutEditor'
@@ -17,7 +18,7 @@ function SettingsCard({ title, tip, children }: { title: string; tip: string; ch
   )
 }
 
-/** Main window → Setup: overlay keys, theme and the in-game layout. Labels only; detail lives in ⓘ tips. */
+/** Main window → Setup: overlay keys, what it shows in champ select and in game, theme. Detail lives in ⓘ tips. */
 export function NexusSettingsView(overlay: OverlayControlsProps) {
   const [theme, setTheme] = useTheme()
   const { state, setLayout, setArranging } = useOverlayLayout()
@@ -29,6 +30,20 @@ export function NexusSettingsView(overlay: OverlayControlsProps) {
     <div className="mx-auto grid w-full max-w-3xl gap-2.5 p-3">
       <SettingsCard title="Overlay" tip="Keys for the overlay and recovery tools if you cannot see it.">
         <OverlayControls {...overlay} />
+      </SettingsCard>
+
+      <SettingsCard
+        title="Champ select overlay"
+        tip="What the overlay shows while you draft. Out of the box it lists your top picks for your role and nothing else; turn on whatever else you want."
+      >
+        <DraftOverlayEditor prefs={state.layout.draft} onChange={(draft) => setLayout({ ...state.layout, draft })} />
+      </SettingsCard>
+
+      <SettingsCard
+        title="In-game layout"
+        tip="What the overlay shows in game, and which parts get their own box: a small window you drag anywhere on screen."
+      >
+        <OverlayLayoutEditor layout={state.layout} arranging={state.arranging} onChange={setLayout} onArrange={setArranging} />
       </SettingsCard>
 
       <SettingsCard title="Theme" tip="Recolors every window: this one, the overlay and your boxes.">
@@ -58,13 +73,6 @@ export function NexusSettingsView(overlay: OverlayControlsProps) {
             )
           })}
         </div>
-      </SettingsCard>
-
-      <SettingsCard
-        title="In-game layout"
-        tip="What the overlay shows in game, and which parts get their own box: a small window you drag anywhere on screen."
-      >
-        <OverlayLayoutEditor layout={state.layout} arranging={state.arranging} onChange={setLayout} onArrange={setArranging} />
       </SettingsCard>
     </div>
   )

@@ -335,6 +335,13 @@ function SectionLabel({ children }: { children: ReactNode }) {
   )
 }
 
+/** Toggle chip for the opt-in engine knobs. */
+function engineChip(on: boolean): string {
+  return on
+    ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
+    : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
+}
+
 function pushOverlayPrefs(patch: OverlayEnginePrefsPatch) {
   void window.drafter.setOverlayEnginePrefs(patch)
 }
@@ -356,8 +363,6 @@ export function OverlayPanel() {
   const [trainedEffects, setTrainedEffects] = useState<CompiledTrainedEffects | null>(null)
   const [pickMatrixOpen, setPickMatrixOpen] = useState(false)
   const [itemMatrixOpen, setItemMatrixOpen] = useState(false)
-  /** Engine knobs stay hidden until asked for — default view is pick-and-go. */
-  const [advancedOpen, setAdvancedOpen] = useState(false)
   /** Hotkeys Windows actually granted, so the footer never advertises a dead key. */
   const [activeHotkeys, setActiveHotkeys] = useState<string[]>([])
   const [itemMatrixPlan, setItemMatrixPlan] = useState<NonNullable<DraftUpdate['draftIntel']>['matchupPlans'][number] | null>(null)
@@ -517,7 +522,6 @@ export function OverlayPanel() {
   }
 
   const s = d.snapshot
-  const topPicks = d.suggestions.slice(0, 6)
   const echo = d.overlayEngineEcho
   const resolvedMc = echo?.resolvedMonteCarlo ?? 0
   const resolvedDeltaList = echo?.resolvedDeltaListMode ?? 'best'
@@ -526,7 +530,6 @@ export function OverlayPanel() {
   const rolloutsMainActive = mcFollowsMain && resolvedMc > 0
   const lcuUi = d.lcuStatus ?? (d.lcuConnected ? 'ready' : 'waiting')
   const lcuLabel = lcuUi === 'ready' ? 'LCU on' : 'LCU waiting'
-  const lcuClass = lcuUi === 'ready' ? 'text-nexus-lime' : 'text-nexus-yellow/90'
   const poolRole: DraftRole | null =
     d.suggestionMyRole != null && d.suggestionMyRole !== 'unknown'
       ? d.suggestionMyRole
@@ -632,6 +635,9 @@ export function OverlayPanel() {
   const liveGame = useLiveGame(buildChampions)
   const enemyPurchases = useEnemyPurchases(liveGame, itemCatalog)
   const { state: layoutState } = useOverlayLayout()
+  /** What the Draft tab shows; set on the main window's Setup page. */
+  const draftShow = layoutState.layout.draft
+  const topPicks = d.suggestions.slice(0, draftShow.picks)
   const openSettings = () => {
     void window.drafter.openSettings().catch(() => {
       /* main window may be mid-teardown */
@@ -672,11 +678,32 @@ export function OverlayPanel() {
       unStatus()
     }
   }, [])
-  const tab: 'draft' | 'build' = peeking ? 'build' : tabChoice?.phase === phase ? tabChoice.tab : phase === 'game' ? 'build' : 'draft'
+  // With the tab bar turned off there is no way to pick a tab, so it just follows the phase.
+  const manualTab = draftShow.extras.tabs && tabChoice?.phase === phase ? tabChoice.tab : null
+  const tab: 'draft' | 'build' = peeking ? 'build' : manualTab ?? (phase === 'game' ? 'build' : 'draft')
   const chooseTab = (next: 'draft' | 'build') => setTabChoice({ phase, tab: next })
   const peekOn = peekKey?.enabled === true && peekKey.available
   const peekKeyLabel = peekKey ? PEEK_KEY_LABELS[peekKey.key] : 'Caps Lock'
   const peekHold = peekKey?.mode !== 'toggle'
+  /** The Draft tab can turn the hotkey hint off; warnings and errors always show. */
+  const showHotkeyHint = peeking || activeHotkeys.length === 0 || tab !== 'draft' || draftShow.extras.hotkeys
+  const showFooter = showHotkeyHint || (Boolean(d.error) && tab === 'draft')
+
+  // A new champ select starts on the Draft tab; when one ends, any open table closes.
+  useEffect(() => {
+    const bridge = window.drafter
+    if (!bridge.onChampSelect) {
+      return
+    }
+    return bridge.onChampSelect(({ active }) => {
+      setTabChoice(null)
+      if (!active) {
+        setPickMatrixOpen(false)
+        setItemMatrixOpen(false)
+        setItemMatrixPlan(null)
+      }
+    })
+  }, [])
 
   /**
    * The overlay hugs its content on every tab so nothing needs scrolling: report the height the
@@ -840,7 +867,8 @@ export function OverlayPanel() {
           </button>
         </span>
       </div>
-      {tab === 'build' && liveActive ? null : (
+      {/* Data refresh status: opt-in from Setup, and never over the in-game build. */}
+      {!draftShow.extras.dataStatus || (tab === 'build' && liveActive) ? null : (
         <div className="nexus-overlay-drag relative z-10 border-b border-nexus-line/60 bg-nexus-surface-2/80 px-3 py-1">
           <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-nexus-muted">
             {livePublicDataStatusLine(liveDataStatus)}
@@ -849,6 +877,7 @@ export function OverlayPanel() {
       )}
 
       {/* Draft in champ select, Build in game: the overlay switches by itself, a click overrides. */}
+      {draftShow.extras.tabs ? (
       <div className="nexus-overlay-nodrag relative z-10 flex border-b border-nexus-line bg-nexus-surface-2/95" role="tablist" aria-label="Overlay view">
         {(['draft', 'build'] as const).map((t) => {
           const on = tab === t
@@ -875,132 +904,7 @@ export function OverlayPanel() {
           )
         })}
       </div>
-
-      {/*
-        One glanceable strip. Everything an average player never touches (delta ordering,
-        Monte Carlo rollouts, override reset) is behind the gear.
-      */}
-      <div className={['nexus-overlay-nodrag border-b border-nexus-line/80 bg-nexus-surface-2/95 px-3 py-2 text-[11px] sm:text-xs font-mono', tab === 'build' ? 'hidden' : ''].join(' ')}>
-        <div className="flex items-center gap-2">
-          <span className="text-nexus-muted uppercase tracking-wide">You</span>
-          <span className="px-2 py-0.5 border border-nexus-lime/50 bg-nexus-lime/10 text-nexus-lime uppercase">
-            {poolRole ?? 'auto'}
-          </span>
-          <NexusInfoTip label="How your role is chosen">
-            Taken from the League client when it is connected, otherwise from the role you set in
-            the main window. Every pick below is scored for this role.
-          </NexusInfoTip>
-
-          <span className="ml-auto inline-flex items-center gap-1.5">
-            <span
-              className={[
-                'h-1.5 w-1.5 rounded-full',
-                lcuUi === 'ready' ? 'bg-nexus-lime' : 'bg-nexus-yellow/90'
-              ].join(' ')}
-              aria-hidden
-            />
-            <span className={lcuClass}>{lcuUi === 'ready' ? 'Live' : 'Waiting'}</span>
-            <NexusInfoTip label="Connection status">
-              {lcuUi === 'ready'
-                ? 'Reading champ select straight from your League client.'
-                : 'League client not detected yet. Start champ select, or enter the draft manually in the main window.'}
-            </NexusInfoTip>
-          </span>
-
-          <button
-            type="button"
-            aria-label="Advanced engine settings"
-            aria-expanded={advancedOpen}
-            title="Advanced settings"
-            className={[
-              'nexus-focus ml-1 h-6 w-6 shrink-0 border text-[13px] leading-none transition-colors',
-              advancedOpen
-                ? 'border-nexus-lime/70 bg-nexus-lime/15 text-nexus-lime'
-                : 'border-nexus-line text-nexus-muted hover:border-nexus-lime/45 hover:text-nexus-text'
-            ].join(' ')}
-            onClick={() => setAdvancedOpen((v) => !v)}
-          >
-            ⚙
-          </button>
-        </div>
-
-        {advancedOpen && (
-          <div className="mt-2 flex flex-col gap-2 border-t border-nexus-line/50 pt-2">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-              <span className="text-nexus-muted uppercase tracking-wide">Order</span>
-              <NexusInfoTip label="About list order">
-                <b>Best</b> puts the champions that gain the most from this lobby on top.
-                <b> Worst</b> flips it — useful for spotting what to ban or avoid.
-              </NexusInfoTip>
-              <button
-                type="button"
-                className={
-                  resolvedDeltaList === 'best'
-                    ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
-                    : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
-                }
-                onClick={() => pushOverlayPrefs({ deltaListModeOverride: 'best' })}
-              >
-                Best
-              </button>
-              <button
-                type="button"
-                className={
-                  resolvedDeltaList === 'worst'
-                    ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
-                    : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
-                }
-                onClick={() => pushOverlayPrefs({ deltaListModeOverride: 'worst' })}
-              >
-                Worst
-              </button>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-              <span className="text-nexus-muted uppercase tracking-wide">Lookahead</span>
-              <NexusInfoTip label="About lookahead">
-                Simulates how the rest of the draft might fill in before scoring a pick. More
-                accurate, slower. <b>Off</b> uses the fast blend only.
-              </NexusInfoTip>
-              <button
-                type="button"
-                className={
-                  rolloutsOffActive
-                    ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
-                    : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
-                }
-                onClick={() => pushOverlayPrefs({ monteCarloOverride: 0 })}
-              >
-                Off
-              </button>
-              <button
-                type="button"
-                className={
-                  rolloutsMainActive
-                    ? 'px-2 py-0.5 border border-nexus-lime bg-nexus-lime/15 text-nexus-lime'
-                    : 'px-2 py-0.5 border border-nexus-line text-nexus-muted hover:text-nexus-text'
-                }
-                onClick={() => pushOverlayPrefs({ monteCarloOverride: null })}
-              >
-                Match main ({resolvedMc})
-              </button>
-              <button
-                type="button"
-                className="ml-auto px-2 py-0.5 border border-nexus-line text-nexus-muted hover:border-nexus-lime/40 hover:text-nexus-text"
-                onClick={() =>
-                  pushOverlayPrefs({
-                    roleOverride: null,
-                    sortByOverride: null,
-                    monteCarloOverride: null,
-                    deltaListModeOverride: null
-                  })
-                }
-              >
-                Reset
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      ) : null}
 
       {pickMatrixOpen && (
         <div className="nexus-overlay-nodrag nexus-matrix-stage absolute inset-0 z-40 flex items-center justify-center p-5 pointer-events-auto">
@@ -1172,7 +1076,7 @@ export function OverlayPanel() {
         ref={scrollRef}
         className={[
           'nexus-overlay-nodrag nexus-overlay-scroll relative z-10 flex-1 min-h-0 overflow-y-auto px-3.5 text-sm leading-relaxed',
-          gameBuildView ? 'py-2.5' : 'py-3.5'
+          gameBuildView || tab === 'draft' ? 'py-2.5' : 'py-3.5'
         ].join(' ')}
       >
         <div ref={scrollInnerRef}>
@@ -1232,9 +1136,288 @@ export function OverlayPanel() {
 
         {tab === 'draft' ? (
         <>
-        {s && (
+        <section className="mb-3">
+          {/* What the list is, for which role, and whether it is reading the client. */}
+          <div className="mb-2 flex items-center gap-1.5 border-b border-nexus-line pb-1.5 font-mono">
+            <h3 className="m-0 text-sm font-bold uppercase tracking-[0.12em] text-nexus-lime/95">Top picks</h3>
+            <span className="border border-nexus-lime/50 bg-nexus-lime/10 px-1.5 text-[10px] font-bold uppercase leading-4 text-nexus-lime">
+              {poolRole ?? 'auto'}
+            </span>
+            <span
+              role="img"
+              aria-label={lcuUi === 'ready' ? 'Reading your League client' : 'League client not detected'}
+              title={lcuUi === 'ready' ? 'Reading champ select from your League client' : 'League client not detected yet'}
+              className={['h-1.5 w-1.5 shrink-0 rounded-full', lcuUi === 'ready' ? 'bg-nexus-lime' : 'bg-nexus-yellow/90'].join(' ')}
+            />
+            <NexusInfoTip label="How picks are ranked" tone="lime">
+              Ranked by how much each champion raises your win chance <i>in this exact lobby</i>, not by overall
+              popularity: <b>Great</b> and <b>Good</b> help, <b>Meh</b> and <b>Risky</b> hurt. Your role comes from the
+              League client, or from the main window when it is not connected.
+              <span className="mt-1 block">
+                {lcuUi === 'ready'
+                  ? 'Reading champ select from your League client.'
+                  : 'League client not detected yet. Start champ select, or enter the draft manually in the main window.'}
+              </span>
+            </NexusInfoTip>
+            <span className="ml-auto flex shrink-0 items-center gap-1">
+              {draftShow.extras.tables ? (
+                <>
+                  <button
+                    type="button"
+                    className="nexus-focus border border-nexus-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-nexus-muted hover:border-nexus-lime/50 hover:text-nexus-text disabled:opacity-45"
+                    onClick={() => setPickMatrixOpen(true)}
+                    disabled={d.suggestions.length === 0}
+                    aria-expanded={pickMatrixOpen}
+                    title="Show the full ranked champion table"
+                  >
+                    See all
+                  </button>
+                  <button
+                    type="button"
+                    className="nexus-focus border border-nexus-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-nexus-muted hover:border-nexus-lime/50 hover:text-nexus-text disabled:opacity-45"
+                    onClick={() => {
+                      if (topItemPlan) {
+                        setItemMatrixPlan(topItemPlan)
+                        setItemMatrixOpen(true)
+                      }
+                    }}
+                    disabled={!topItemPlan}
+                    aria-expanded={itemMatrixOpen}
+                    title="Show the full item build table"
+                  >
+                    Items
+                  </button>
+                </>
+              ) : null}
+              <button
+                type="button"
+                className="nexus-focus border border-nexus-line px-1.5 text-[12px] leading-[18px] text-nexus-muted hover:border-nexus-lime/50 hover:text-nexus-text"
+                onClick={openSettings}
+                title="Choose what this overlay shows (opens Setup)"
+                aria-label="Customize the overlay"
+              >
+                ⚙
+              </button>
+            </span>
+          </div>
+
+          {/* Engine knobs most players never touch: only when turned on in Setup. */}
+          {draftShow.extras.engine ? (
+            <div className="mb-2 flex flex-col gap-1.5 border border-nexus-line/60 bg-nexus-bg/25 px-2 py-1.5 font-mono text-[11px]">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="w-[72px] uppercase tracking-wide text-nexus-muted">Order</span>
+                <button type="button" className={engineChip(resolvedDeltaList === 'best')} onClick={() => pushOverlayPrefs({ deltaListModeOverride: 'best' })}>
+                  Best
+                </button>
+                <button type="button" className={engineChip(resolvedDeltaList === 'worst')} onClick={() => pushOverlayPrefs({ deltaListModeOverride: 'worst' })}>
+                  Worst
+                </button>
+                <NexusInfoTip label="About list order">
+                  <b>Best</b> puts the champions that gain the most from this lobby on top. <b>Worst</b> flips it, which helps
+                  spot what to ban or avoid.
+                </NexusInfoTip>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="w-[72px] uppercase tracking-wide text-nexus-muted">Lookahead</span>
+                <button type="button" className={engineChip(rolloutsOffActive)} onClick={() => pushOverlayPrefs({ monteCarloOverride: 0 })}>
+                  Off
+                </button>
+                <button type="button" className={engineChip(rolloutsMainActive)} onClick={() => pushOverlayPrefs({ monteCarloOverride: null })}>
+                  Match main ({resolvedMc})
+                </button>
+                <NexusInfoTip label="About lookahead">
+                  Simulates how the rest of the draft might fill in before scoring a pick. More accurate, slower. <b>Off</b> uses
+                  the fast blend only.
+                </NexusInfoTip>
+                <button
+                  type="button"
+                  className="ml-auto border border-nexus-line px-2 py-0.5 text-nexus-muted hover:border-nexus-lime/40 hover:text-nexus-text"
+                  onClick={() =>
+                    pushOverlayPrefs({
+                      roleOverride: null,
+                      sortByOverride: null,
+                      monteCarloOverride: null,
+                      deltaListModeOverride: null
+                    })
+                  }
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {topPicks.length === 0 && (
+            <p className="m-0 font-mono text-xs text-nexus-muted">
+              Waiting for champ select. Start a game, or enter the draft manually in the main window.
+            </p>
+          )}
+          <ul className="m-0 list-none space-y-1 p-0" key={d.boardSignature ? d.boardSignature : d.updatedAt}>
+            {topPicks.map((p, i) => {
+              const details = draftShow.pickDetails
+              const verdict = pickVerdict(p.winRateDelta)
+              const showTeamSynergy =
+                p.reasons.includes('team_synergy') &&
+                p.winRateDelta != null &&
+                Math.abs(p.winRateDelta) >= MEANINGFUL_TEAM_SYNERGY_DELTA
+              const showPairs = details.pairs && showTeamSynergy
+              const allies = bestAllySlotsForCandidate(p.championId, poolRole, s?.ally ?? [], trainedEffects)
+              const enemies = bestEnemySlotsForCandidate(p.championId, poolRole, enemySlotsWithInference)
+              const synergySlots = allies.length ? allies : focusedSlots(s?.ally ?? [], poolRole, 'ally')
+              const goodVsSlots = enemies.length ? enemies : focusedSlots(enemySlotsWithInference, poolRole, 'enemy')
+              const matchupPlan = d.draftIntel?.matchupPlans.find((plan) => plan.championId === p.championId) ?? null
+              const showContext = details.beats || showPairs
+              const showExtras = (details.runes && p.runes != null) || details.tips || (details.build && matchupPlan?.itemPlan != null)
+              const intel = formatRuneTipNote(
+                p.runes?.note,
+                p.buildProfile?.buildHint ?? 'Matchup notes locked until board has more context.'
+              )
+              const verdictWhy = [
+                `${verdict.word} for this lobby.`,
+                p.baseWinRate != null && p.contextWinRate != null
+                  ? `Normally wins ${pct(p.baseWinRate)} in ${poolRole ?? 'this role'}; against this draft ${pct(p.contextWinRate)}.`
+                  : null,
+                p.buildProfile ? `Deals ${p.buildProfile.damage} damage as a ${p.buildProfile.archetype}.` : null
+              ]
+                .filter(Boolean)
+                .join(' ')
+              return (
+                <li
+                  key={`${d.boardSignature ?? d.updatedAt}-${i}-${p.championId}`}
+                  className="relative border border-nexus-line/85 bg-nexus-surface-2/90 px-2 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]"
+                >
+                  {/* One line per champion: rank, portrait, name, how much it helps. */}
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 shrink-0 text-center font-mono text-xs tabular-nums text-nexus-muted">{i + 1}</span>
+                    {championIconUrl(p.championId) && (
+                      <img
+                        className="h-8 w-8 shrink-0 border border-nexus-line/80 object-cover"
+                        src={championIconUrl(p.championId)!}
+                        alt=""
+                        width={32}
+                        height={32}
+                      />
+                    )}
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5 font-mono text-sm font-bold leading-tight">
+                      <span className="truncate text-nexus-lime/95">{p.championName}</span>
+                      {details.score ? (
+                        <span className="shrink-0 text-[11px] font-normal tabular-nums text-nexus-muted" title="Model score">
+                          {p.score.toFixed(2)}
+                        </span>
+                      ) : null}
+                      {p.isLockedPick && (
+                        <span className="shrink-0 border border-nexus-lime/70 px-1 text-[9px] uppercase tracking-[0.12em] text-nexus-lime/90">
+                          Picked
+                        </span>
+                      )}
+                    </div>
+                    {details.delta ? (
+                      <span className="flex shrink-0 items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.1em]" title={verdictWhy}>
+                        {p.winRateDelta != null && (
+                          <span className={['font-bold tabular-nums', verdict.cls].join(' ')}>{signedPct(p.winRateDelta)}</span>
+                        )}
+                        <span className={['border px-1.5 py-[1px]', verdict.chip].join(' ')}>{verdict.word}</span>
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {showContext ? (
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 pl-6 font-mono text-[10px]">
+                      {details.beats ? (
+                        <span className="inline-flex items-center gap-1" title="Enemy picks this champion does well against">
+                          <span className="uppercase tracking-[0.1em] text-nexus-red/80">Beats</span>
+                          {goodVsSlots.length ? (
+                            goodVsSlots.map((slot) => (
+                              <ContextPortrait
+                                key={`vs-${p.championId}-${slot.role}-${slot.championId}`}
+                                slot={slot}
+                                imageUrl={championIconUrl(slot.championId)}
+                                tone="enemy"
+                              />
+                            ))
+                          ) : (
+                            <span className="text-nexus-muted">—</span>
+                          )}
+                        </span>
+                      ) : null}
+                      {showPairs ? (
+                        <span className="inline-flex items-center gap-1" title="Teammates this champion combos with">
+                          <span className="uppercase tracking-[0.1em] text-nexus-lime/80">Pairs</span>
+                          {synergySlots.length ? (
+                            synergySlots.map((slot) => (
+                              <ContextPortrait
+                                key={`syn-${p.championId}-${slot.role}-${slot.championId}`}
+                                slot={slot}
+                                imageUrl={championIconUrl(slot.championId)}
+                                tone="ally"
+                              />
+                            ))
+                          ) : (
+                            <span className="text-nexus-muted">—</span>
+                          )}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {showExtras ? (
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 pl-6 font-mono text-[10px]">
+                      {details.runes && p.runes ? (
+                        <span className="inline-flex max-w-full items-center gap-1 border border-nexus-line/70 bg-nexus-bg/25 px-1.5 py-[2px]">
+                          <span className="truncate text-nexus-lime/85">{p.runes.keystone}</span>
+                          <NexusInfoTip label="Full rune page">
+                            Keystone <b>{p.runes.keystone}</b> in {p.runes.primaryTree}, secondary {p.runes.secondary}.
+                          </NexusInfoTip>
+                        </span>
+                      ) : null}
+                      {details.tips ? (
+                        <span className="inline-flex items-center gap-1 border border-nexus-line/70 bg-nexus-bg/25 px-1.5 py-[2px] text-nexus-muted">
+                          <span className="uppercase tracking-[0.1em]">Tips</span>
+                          <NexusInfoTip label={`How to play ${p.championName}`}>
+                            <span>{intel}</span>
+                            {p.buildProfile?.itemHint ? (
+                              <span className="mt-1 block text-nexus-muted">
+                                <b className="text-nexus-lime/80">Items:</b> {p.buildProfile.itemHint}
+                              </span>
+                            ) : null}
+                            {p.buildProfile && p.buildProfile.tagsLine !== '—' ? (
+                              <span className="mt-1 block text-nexus-muted">{p.buildProfile.tagsLine}</span>
+                            ) : null}
+                          </NexusInfoTip>
+                        </span>
+                      ) : null}
+                      {details.build && matchupPlan?.itemPlan ? (
+                        <details className="group w-full border border-nexus-line/65 bg-nexus-bg/25 leading-snug text-nexus-text/75">
+                          <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1 uppercase tracking-[0.1em] text-nexus-muted marker:hidden">
+                            <span>Build</span>
+                            <span className="text-nexus-lime/80 transition-transform group-open:rotate-45">+</span>
+                          </summary>
+                          <div className="border-t border-nexus-line/55 px-2 py-1.5">
+                            <OverlayItemPlan
+                              itemPlan={matchupPlan.itemPlan}
+                              ddragonVersion={d.dataDragonVersion}
+                              compact
+                              limit={2}
+                              showHeader={false}
+                              onOpenMatrix={() => {
+                                setItemMatrixPlan(matchupPlan)
+                                setItemMatrixOpen(true)
+                              }}
+                            />
+                          </div>
+                        </details>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+
+        {draftShow.sections.board && s && (
           <section className="mb-5">
-            <SectionLabel>Draft board</SectionLabel>
+            <SectionLabel>Both teams</SectionLabel>
             <div className="space-y-1.5 font-mono text-xs text-nexus-text/90">
               <div className="flex flex-wrap gap-1.5">
                 <span className="w-full text-nexus-muted uppercase tracking-[0.12em]">Allies</span>
@@ -1254,13 +1437,10 @@ export function OverlayPanel() {
                 ))}
               </div>
             </div>
-            {poolRole && (
-              <p className="font-mono font-bold text-sm text-nexus-lime/90 mt-2.5 m-0">Picks for {poolRole} (team-comp–weighted model)</p>
-            )}
           </section>
         )}
 
-        {myChampion && (
+        {draftShow.sections.matchups && myChampion && (
           <OverlayMatchupList
             championId={myChampion.id}
             championName={myChampion.name}
@@ -1271,7 +1451,7 @@ export function OverlayPanel() {
           />
         )}
 
-        {d.draftIntel && (
+        {draftShow.sections.intel && d.draftIntel && (
           <section className="mb-5">
             <details className="group font-mono">
               <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-3 border-b border-nexus-line pb-1.5 font-bold text-sm uppercase tracking-[0.12em] text-nexus-lime/95 marker:hidden">
@@ -1314,8 +1494,9 @@ export function OverlayPanel() {
           </section>
         )}
 
+        {draftShow.sections.lookup && (
         <section className="mb-5">
-          <SectionLabel>Champion lookup</SectionLabel>
+          <SectionLabel>Champion search</SectionLabel>
           <input
             type="text"
             className="nexus-focus w-full font-mono text-sm py-1.5 px-2.5 border border-nexus-line bg-nexus-bg text-nexus-text placeholder:text-nexus-muted/70 mb-2"
@@ -1490,222 +1671,9 @@ export function OverlayPanel() {
           )}
           {s && !poolRole && <p className="font-mono text-xs text-nexus-muted m-0">Set role in the main app (or LCU) to score a lookup for your role.</p>}
         </section>
+        )}
 
-        <section className="mb-5">
-          <div className="mb-2.5 flex items-center gap-2 border-b border-nexus-line pb-1.5">
-            <h3 className="m-0 mr-auto flex items-center gap-1.5 font-mono text-sm font-bold uppercase tracking-[0.12em] text-nexus-lime/95">
-              Best picks
-              <NexusInfoTip label="How picks are ranked" tone="lime">
-                Ranked by how much each champion raises your win chance <i>in this exact lobby</i> —
-                not by overall popularity.
-              </NexusInfoTip>
-            </h3>
-            <button
-              type="button"
-              className="nexus-focus border border-nexus-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-nexus-muted hover:border-nexus-lime/50 hover:text-nexus-text disabled:opacity-45"
-              onClick={() => setPickMatrixOpen(true)}
-              disabled={d.suggestions.length === 0}
-              aria-expanded={pickMatrixOpen}
-              title="Show the full ranked champion table"
-            >
-              See all
-            </button>
-            <button
-              type="button"
-              className="nexus-focus border border-nexus-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-nexus-muted hover:border-nexus-lime/50 hover:text-nexus-text disabled:opacity-45"
-              onClick={() => {
-                if (topItemPlan) {
-                  setItemMatrixPlan(topItemPlan)
-                  setItemMatrixOpen(true)
-                }
-              }}
-              disabled={!topItemPlan}
-              aria-expanded={itemMatrixOpen}
-              title="Show the full item build table"
-            >
-              Items
-            </button>
-          </div>
-          {topPicks.length === 0 && (
-            <p className="m-0 font-mono text-sm text-nexus-muted">
-              Waiting for champ select. Start a game, or enter the draft manually in the main window.
-            </p>
-          )}
-          <ul
-            className="list-none m-0 p-0 space-y-2.5"
-            key={d.boardSignature ? d.boardSignature : d.updatedAt}
-          >
-            {topPicks.map((p, i) => {
-              const showTeamSynergy =
-                p.reasons.includes('team_synergy') &&
-                p.winRateDelta != null &&
-                Math.abs(p.winRateDelta) >= MEANINGFUL_TEAM_SYNERGY_DELTA
-              const allies = bestAllySlotsForCandidate(p.championId, poolRole, s?.ally ?? [], trainedEffects)
-              const enemies = bestEnemySlotsForCandidate(p.championId, poolRole, enemySlotsWithInference)
-              const allyFallback = focusedSlots(s?.ally ?? [], poolRole, 'ally')
-              const enemyFallback = focusedSlots(enemySlotsWithInference, poolRole, 'enemy')
-              const synergySlots = showTeamSynergy ? (allies.length ? allies : allyFallback) : []
-              const goodVsSlots = enemies.length ? enemies : enemyFallback
-              const intel = formatRuneTipNote(
-                p.runes?.note,
-                p.buildProfile?.buildHint ?? 'Matchup notes locked until board has more context.'
-              )
-              const matchupPlan = d.draftIntel?.matchupPlans.find((plan) => plan.championId === p.championId) ?? null
-              const verdict = pickVerdict(p.winRateDelta)
-              return (
-                <li
-                  key={`${d.boardSignature ?? d.updatedAt}-${i}-${p.championId}`}
-                  className="relative border border-nexus-line/85 bg-nexus-surface-2/90 px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]"
-                >
-                  {/* Row 1: rank, portrait, name, verdict. Readable in one glance. */}
-                  <div className="flex items-center gap-2">
-                    <span className="w-4 shrink-0 text-center font-mono text-xs tabular-nums text-nexus-muted">
-                      {i + 1}
-                    </span>
-                    {championIconUrl(p.championId) && (
-                      <img
-                        className="h-10 w-10 shrink-0 border border-nexus-line/80 object-cover"
-                        src={championIconUrl(p.championId)!}
-                        alt=""
-                        width={40}
-                        height={40}
-                      />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 font-mono font-bold text-sm sm:text-base leading-tight">
-                        <span className="truncate text-nexus-lime/95">{p.championName}</span>
-                        <span className="text-nexus-line">·</span>
-                        <span className="shrink-0 tabular-nums text-nexus-text/90">{p.score.toFixed(2)}</span>
-                        {p.isLockedPick && (
-                          <span className="shrink-0 border border-nexus-lime/70 px-1 text-[9px] uppercase tracking-[0.12em] text-nexus-lime/90">
-                            Picked
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.1em]">
-                        <span className={['border px-1.5 py-[1px]', verdict.chip].join(' ')}>{verdict.word}</span>
-                        {p.winRateDelta != null && (
-                          <span className={['tabular-nums font-bold', verdict.cls].join(' ')}>
-                            {signedPct(p.winRateDelta)}
-                          </span>
-                        )}
-                        <NexusInfoTip label={`Why ${p.championName} is rated ${verdict.word}`}>
-                          <b>{verdict.word}</b> for this lobby.
-                          {p.baseWinRate != null && p.contextWinRate != null ? (
-                            <>
-                              {' '}
-                              Normally wins <b>{pct(p.baseWinRate)}</b> in {poolRole ?? 'this role'}; against
-                              this specific draft it is <b>{pct(p.contextWinRate)}</b>.
-                            </>
-                          ) : null}
-                          {p.buildProfile ? (
-                            <>
-                              {' '}
-                              Deals <b>{p.buildProfile.damage}</b> damage as a {p.buildProfile.archetype}.
-                            </>
-                          ) : null}
-                        </NexusInfoTip>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Row 2: who it beats / pairs with, as portraits only. */}
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 pl-6 font-mono text-[10px]">
-                    <span className="inline-flex items-center gap-1">
-                      <span className="uppercase tracking-[0.1em] text-nexus-red/80">Beats</span>
-                      {goodVsSlots.length ? (
-                        goodVsSlots.map((slot) => (
-                          <ContextPortrait
-                            key={`vs-${p.championId}-${slot.role}-${slot.championId}`}
-                            slot={slot}
-                            imageUrl={championIconUrl(slot.championId)}
-                            tone="enemy"
-                          />
-                        ))
-                      ) : (
-                        <span className="text-nexus-muted">—</span>
-                      )}
-                      <NexusInfoTip label="Beats">
-                        Enemy champions already locked in that this pick matches up well against.
-                      </NexusInfoTip>
-                    </span>
-
-                    {showTeamSynergy && (
-                      <span className="inline-flex items-center gap-1">
-                        <span className="uppercase tracking-[0.1em] text-nexus-lime/80">Pairs</span>
-                        {synergySlots.length ? (
-                          synergySlots.map((slot) => (
-                            <ContextPortrait
-                              key={`syn-${p.championId}-${slot.role}-${slot.championId}`}
-                              slot={slot}
-                              imageUrl={championIconUrl(slot.championId)}
-                              tone="ally"
-                            />
-                          ))
-                        ) : (
-                          <span className="text-nexus-muted">—</span>
-                        )}
-                        <NexusInfoTip label="Pairs">
-                          Teammates this pick combos with — their kits amplify each other.
-                        </NexusInfoTip>
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Row 3: runes + tips collapse into badges; only Build keeps a panel (it draws item icons). */}
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-6 font-mono text-[10px]">
-                    {p.runes && (
-                      <span className="inline-flex max-w-full items-center gap-1 border border-nexus-line/70 bg-nexus-bg/25 px-1.5 py-[2px]">
-                        <span className="truncate text-nexus-lime/85">{p.runes.keystone}</span>
-                        <NexusInfoTip label="Full rune page">
-                          Keystone <b>{p.runes.keystone}</b> in {p.runes.primaryTree}, secondary{' '}
-                          {p.runes.secondary}.
-                        </NexusInfoTip>
-                      </span>
-                    )}
-                    <span className="inline-flex items-center gap-1 border border-nexus-line/70 bg-nexus-bg/25 px-1.5 py-[2px] text-nexus-muted">
-                      <span className="uppercase tracking-[0.1em]">Tips</span>
-                      <NexusInfoTip label={`How to play ${p.championName}`}>
-                        <span>{intel}</span>
-                        {p.buildProfile?.itemHint ? (
-                          <span className="mt-1 block text-nexus-muted">
-                            <b className="text-nexus-lime/80">Items:</b> {p.buildProfile.itemHint}
-                          </span>
-                        ) : null}
-                        {p.buildProfile && p.buildProfile.tagsLine !== '—' ? (
-                          <span className="mt-1 block text-nexus-muted">{p.buildProfile.tagsLine}</span>
-                        ) : null}
-                      </NexusInfoTip>
-                    </span>
-                    {matchupPlan?.itemPlan && (
-                      <details className="group w-full border border-nexus-line/65 bg-nexus-bg/25 leading-snug text-nexus-text/75">
-                        <summary className="nexus-focus flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1 uppercase tracking-[0.1em] text-nexus-muted marker:hidden">
-                          <span>Build</span>
-                          <span className="text-nexus-lime/80 group-open:rotate-45 transition-transform">+</span>
-                        </summary>
-                        <div className="border-t border-nexus-line/55 px-2 py-1.5">
-                          <OverlayItemPlan
-                            itemPlan={matchupPlan.itemPlan}
-                            ddragonVersion={d.dataDragonVersion}
-                            compact
-                            limit={2}
-                            showHeader={false}
-                            onOpenMatrix={() => {
-                              setItemMatrixPlan(matchupPlan)
-                              setItemMatrixOpen(true)
-                            }}
-                          />
-                        </div>
-                      </details>
-                    )}
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        </section>
-
-        {d.geminiNarration && (
+        {draftShow.sections.coaching && d.geminiNarration && (
           <section className="mb-5">
             <SectionLabel>Coaching</SectionLabel>
             <p className="nexus-allow-select font-mono font-bold text-sm text-nexus-text/80 whitespace-pre-wrap max-h-40 overflow-y-auto nexus-overlay-no-scrollbar m-0 leading-relaxed">
@@ -1717,9 +1685,11 @@ export function OverlayPanel() {
         </>
         ) : null}
 
+        {showFooter ? (
         <div className="flex flex-col gap-1.5 border-t border-nexus-line pt-3">
           {d.error && tab === 'draft' && <p className="m-0 font-mono text-xs font-bold leading-snug text-nexus-red">{d.error}</p>}
           {/* Show the key that actually registered — never advertise a dead hotkey. */}
+          {showHotkeyHint ? (
           <p className="m-0 flex flex-wrap items-center gap-x-1.5 font-mono text-[11px] text-nexus-muted">
             {peeking ? (
               <span className="text-nexus-lime">
@@ -1768,7 +1738,9 @@ export function OverlayPanel() {
               </span>
             </NexusInfoTip>
           </p>
+          ) : null}
         </div>
+        ) : null}
         </div>
       </div>
     </div>

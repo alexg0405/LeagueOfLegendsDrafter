@@ -34,6 +34,8 @@ export class OverlayBoxManager {
   private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private visible = false
   private reassertTimer: ReturnType<typeof setInterval> | null = null
+  /** Last layout synced, so a box window that got closed can be rebuilt when boxes show again. */
+  private layout: OverlayLayout | null = null
 
   constructor(private readonly deps: OverlayBoxDeps) {}
 
@@ -47,6 +49,7 @@ export class OverlayBoxManager {
 
   /** Create/destroy windows so there is exactly one per box in the layout. */
   sync(layout: OverlayLayout): void {
+    this.layout = layout
     const wanted = new Set(layout.boxes.map((box) => box.id))
     for (const [id, win] of Array.from(this.windows)) {
       if (!wanted.has(id)) {
@@ -65,6 +68,10 @@ export class OverlayBoxManager {
   }
 
   setVisible(on: boolean): void {
+    // A box window that was closed somehow comes back the next time boxes should show.
+    if (on && this.layout && this.windows.size < this.layout.boxes.length) {
+      this.sync(this.layout)
+    }
     if (on !== this.visible) {
       this.deps.log(`[boxes] ${on ? 'show' : 'hide'} (${this.windows.size})`)
     }
@@ -137,6 +144,9 @@ export class OverlayBoxManager {
       fullscreenable: false,
       alwaysOnTop: true,
       skipTaskbar: true,
+      // Clicking a box (or dragging it) must never pull keyboard focus away from the game.
+      // Boxes have no inputs; dragging works through the drag strip without focus.
+      focusable: false,
       show: false,
       icon: this.deps.iconPath,
       webPreferences: this.deps.webPreferences()
@@ -146,8 +156,10 @@ export class OverlayBoxManager {
     win.on('moved', () => this.queueSave(id))
     win.on('resize', () => this.queueSave(id))
     win.on('closed', () => {
+      // Still in the map means nobody here closed it on purpose (sync/closeAll remove first).
       if (this.windows.get(id) === win) {
         this.windows.delete(id)
+        this.deps.log(`[boxes] ${id} window closed; it comes back the next time boxes show`)
       }
     })
     win.webContents.once('did-finish-load', () => this.applyVisibility())

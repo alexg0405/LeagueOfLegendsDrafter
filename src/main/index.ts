@@ -4,6 +4,7 @@ import {
   dialog,
   globalShortcut,
   ipcMain,
+  Menu,
   screen,
   desktopCapturer,
   shell,
@@ -743,6 +744,7 @@ function createOverlayWindow() {
   overlayWindow.on('resize', queueOverlayBoundsSave)
 
   overlayWindow.on('closed', () => {
+    diagLog('[overlay] window closed')
     clearOverlayShowWatchdog()
     stopOverlayTopmostReassert()
     overlayWindow = null
@@ -1073,6 +1075,13 @@ function sendDraftToOverlay(payload: DraftUpdate) {
 }
 
 app.whenReady().then(() => {
+  /*
+   * No menu at all. Electron's default one stays active even with the bar hidden, and its
+   * Ctrl+W (close window) and Ctrl+R (reload) fire on whichever of our windows has focus. In
+   * League, Ctrl+W/Ctrl+R level up W and R, so a click on a box or the overlay followed by a
+   * level-up closed that window for good.
+   */
+  Menu.setApplicationMenu(null)
   loadLocalEnvWhenReady()
   const preloadFile = absolutePreloadPath()
   if (!existsSync(preloadFile)) {

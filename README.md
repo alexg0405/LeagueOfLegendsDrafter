@@ -78,10 +78,14 @@ champion search, coaching), the Draft/Build tabs, data status, hotkey hint, engi
 full tables, and the open/close behavior itself.
 
 The main window's **Live** page (menu item 04) is the full Draft tab: every pick with all its
-details, both teams, your matchups, draft intel and champion search. It comes up in front of the
-League client when champ select starts (typing still goes to the client) and hides again when it
-ends, if champ select is what opened it. Both are toggles under **Setup → Champ select overlay →
-Live page (04)**.
+details, both teams, your matchups, draft intel and champion search. Champ select opens only the
+overlay by default; turn on **Setup → Champ select overlay → Live page (04) → Open at champ select**
+to also bring this page up in front of the League client (typing still goes to the client). It
+hides again when champ select ends, if champ select is what opened it.
+
+The app has no menu on purpose: Electron's default one maps Ctrl+W and Ctrl+R (close and reload
+window), which League uses to level up abilities. Boxes can't take keyboard focus at all, and a box
+window that gets closed anyway comes back the next time boxes show.
 
 Champ select start and end come from the same 400 ms League client poll that feeds the draft. The
 overlay closes after about 1.2 s with no session, so one failed request never closes it mid-draft.

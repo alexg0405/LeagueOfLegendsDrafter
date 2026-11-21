@@ -57,7 +57,7 @@ export type DraftOverlayPrefs = {
   openOnChampSelect: boolean
   /** Hide it when champ select ends (the game starts, or someone dodges). */
   closeAfterChampSelect: boolean
-  /** Bring the main window up on its Live page (the full Draft tab) when champ select starts. */
+  /** Bring the main window up on its Live page (the full Draft tab) when champ select starts. Off by default: only the overlay opens. */
   openPageOnChampSelect: boolean
   /** Hide that window again when champ select ends, if champ select is what opened it. */
   closePageAfterChampSelect: boolean
@@ -70,7 +70,7 @@ export const DEFAULT_DRAFT_OVERLAY: DraftOverlayPrefs = {
   extras: { tabs: true, dataStatus: false, hotkeys: true, engine: false, tables: false },
   openOnChampSelect: true,
   closeAfterChampSelect: true,
-  openPageOnChampSelect: true,
+  openPageOnChampSelect: false,
   closePageAfterChampSelect: true
 }
 

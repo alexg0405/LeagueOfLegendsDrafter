@@ -166,9 +166,10 @@ export function DraftOverlayEditor({
         label="Live page (04)"
         tip={
           <>
-            The full Draft tab in this window: every pick with all its details, both teams, matchups, intel and champion search.
-            <b> Open</b>: it comes up in front of the League client when champ select starts (typing still goes to the client).
-            <b> Close</b>: it hides again when champ select ends, if champ select is what opened it.
+            The full Draft tab in this window (menu item 04): every pick with all its details, both teams, matchups, intel and
+            champion search. Off by default, so champ select opens only the overlay. <b>Open</b>: it also comes up in front of the
+            League client when champ select starts (typing still goes to the client). <b>Close</b>: it hides again when champ
+            select ends, if champ select is what opened it.
           </>
         }
       >

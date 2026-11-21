@@ -21,7 +21,8 @@ describe('champ select overlay settings', () => {
     expect(Object.values(draft.sections).some(Boolean)).toBe(false)
     expect(draft.openOnChampSelect).toBe(true)
     expect(draft.closeAfterChampSelect).toBe(true)
-    expect(draft.openPageOnChampSelect).toBe(true)
+    // Champ select opens only the overlay unless the Live page is turned on in Setup.
+    expect(draft.openPageOnChampSelect).toBe(false)
     expect(draft.closePageAfterChampSelect).toBe(true)
   })
 
@@ -29,8 +30,8 @@ describe('champ select overlay settings', () => {
     expect(Object.values(FULL_DRAFT_VIEW.sections).every(Boolean)).toBe(true)
     expect(Object.values(FULL_DRAFT_VIEW.pickDetails).every(Boolean)).toBe(true)
     expect(FULL_DRAFT_VIEW.extras).toEqual({ tabs: false, dataStatus: false, hotkeys: false, engine: true, tables: true })
-    expect(normalizeDraftOverlay({ openPageOnChampSelect: false, closePageAfterChampSelect: 1 })).toMatchObject({
-      openPageOnChampSelect: false,
+    expect(normalizeDraftOverlay({ openPageOnChampSelect: true, closePageAfterChampSelect: 1 })).toMatchObject({
+      openPageOnChampSelect: true,
       closePageAfterChampSelect: true
     })
   })

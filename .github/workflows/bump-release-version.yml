@@ -22,6 +22,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # Full history without file contents (those download on demand), so the inspect step
+          # can read package.json as it was before this push without pulling every old exe.
+          fetch-depth: 0
+          filter: blob:none
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -34,22 +38,34 @@ jobs:
       - name: Inspect pushed commits
         id: inspect
         env:
+          BEFORE_SHA: ${{ github.event.before }}
           COMMITS_JSON: ${{ toJson(github.event.commits) }}
         run: |
           node <<'NODE' >> "$GITHUB_OUTPUT"
+          const { execFileSync } = require('node:child_process')
+          const { readFileSync } = require('node:fs')
+          // Skip a push that already changed the version (a release, or a manual bump). This
+          // compares package.json before and after the push: Actions' push payload has no
+          // per-commit file lists (commit.added/modified are missing), so checking which files
+          // a push touched never fired and releases got bumped a second time.
           const commits = JSON.parse(process.env.COMMITS_JSON || '[]')
-          const versionFiles = new Set([
-            'package.json',
-            'package-lock.json',
-            'src/renderer/src/MainShell.tsx',
-            'src/renderer/src/WebDraftApp.tsx'
-          ])
           const userCommits = commits.filter((commit) => !String(commit.message || '').startsWith('chore: bump release version'))
-          const touchedVersion = userCommits.some((commit) =>
-            [...(commit.added || []), ...(commit.modified || []), ...(commit.removed || [])].some((path) => versionFiles.has(path))
-          )
+          const versionOf = (json) => JSON.parse(json).version
+          const after = versionOf(readFileSync('package.json', 'utf8'))
+          let before = null
+          try {
+            const old = execFileSync('git', ['show', `${process.env.BEFORE_SHA}:package.json`], {
+              encoding: 'utf8',
+              stdio: ['ignore', 'pipe', 'ignore']
+            })
+            before = versionOf(old)
+          } catch {
+            // First push of the branch (before is all zeros) or a force push: bump as usual.
+          }
+          const versionChanged = before !== null && before !== after
+          console.error(`version ${before ?? 'unknown'} -> ${after}, ${userCommits.length} pushed commit(s)`)
           console.log(`count=${userCommits.length}`)
-          console.log(`skip=${touchedVersion || userCommits.length === 0}`)
+          console.log(`skip=${versionChanged || userCommits.length === 0}`)
           NODE
 
       - name: Bump release version

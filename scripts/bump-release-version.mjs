@@ -15,6 +15,13 @@ if (!Number.isFinite(count) || count < 0) {
   throw new Error('Expected --count to be a non-negative integer.')
 }
 
+// --set 5.0.0 writes that exact version instead of bumping.
+const setArgIndex = process.argv.indexOf('--set')
+const setVersion = setArgIndex >= 0 ? process.argv[setArgIndex + 1] : undefined
+if (setArgIndex >= 0 && !setVersion) {
+  throw new Error('Expected --set to be followed by a version, e.g. --set 5.0.0.')
+}
+
 function readText(path) {
   return readFileSync(resolve(repoRoot, path), 'utf8')
 }
@@ -75,7 +82,7 @@ function replaceRequired(path, pattern, replacement) {
 
 const packageJson = readJson('package.json')
 const previous = parseVersion(packageJson.version)
-const next = bumpVersion(packageJson.version, count)
+const next = setVersion ? parseVersion(setVersion) : bumpVersion(packageJson.version, count)
 const nextVersion = formatVersion(next)
 
 packageJson.version = nextVersion

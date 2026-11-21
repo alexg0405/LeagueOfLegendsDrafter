@@ -119,6 +119,11 @@ platform builds.
 
 ## Release Flow
 
+Every push to `main` bumps the version (the `Bump release version` workflow), except a push that
+already changed the version in `package.json`, so a release keeps the number you gave it. To pick
+the number, run `npm run release:bump-version -- --set 5.0.0` before building; it updates
+`package.json`, `package-lock.json`, the app's build label and the website's download and build labels.
+
 1. Run `npm run build` and `npm run build:web`.
 2. Run `npm run dist:win` to produce the desktop `.exe` artifacts.
 3. Run `npm run release:stage-web` to copy `latest.yml` + the installer/portable into

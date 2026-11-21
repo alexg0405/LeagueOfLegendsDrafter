@@ -119,19 +119,19 @@ platform builds.
 
 ## Release Flow
 
-Every push to `main` bumps the version (the `Bump release version` workflow), except a push that
-already changed the version in `package.json`, so a release keeps the number you gave it. To pick
-the number, run `npm run release:bump-version -- --set 5.0.0` before building; it updates
-`package.json`, `package-lock.json`, the app's build label and the website's download and build labels.
+The version only changes when you release. Pushing to `main` leaves it alone.
 
-1. Run `npm run build` and `npm run build:web`.
-2. Run `npm run dist:win` to produce the desktop `.exe` artifacts.
-3. Run `npm run release:stage-web` to copy `latest.yml` + the installer/portable into
+1. Set the release number: `npm run release:bump-version -- --set 5.1.0` (`-- --count 1` picks the
+   next number instead). It updates `package.json`, `package-lock.json`, the app's build label and
+   the website's download and build labels.
+2. Run `npm run build` and `npm run build:web`.
+3. Run `npm run dist:win` to produce the desktop `.exe` artifacts.
+4. Run `npm run release:stage-web` to copy `latest.yml` + the installer/portable into
    `src/renderer/public/downloads/`. This also prunes superseded builds and writes a
    `downloads.json` manifest.
-4. Upload the desktop artifacts to a GitHub Release.
-5. Include the [VirusTotal safety scan](https://www.virustotal.com/gui/file-analysis/OWQyYjU0YWQwNzU0NmE5ZTgzY2QwN2QxMWQyZWZjYzc6MTc4MDE2NTI4Mg==) in the release notes.
-6. Push `main`; Vercel builds the web app from `vercel.json` using `npm run build:web`.
+5. Upload the desktop artifacts to a GitHub Release.
+6. Include the [VirusTotal safety scan](https://www.virustotal.com/gui/file-analysis/OWQyYjU0YWQwNzU0NmE5ZTgzY2QwN2QxMWQyZWZjYzc6MTc4MDE2NTI4Mg==) in the release notes.
+7. Push `main`; Vercel builds the web app from `vercel.json` using `npm run build:web`.
 
 > `src/renderer/public/downloads/` is served by Vercel, so both exes (~165 MB total) ship in every
 > deploy. If that becomes a problem, host the binaries on the GitHub Release and keep only
